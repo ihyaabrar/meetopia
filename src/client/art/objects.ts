@@ -26,6 +26,8 @@ const TALL: ObjectKind[] = [
   "fridge",
   "arcade",
   "gamingDesk",
+  "cabinet",
+  "printer",
 ];
 export const isTall = (k: ObjectKind) => TALL.includes(k);
 
@@ -249,7 +251,7 @@ export function drawObject(ctx: CanvasRenderingContext2D, o: MapObject) {
     }
 
     case "sofa": {
-      const base = v > 0.5 ? "#7b8794" : "#a07862";
+      const base = ["#5f8f6a", "#7b8794", "#a07862"][Math.floor(v * 3)];
       boxShadow(ctx, x + 2, y - 6, w - 4, T + 2, 10);
       // sandaran
       rr(ctx, x + 2, y - 8, w - 4, 16, 8);
@@ -747,6 +749,39 @@ export function drawObject(ctx: CanvasRenderingContext2D, o: MapObject) {
       ctx.fillRect(x + w / 2 - 10, y + 15, 20, 1);
       rr(ctx, x + w / 2 + 16, y + 13, 5, 7, 2.5);
       fillStroke(ctx, "#1b1d22", 1.2);
+      break;
+    }
+
+    case "cabinet": {
+      // Lemari arsip tiga laci
+      const cx = x + 4;
+      const cw = T - 8;
+      groundShadow(ctx, x + T / 2, y + T - 3, 13, 4, 0.25);
+      rr(ctx, cx, y - 22, cw, T + 18, 4);
+      fillStroke(ctx, "#9aa3a8");
+      for (let i = 0; i < 3; i++) {
+        const dy = y - 18 + i * 15;
+        rr(ctx, cx + 3, dy, cw - 6, 12, 2);
+        fillStroke(ctx, "#b8c0c4", 1.2);
+        ctx.fillStyle = "#5a6266";
+        ctx.fillRect(x + T / 2 - 4, dy + 5, 8, 2);
+      }
+      break;
+    }
+
+    case "printer": {
+      // Meja kecil dengan printer
+      counter(ctx, x + 3, y + 6, T - 6, 8, 10, C.woodDark, 3);
+      rr(ctx, x + 6, y - 8, T - 12, 16, 3);
+      fillStroke(ctx, "#e9eef0");
+      ctx.fillStyle = "#3a403c";
+      ctx.fillRect(x + 9, y - 2, T - 18, 3);
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(x + 10, y - 14, T - 20, 8);
+      ctx.strokeStyle = "rgba(0,0,0,0.25)";
+      ctx.strokeRect(x + 10, y - 14, T - 20, 8);
+      ctx.fillStyle = C.green;
+      ctx.fillRect(x + T - 12, y + 3, 2, 2);
       break;
     }
 

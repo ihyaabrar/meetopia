@@ -6,7 +6,7 @@ import { PublicShell } from "@/components/PublicShell";
 import { Icon, type IconName } from "@/components/Icon";
 import { useT } from "@/i18n/client";
 import { Scene, type PersonView } from "@/client/scene";
-import { TILE, buildWalkable } from "@/shared/map";
+import { TILE, buildWalkable, privateZoneAt } from "@/shared/map";
 import { OFFICE_TEMPLATE } from "@/shared/templates";
 import { EMOTES, type Presence } from "@/shared/protocol";
 import { findPath, type Point } from "@/shared/pathfinding";
@@ -23,7 +23,9 @@ function HeroMap() {
     const scene = new Scene(map, (k) => t(k));
     const grid = buildWalkable(map);
     const free: Point[] = [];
-    grid.forEach((row, y) => row.forEach((ok, x) => ok && y > 11 && free.push({ x, y })));
+    grid.forEach((row, y) =>
+      row.forEach((ok, x) => ok && !privateZoneAt(map, x + 0.5, y + 0.5) && free.push({ x, y })),
+    );
     const names = ["Rani", "Dito", "Ayu", "Bima", "Sari", "Joko", "Lala", "Tegar"];
     const lines = [t("landing.bubble1"), t("landing.bubble2"), t("landing.bubble3")];
     const statuses = ["active", "active", "busy", "active", "meeting", "active", "away", "active"] as const;
@@ -100,13 +102,14 @@ function HeroMap() {
         else scene.bubble(b.presence.id, lines[Math.floor(Math.random() * lines.length)], time);
         nextFx = time + 1.6 + Math.random() * 1.5;
       }
-      // Kamera menyapu pelan lobi dan lounge
-      const zoom = Math.max(0.8, w / (15 * TILE));
+      // Kamera menyapu pelan seluruh kantor (area kerja, lobi, lounge)
+      const zoom = Math.max(0.6, w / (24 * TILE));
       const viewW = w / zoom;
       const viewH = h / zoom;
-      const span = map.width * TILE - viewW;
-      const cx = span / 2 + (Math.sin(time * 0.06) * span) / 2;
-      const cy = Math.min(map.height * TILE - viewH, 15 * TILE);
+      const spanX = Math.max(0, map.width * TILE - viewW);
+      const spanY = Math.max(0, map.height * TILE - viewH);
+      const cx = spanX / 2 + (Math.sin(time * 0.05) * spanX) / 2;
+      const cy = spanY / 2 + (Math.sin(time * 0.037 + 1.2) * spanY) / 2;
       const people: PersonView[] = bots.map((b, i) => ({
         p: b.presence,
         x: b.presence.x,
@@ -144,36 +147,37 @@ function HeroMap() {
 export function Landing() {
   const t = useT();
   const features: Array<[IconName, string, string]> = [
-    ["mic", t("landing.f1.title"), t("landing.f1.body")],
-    ["screen", t("landing.f2.title"), t("landing.f2.body")],
-    ["notes", t("landing.f3.title"), t("landing.f3.body")],
+    ["door", t("landing.f1.title"), t("landing.f1.body")],
+    ["chat", t("landing.f2.title"), t("landing.f2.body")],
+    ["check", t("landing.f3.title"), t("landing.f3.body")],
+    ["smile", t("landing.f4.title"), t("landing.f4.body")],
   ];
   return (
     <PublicShell>
-      <section className="hero">
-        <div>
-          <h1 dangerouslySetInnerHTML={{ __html: t("landing.title") }} />
-          <p className="lead">{t("landing.lead")}</p>
-          <div className="row" style={{ flexWrap: "wrap" }}>
-            <Link className="btn" href="/register" style={{ minHeight: 48, padding: "10px 22px" }}>
-              {t("landing.cta")}
-            </Link>
-            <Link className="btn secondary" href="/login" style={{ minHeight: 48 }}>
-              {t("auth.login")}
-            </Link>
+      <section className="hero-card">
+        <div className="hero">
+          <div>
+            <h1 dangerouslySetInnerHTML={{ __html: t("landing.title") }} />
+            <p className="lead">{t("landing.lead")}</p>
+            <div className="row" style={{ flexWrap: "wrap" }}>
+              <Link className="btn" href="/login" style={{ minHeight: 48, padding: "10px 22px" }}>
+                {t("landing.ctaEnter")} <Icon name="send" size={16} />
+              </Link>
+              <Link className="btn secondary" href="/register" style={{ minHeight: 48 }}>
+                {t("landing.ctaCreate")}
+              </Link>
+            </div>
+          </div>
+          <div className="hero-art">
+            <HeroMap />
           </div>
         </div>
-        <div className="hero-art">
-          <HeroMap />
-        </div>
-      </section>
-      {/* Tiga fungsi inti PRD sebagai daftar biasa (bukan kartu seragam), ikon sesuai fungsinya. */}
-      <section className="how" aria-labelledby="how-title">
-        <h2 id="how-title">{t("landing.howTitle")}</h2>
-        <ul className="how-list">
+        <ul className="feature-row">
           {features.map(([icon, title, body]) => (
             <li key={title}>
-              <Icon name={icon} size={22} />
+              <span className="feature-icon" aria-hidden>
+                <Icon name={icon} size={20} />
+              </span>
               <div>
                 <b>{title}</b>
                 <span>{body}</span>

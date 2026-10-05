@@ -17,7 +17,7 @@ export type TemplateId = (typeof TEMPLATE_IDS)[number];
 export const isTemplateId = (v: unknown): v is TemplateId =>
   typeof v === "string" && (TEMPLATE_IDS as readonly string[]).includes(v);
 
-export const TEMPLATE_REVS: Record<TemplateId, number> = { office: 4, home: 1, gaming: 1 };
+export const TEMPLATE_REVS: Record<TemplateId, number> = { office: 5, home: 1, gaming: 1 };
 
 /** Kelebihan tiap jenis ruangan (kunci terjemahan), ditampilkan saat memilih. */
 export const TEMPLATE_PERKS: Record<TemplateId, string[]> = {
@@ -79,9 +79,9 @@ function buildOffice(): MapData {
   let n = 0;
   const add = (o: Omit<MapObject, "id">) => objects.push({ id: `${o.kind}-${++n}`, ...o });
 
-  // Area kerja: deretan meja dengan kursi
-  for (const row of [3, 8]) {
-    for (const col of [3, 9, 15]) {
+  // Area kerja: tiga baris meja dengan kursi (lebih ramai, seperti kantor sungguhan)
+  for (const row of [3, 7, 11]) {
+    for (const col of [2, 7, 12, 17]) {
       add({
         kind: "desk",
         x: col,
@@ -130,6 +130,12 @@ function buildOffice(): MapData {
   add({ kind: "plant", x: 7, y: 1, w: 1, h: 1, solid: true });
   add({ kind: "plant", x: 13, y: 1, w: 1, h: 1, solid: true });
   add({ kind: "lamp", x: 21, y: 6, w: 1, h: 1, solid: true });
+  add({ kind: "cabinet", x: 4, y: 1, w: 1, h: 1, solid: true });
+  add({ kind: "cabinet", x: 5, y: 1, w: 1, h: 1, solid: true });
+  add({ kind: "cabinet", x: 16, y: 1, w: 1, h: 1, solid: true });
+  add({ kind: "printer", x: 17, y: 1, w: 1, h: 1, solid: true });
+  add({ kind: "plant", x: 10, y: 1, w: 1, h: 1, solid: true });
+  add({ kind: "art", x: 9, y: 0, w: 2, h: 1, solid: false });
 
   // Ruang rapat
   add({
@@ -222,6 +228,12 @@ function buildOffice(): MapData {
   add({ kind: "lamp", x: 1, y: 18, w: 1, h: 1, solid: true });
   add({ kind: "art", x: 6, y: 14, w: 2, h: 1, solid: false });
   add({ kind: "art", x: 16, y: 14, w: 2, h: 1, solid: false });
+  add({ kind: "sofa", x: 17, y: 20, w: 3, h: 1, solid: false, label: "object.sofa", actions: ["sit"] });
+  add({ kind: "table", x: 17, y: 22, w: 3, h: 1, solid: true });
+  add({ kind: "plant", x: 1, y: 15, w: 1, h: 1, solid: true });
+  add({ kind: "plant", x: 7, y: 15, w: 1, h: 1, solid: true });
+  add({ kind: "plant", x: 21, y: 20, w: 1, h: 1, solid: true });
+  add({ kind: "lamp", x: 21, y: 23, w: 1, h: 1, solid: true });
 
   // Lounge
   add({ kind: "sofa", x: 27, y: 16, w: 3, h: 1, solid: false, label: "object.sofa", actions: ["sit"] });
@@ -249,6 +261,12 @@ function buildOffice(): MapData {
     actions: ["music"],
   });
   add({ kind: "art", x: 38, y: 11, w: 2, h: 1, solid: false });
+  add({ kind: "fridge", x: 36, y: 13, w: 1, h: 1, solid: true, label: "object.fridge", actions: ["drink"] });
+  add({ kind: "table", x: 26, y: 20, w: 2, h: 2, solid: true });
+  add({ kind: "chair", x: 26, y: 19, w: 1, h: 1, solid: false, facing: "down", ...sit });
+  add({ kind: "chair", x: 27, y: 22, w: 1, h: 1, solid: false, facing: "up", ...sit });
+  add({ kind: "plant", x: 25, y: 17, w: 1, h: 1, solid: true });
+  add({ kind: "plant", x: 42, y: 21, w: 1, h: 1, solid: true });
 
   return {
     version: 1,

@@ -404,43 +404,50 @@ input[type="checkbox"] {
   height: 100%;
   display: block;
 }
-.how {
+.hero-card {
   max-width: 1240px;
-  margin: 0 auto;
-  padding: 24px clamp(16px, 4vw, 48px) 72px;
-  width: 100%;
-  display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  gap: clamp(24px, 5vw, 64px);
+  width: calc(100% - 32px);
+  margin: clamp(8px, 3vw, 32px) auto 40px;
+  border-radius: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  overflow: hidden;
 }
-.how h2 {
-  font-size: 24px;
-  margin: 0;
-  letter-spacing: -0.01em;
+.hero-card .hero {
+  padding: clamp(24px, 4vw, 48px) clamp(20px, 4vw, 48px) 24px;
 }
-.how-list {
+.feature-row {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 20px clamp(20px, 4vw, 48px) 28px;
   display: grid;
-  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  border-top: 1px solid var(--border);
 }
-.how-list li {
-  display: grid;
-  grid-template-columns: 24px 1fr;
-  gap: 14px;
-  align-items: start;
+.feature-row li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
 }
-.how-list li svg {
-  color: var(--text-muted);
-  margin-top: 2px;
-}
-.how-list b {
+.feature-row b {
   display: block;
   margin-bottom: 2px;
 }
-.how-list span {
+.feature-row span:not(.feature-icon) {
+  display: block;
   color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.feature-icon {
+  flex: 0 0 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
 }
 .public-footer {
   margin-top: auto;
@@ -2843,8 +2850,7 @@ input.switch:checked::before {
   .videos {
     max-width: calc(100% - 70px);
   }
-  .hero,
-  .how {
+  .hero {
     grid-template-columns: minmax(0, 1fr);
   }
 }

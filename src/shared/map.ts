@@ -42,7 +42,9 @@ export type ObjectKind =
   | "counter"
   | "fridge"
   | "arcade"
-  | "gamingDesk";
+  | "gamingDesk"
+  | "cabinet"
+  | "printer";
 
 export type ObjectAction =
   | "sit"

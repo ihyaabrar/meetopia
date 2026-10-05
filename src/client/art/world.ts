@@ -86,10 +86,10 @@ function drawFloorTile(ctx: CanvasRenderingContext2D, kind: FloorKind, tx: numbe
   const y = ty * T;
   switch (kind) {
     case "work":
-      drawPlanks(ctx, x, y, [36, 52, 80], "rgba(140,100,60,0.22)", tx, ty);
+      drawPlanks(ctx, x, y, [33, 50, 72], "rgba(120,80,45,0.26)", tx, ty);
       break;
     case "lounge":
-      drawPlanks(ctx, x, y, [28, 46, 72], "rgba(110,70,40,0.25)", tx, ty);
+      drawPlanks(ctx, x, y, [26, 44, 64], "rgba(100,62,35,0.28)", tx, ty);
       break;
     case "home":
       drawPlanks(ctx, x, y, [34, 50, 70], "rgba(120,80,45,0.24)", tx, ty);
@@ -153,7 +153,7 @@ function drawFloorTile(ctx: CanvasRenderingContext2D, kind: FloorKind, tx: numbe
       break;
     }
     case "meeting": {
-      ctx.fillStyle = "#d9d6d0";
+      ctx.fillStyle = "#c8ccd0";
       ctx.fillRect(x, y, T, T);
       // tekstur karpet
       for (let i = 0; i < 10; i++) {
@@ -166,11 +166,11 @@ function drawFloorTile(ctx: CanvasRenderingContext2D, kind: FloorKind, tx: numbe
     default: {
       // ubin batu besar 2x2
       const v = hash(Math.floor(tx / 2), Math.floor(ty / 2)) * 0.05;
-      ctx.fillStyle = `hsl(43 38% ${90 - v * 100}%)`;
+      ctx.fillStyle = `hsl(36 30% ${82 - v * 100}%)`;
       ctx.fillRect(x, y, T, T);
       ctx.fillStyle = "rgba(255,255,255,0.18)";
       for (let i = 0; i < 4; i++) ctx.fillRect(x + hash(tx, ty, i) * T, y + hash(i, ty, tx) * T, 3, 1);
-      ctx.fillStyle = "rgba(150,130,90,0.22)";
+      ctx.fillStyle = "rgba(120,100,70,0.3)";
       if (tx % 2 === 0) ctx.fillRect(x, y, 1, T);
       if (ty % 2 === 0) ctx.fillRect(x, y, T, 1);
     }
