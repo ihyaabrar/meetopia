@@ -66,3 +66,15 @@ describe("speaker musik", () => {
     expect(bad.success).toBe(false);
   });
 });
+
+describe("TV YouTube", () => {
+  it("mengenali berbagai bentuk tautan YouTube", async () => {
+    const { youtubeId } = await import("@/shared/tv");
+    expect(youtubeId("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=10")).toBe("dQw4w9WgXcQ");
+    expect(youtubeId("https://youtu.be/dQw4w9WgXcQ?si=abc")).toBe("dQw4w9WgXcQ");
+    expect(youtubeId("https://m.youtube.com/shorts/dQw4w9WgXcQ")).toBe("dQw4w9WgXcQ");
+    expect(youtubeId("dQw4w9WgXcQ")).toBe("dQw4w9WgXcQ");
+    expect(youtubeId("https://vimeo.com/123")).toBeNull();
+    expect(youtubeId("javascript:alert(1)")).toBeNull();
+  });
+});

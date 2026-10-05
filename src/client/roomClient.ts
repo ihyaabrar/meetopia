@@ -12,6 +12,7 @@ import type {
 } from "@/shared/protocol";
 import type { MapData } from "@/shared/map";
 import type { MusicState } from "@/shared/music";
+import type { TvState } from "@/shared/tv";
 
 export type ConnState = "connecting" | "open" | "reconnecting" | "closed";
 
@@ -23,6 +24,8 @@ export interface RoomSnapshot {
   sharedNote: SharedNote | null;
   /** Musik yang sedang diputar per speaker (id objek). */
   music: Record<string, MusicState>;
+  /** Video YouTube yang sedang diputar per TV (id objek). */
+  tv: Record<string, TvState>;
   /** Ruangan yang sedang dikunci (id zona). */
   locks: Record<string, ZoneLock>;
   /** Selisih jam server dan jam lokal (ms), untuk menyinkronkan posisi lagu. */
@@ -85,6 +88,7 @@ export class RoomClient {
     map: null,
     sharedNote: null,
     music: {},
+    tv: {},
     locks: {},
     clockOffset: 0,
     version: 0,
@@ -246,6 +250,7 @@ export class RoomClient {
           sharedNote: m.sharedNote,
           music: Object.fromEntries(m.music.map((x) => [x.objectId, x])),
           locks: m.locks,
+          tv: Object.fromEntries(m.tv.map((x) => [x.objectId, x])),
           clockOffset: m.serverNow - Date.now(),
           configError: undefined,
         });
@@ -325,6 +330,12 @@ export class RoomClient {
         return this.emit("teleported", m);
       case "locks":
         return this.commit({ locks: m.locks });
+      case "tv": {
+        const tv = { ...this.snapshot.tv };
+        if (m.state) tv[m.objectId] = m.state;
+        else delete tv[m.objectId];
+        return this.commit({ tv });
+      }
       case "pinResult":
         if (m.ok) this.updateSelf({ allowedZone: m.zoneId });
         return this.emit("pinResult", m);

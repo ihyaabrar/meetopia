@@ -5,6 +5,7 @@ import { STATUSES, type PresenceStatus } from "./proximity";
 import type { MapData } from "./map";
 import type { Role } from "./roles";
 import { musicSourceSchema, type MusicState } from "./music";
+import { tvMessageSchema, type TvState } from "./tv";
 
 export type Direction = "up" | "down" | "left" | "right";
 
@@ -97,6 +98,7 @@ export const clientMessageSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("knockReply"), knockId: z.string().max(64), accept: z.boolean() }),
   z.object({ t: z.literal("emote"), emoji: z.enum(EMOTES) }),
   z.object({ t: z.literal("teleport"), toUserId: z.string().max(64) }),
+  tvMessageSchema,
   z.object({
     t: z.literal("lockZone"),
     zoneId: z.string().max(64),
@@ -124,6 +126,7 @@ export type ServerMessage =
       sharedNote: SharedNote;
       music: MusicState[];
       locks: Record<string, ZoneLock>;
+      tv: TvState[];
       /** Jam server (ms) untuk menyinkronkan posisi lagu. */
       serverNow: number;
     }
@@ -142,6 +145,7 @@ export type ServerMessage =
   | { t: "groupChanged" }
   | { t: "locks"; locks: Record<string, ZoneLock> }
   | { t: "pinResult"; zoneId: string; ok: boolean }
+  | { t: "tv"; objectId: string; state: TvState | null; serverNow: number }
   | { t: "teleported"; x: number; y: number; toName: string }
   | { t: "teleportRejected"; reason: "busy" | "privateZone" | "noSpace" | "offline" }
   | { t: "music"; objectId: string; state: MusicState | null; serverNow: number }

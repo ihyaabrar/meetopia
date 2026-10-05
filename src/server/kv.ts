@@ -124,4 +124,5 @@ export const keys = {
   knock: (knockId: string) => `knock:${knockId}`,
   music: (groupId: string) => `music:${groupId}`,
   locks: (groupId: string) => `locks:${groupId}`,
+  tv: (groupId: string) => `tv:${groupId}`,
 };

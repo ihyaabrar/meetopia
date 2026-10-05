@@ -39,6 +39,8 @@ export interface SceneFrame {
   reducedMotion: boolean;
   /** Ruangan yang sedang dikunci: gembok digambar di pintunya. */
   lockedZones?: Record<string, unknown>;
+  /** TV yang sedang memutar video. */
+  playingTvs?: MapObject[];
 }
 
 const T = TILE;
@@ -258,6 +260,9 @@ export class Scene {
       ctx.restore();
     }
 
+    // Layar TV yang sedang memutar video
+    for (const o of f.playingTvs ?? []) this.drawTvPlaying(ctx, o, time);
+
     // Gembok di pintu ruangan yang dikunci
     for (const id of Object.keys(f.lockedZones ?? {}))
       for (const d of this.doors.get(id) ?? []) this.drawPadlock(ctx, d.x * T, d.y * T);
@@ -362,6 +367,37 @@ export class Scene {
         this.drawNote(ctx, nx, ny, i % 2 === 0);
       }
     }
+    ctx.restore();
+  }
+
+  private drawTvPlaying(ctx: CanvasRenderingContext2D, o: MapObject, time: number) {
+    const x = o.x * T + 6;
+    const y = o.y * T - 22;
+    const w = o.w * T - 12;
+    const h = 22;
+    ctx.save();
+    ctx.fillStyle = "#1d2a33";
+    ctx.fillRect(x, y, w, h);
+    // kilasan warna adegan video
+    const k = (Math.sin(time * 1.3) + 1) / 2;
+    ctx.fillStyle = `rgba(${Math.round(80 + k * 60)},${Math.round(120 + k * 40)},170,0.55)`;
+    ctx.fillRect(x, y, w, h - 4);
+    // tombol putar
+    ctx.fillStyle = "#d9584c";
+    ctx.beginPath();
+    ctx.roundRect(x + w / 2 - 8, y + 4, 16, 11, 3);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.moveTo(x + w / 2 - 2.5, y + 6.5);
+    ctx.lineTo(x + w / 2 + 3.5, y + 9.5);
+    ctx.lineTo(x + w / 2 - 2.5, y + 12.5);
+    ctx.fill();
+    // bilah kemajuan
+    ctx.fillStyle = "rgba(255,255,255,0.3)";
+    ctx.fillRect(x + 3, y + h - 3, w - 6, 1.5);
+    ctx.fillStyle = "#d9584c";
+    ctx.fillRect(x + 3, y + h - 3, (w - 6) * ((time / 40) % 1), 1.5);
     ctx.restore();
   }
 

@@ -405,6 +405,7 @@ export function RoomStage({
           return [{ obj, level: me ? speakerVolume(map, obj, me.x, me.y).volume : 0 }];
         }),
         reducedMotion: reducedMotion(),
+        playingTvs: Object.keys(s.tv).flatMap((id) => map.objects.filter((o) => o.id === id)),
         lockedZones: Object.fromEntries(Object.entries(s.locks).filter(([, l]) => l.locked)),
       });
 
@@ -585,7 +586,7 @@ export function RoomStage({
       });
       return;
     }
-    if (action === "music") {
+    if (action === "music" || (action === "watch" && obj.kind === "tv")) {
       // Dekati speaker dulu: hanya orang di dekatnya yang bisa mengganti musik.
       walkTo({ x: obj.x + obj.w / 2, y: obj.y + obj.h + 0.2 }, () => onAction(action, obj));
       return;

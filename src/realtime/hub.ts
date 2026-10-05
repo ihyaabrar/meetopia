@@ -25,6 +25,7 @@ import {
   type Zone,
 } from "@/shared/map";
 import { SPEAKER_CONTROL_RANGE, type MusicState } from "@/shared/music";
+import { TV_CONTROL_RANGE, youtubeId, type TvState } from "@/shared/tv";
 import { pairVolume } from "@/shared/proximity";
 import { sanitizeAvatar } from "@/shared/avatar";
 import { can, type Role } from "@/shared/roles";
@@ -235,6 +236,7 @@ export class RealtimeHub {
       sharedNote: await repo.getSharedNote(auth.groupId),
       music: await this.readMusic(room),
       locks: await this.readLocks(room),
+      tv: await this.readTv(room),
       serverNow: Date.now(),
     });
     await publishToRoom(auth.groupId, { msg: { t: "join", peer: presence } });
@@ -471,6 +473,9 @@ export class RealtimeHub {
       case "teleport":
         return this.onTeleport(room, conn, m.toUserId);
 
+      case "tv":
+        return this.onTv(room, conn, m);
+
       case "lockZone": {
         // Hanya pemegang ruangan (orang pertama yang masuk) yang bisa mengunci/membuka, dari dalam.
         const zone = room.map.zones.find((z) => z.id === m.zoneId);
@@ -651,6 +656,36 @@ export class RealtimeHub {
     await this.broadcastUpdate(conn);
     if (fromZone && fromZone.id !== zone?.id) await this.leaveZone(room, conn.userId, fromZone);
     if (zone && zone.id !== fromZone?.id) await this.enterZone(room, conn, zone);
+  }
+
+  private async readTv(room: Room): Promise<TvState[]> {
+    const kv = await this.kv();
+    const raw = await kv.hgetall(keys.tv(room.groupId));
+    return Object.values(raw)
+      .map((v) => JSON.parse(v) as TvState)
+      .filter((s) => room.map.objects.some((o) => o.id === s.objectId && o.kind === "tv"));
+  }
+
+  /** Putar/hentikan video YouTube di TV. Hanya anggota (bukan tamu) yang berdiri di dekat TV. */
+  private async onTv(room: Room, conn: Conn, m: Extract<ClientMessage, { t: "tv" }>) {
+    if (!can(conn.role, "controlMusic")) return send(conn.ws, { t: "error", code: "forbidden" });
+    const obj = room.map.objects.find((o) => o.id === m.objectId && o.kind === "tv");
+    if (!obj) return;
+    if (distanceToObject(obj, conn.presence.x, conn.presence.y) > TV_CONTROL_RANGE)
+      return send(conn.ws, { t: "error", code: "tooFar" });
+    const now = Date.now();
+    conn.musicTimes = conn.musicTimes.filter((t) => now - t < 10_000);
+    if (conn.musicTimes.length >= 6) return send(conn.ws, { t: "error", code: "rateLimited" });
+    conn.musicTimes.push(now);
+    const kv = await this.kv();
+    let state: TvState | null = null;
+    if (m.action === "play") {
+      const videoId = youtubeId(m.url ?? "");
+      if (!videoId) return send(conn.ws, { t: "error", code: "badVideo" });
+      state = { objectId: obj.id, videoId, startedAt: now, by: conn.userId, byName: conn.presence.name };
+      await kv.hset(keys.tv(room.groupId), obj.id, JSON.stringify(state));
+    } else await kv.hdel(keys.tv(room.groupId), obj.id);
+    await publishToRoom(conn.groupId, { msg: { t: "tv", objectId: obj.id, state, serverNow: Date.now() } });
   }
 
   private async readMusic(room: Room): Promise<MusicState[]> {

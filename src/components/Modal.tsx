@@ -10,6 +10,7 @@ export function Modal({
   children,
   wide,
   bare,
+  className = "",
 }: {
   title: string;
   sub?: string;
@@ -18,6 +19,7 @@ export function Modal({
   wide?: boolean;
   /** Tanpa judul bawaan dan tanpa padding (untuk kartu dengan tata letak sendiri). */
   bare?: boolean;
+  className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -35,7 +37,7 @@ export function Modal({
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
         ref={ref}
-        className={`modal ${wide ? "wide" : ""} ${bare ? "bare" : ""}`}
+        className={`modal ${wide ? "wide" : ""} ${bare ? "bare" : ""} ${className}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}

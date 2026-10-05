@@ -27,6 +27,7 @@ import { CreateGroup } from "./CreateGroup";
 import { UserSettings, type UserSection } from "./UserSettings";
 import { GroupSettings, type GroupSection } from "./GroupSettings";
 import { SpeakerPanel } from "./SpeakerPanel";
+import { TvPanel } from "./TvPanel";
 import { ProfileCard } from "./ProfileCard";
 import { StatusEditor } from "./StatusEditor";
 import { InviteModal } from "./InviteModal";
@@ -52,6 +53,7 @@ const EMPTY_SNAP: RoomSnapshot = {
   map: null,
   sharedNote: null,
   music: {},
+  tv: {},
   locks: {},
   clockOffset: 0,
   version: 0,
@@ -78,6 +80,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
   const [media, setMedia] = useState<MediaManager | null>(null);
   const [music, setMusic] = useState<MusicPlayer | null>(null);
   const [speaker, setSpeaker] = useState<MapObject | null>(null);
+  const [tv, setTv] = useState<MapObject | null>(null);
   const [chatTarget, setChatTarget] = useState<ChatTarget>({ kind: "nearby" });
   const [dmTabs, setDmTabs] = useState<string[]>([]);
   const [notes, setNotes] = useState<null | "private" | "shared">(null);
@@ -170,6 +173,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
     setMedia(m);
     setMusic(mp);
     setSpeaker(null);
+    setTv(null);
     void r.connect();
     // Hook debug untuk tes e2e dan pengukuran spike (hanya di pengembangan).
     if (process.env.NODE_ENV !== "production")
@@ -274,7 +278,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
         }
       }),
       room.on("error", (code) => {
-        if (["rateLimited", "tooFar", "notRoomMaster", "badPin"].includes(code))
+        if (["rateLimited", "tooFar", "notRoomMaster", "badPin", "badVideo"].includes(code))
           toast({ text: t(`error.${code}`), kind: "error" });
       }),
       room.on("kicked", (reason) => {
@@ -347,7 +351,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
       case "drink":
         return toast({ text: t("action.drinkResult") });
       case "watch":
-        return toast({ text: t("action.watchResult") });
+        return obj.kind === "tv" ? setTv(obj) : toast({ text: t("action.watchResult") });
       case "cook":
         return toast({ text: t("action.cookResult") });
       case "play":
@@ -922,6 +926,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
         />
       )}
       {modal === "tips" && <Tips onClose={() => setModal(null)} />}
+      {tv && room && <TvPanel room={room} snap={snap} obj={tv} role={role} onClose={() => setTv(null)} />}
       {speaker && room && (
         <SpeakerPanel room={room} snap={snap} obj={speaker} role={role} onClose={() => setSpeaker(null)} />
       )}

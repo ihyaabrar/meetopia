@@ -386,6 +386,17 @@ test("Jenis ruangan: buat Rumah, lalu ganti ke Gaming house", async ({ browser }
   await a.keyboard.up("d");
   await expect(a.locator(".hud-tl")).toContainText("Ruang keluarga");
 
+  // TV ruang keluarga: nonton YouTube bareng di popup yang bisa diperbesar
+  await walk(a, 8.5, 2.5);
+  await a.keyboard.press("e");
+  await a.locator(".hint-pop").getByRole("button", { name: "Nonton bareng" }).click();
+  await a.getByLabel("Tautan YouTube").fill("https://youtu.be/dQw4w9WgXcQ");
+  await a.getByRole("button", { name: "Putar" }).click();
+  await expect(a.locator(".tv-screen iframe")).toHaveAttribute("src", /embed\/dQw4w9WgXcQ/);
+  await a.locator(".tv-modal").getByRole("button", { name: "Perbesar" }).click();
+  await expect(a.locator(".modal.tv-big")).toBeVisible();
+  await a.keyboard.press("Escape");
+
   // Kamar bisa dikunci dari dalam
   await goTo(a, "Kamar 1");
   await expect(a.locator(".hud-tl")).toContainText("Kamar 1", { timeout: 20_000 });
