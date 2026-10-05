@@ -346,6 +346,16 @@ test("Speaker: musik makin pelan saat menjauh, hilang di luar jangkauan", async 
   expect(far).toBeGreaterThan(0);
   expect(far).toBeLessThan(0.5);
 
+  // Speaker juga bisa memutar YouTube (hanya suara, volume tetap menurut jarak)
+  await a.keyboard.press("e");
+  await a.locator(".hint-pop").getByRole("button", { name: "Atur musik" }).click();
+  await a.getByLabel("Tautan YouTube atau audio").fill("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+  await a.getByRole("button", { name: "Putar", exact: true }).click();
+  await expect(a.getByText("Diputar oleh Ayu")).toBeVisible();
+  await a.keyboard.press("Escape");
+  await expect(b.locator(".hud-chip.music")).toContainText("YouTube", { timeout: 15_000 });
+  await expect(b.locator("iframe.yt-audio")).toHaveAttribute("src", /embed\/dQw4w9WgXcQ\?enablejsapi=1/);
+
   // A menghentikan musik: hilang untuk semua orang
   await a.keyboard.press("e");
   await a.locator(".hint-pop").getByRole("button", { name: "Atur musik" }).click();
@@ -356,6 +366,7 @@ test("Speaker: musik makin pelan saat menjauh, hilang di luar jangkauan", async 
       0,
   );
   await expect(b.locator(".hud-chip.music")).toHaveCount(0);
+  await expect(b.locator("iframe.yt-audio")).toHaveCount(0);
 });
 
 test("Jenis ruangan: buat Rumah, lalu ganti ke Gaming house", async ({ browser }) => {

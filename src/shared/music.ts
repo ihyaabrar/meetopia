@@ -11,7 +11,11 @@ import { volumeForDistance } from "./proximity";
 export const STATIONS = ["lofi", "ambient", "piano", "retro"] as const;
 export type StationId = (typeof STATIONS)[number];
 
-export type MusicSource = { kind: "station"; id: StationId } | { kind: "url"; url: string };
+export type MusicSource =
+  | { kind: "station"; id: StationId }
+  | { kind: "url"; url: string }
+  /** Video YouTube diputar sebagai audio (pemutar tersembunyi), volume tetap menurut jarak. */
+  | { kind: "youtube"; id: string };
 
 export interface MusicState {
   objectId: string;
@@ -42,6 +46,7 @@ export function isValidAudioUrl(raw: string): boolean {
 export const musicSourceSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("station"), id: z.enum(STATIONS) }),
   z.object({ kind: z.literal("url"), url: z.string().max(500).refine(isValidAudioUrl) }),
+  z.object({ kind: z.literal("youtube"), id: z.string().regex(/^[A-Za-z0-9_-]{11}$/) }),
 ]);
 
 export function speakerCenter(o: MapObject) {

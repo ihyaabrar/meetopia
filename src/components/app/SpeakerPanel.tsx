@@ -15,6 +15,7 @@ import {
   type MusicSource,
 } from "@/shared/music";
 import { can, type Role } from "@/shared/roles";
+import { youtubeId } from "@/shared/tv";
 
 /** Panel speaker: pilih stasiun bawaan atau tautan audio sendiri, hentikan, dan atur volume pribadi. */
 export function SpeakerPanel({
@@ -38,13 +39,18 @@ export function SpeakerPanel({
   const allowed = can(role, "controlMusic");
   const canControl = allowed && near;
   const [url, setUrl] = useState(state?.source.kind === "url" ? state.source.url : "");
-  const urlOk = isValidAudioUrl(url.trim());
+  const ytId = youtubeId(url);
+  const urlOk = !!ytId || isValidAudioUrl(url.trim());
   const radius = (obj.audio ?? SPEAKER_AUDIO).radius;
 
   const play = (source: MusicSource) => room.send({ t: "music", objectId: obj.id, action: "play", source });
   const stop = () => room.send({ t: "music", objectId: obj.id, action: "stop" });
   const sourceName = (s: MusicSource) =>
-    s.kind === "station" ? t(`music.station.${s.id}`) : t("music.customLink");
+    s.kind === "station"
+      ? t(`music.station.${s.id}`)
+      : s.kind === "youtube"
+        ? t("music.youtube")
+        : t("music.customLink");
 
   return (
     <Modal title={t("object.speaker")} sub={t("music.sub", { n: Math.round(radius) })} onClose={onClose}>
@@ -106,14 +112,15 @@ export function SpeakerPanel({
         className="row"
         onSubmit={(e) => {
           e.preventDefault();
-          if (urlOk) play({ kind: "url", url: url.trim() });
+          if (ytId) play({ kind: "youtube", id: ytId });
+          else if (urlOk) play({ kind: "url", url: url.trim() });
         }}
       >
         <input
           className="input"
           type="url"
           inputMode="url"
-          placeholder="https://contoh.com/lagu.mp3"
+          placeholder={t("music.linkPlaceholder")}
           aria-label={t("music.customLink")}
           value={url}
           disabled={!canControl}

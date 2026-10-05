@@ -443,8 +443,8 @@
   "music.station.piano.desc": "Calm piano arpeggios.",
   "music.station.retro": "8-bit café",
   "music.station.retro.desc": "Cheerful retro game tunes.",
-  "music.customLink": "Your own audio link",
-  "music.linkHint": "A direct link to an audio file or stream (https, e.g. .mp3 or .ogg). YouTube and Spotify links can't be played.",
+  "music.customLink": "YouTube or audio link",
+  "music.linkHint": "Paste a YouTube link (only the sound plays) or a direct link to an audio file or stream (https). Videos whose owners block embedding can't play.",
   "music.myVolume": "Your volume",
   "music.myVolumeHint": "Only changes what you hear, not what others hear.",
   "music.mute": "Mute music",
@@ -625,5 +625,7 @@
   "media.screenHide": "Hide screen",
   "media.screenShow": "Show {name}'s screen",
   "media.stopSharing": "Stop sharing screen",
-  "media.err.connFailed": "Voice/screen couldn't connect to a teammate. Your network may block direct connections; try another network, or an admin needs to add a TURN server (NEXT_PUBLIC_ICE_SERVERS)."
+  "media.err.connFailed": "Voice/screen couldn't connect to a teammate. Your network may block direct connections; try another network, or an admin needs to add a TURN server (NEXT_PUBLIC_ICE_SERVERS).",
+  "music.youtube": "YouTube",
+  "music.linkPlaceholder": "https://youtu.be/... or https://example.com/song.mp3"
 }

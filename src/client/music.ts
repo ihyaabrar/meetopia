@@ -30,8 +30,8 @@ interface Voice {
 
 const IDLE_STOP_MS = 4000;
 
-const sameSource = (a: MusicSource, b: MusicSource) =>
-  a.kind === b.kind && (a.kind === "station" ? a.id === (b as typeof a).id : a.url === (b as typeof a).url);
+const sourceKey = (m: MusicSource) => (m.kind === "url" ? `url:${m.url}` : `${m.kind}:${m.id}`);
+const sameSource = (a: MusicSource, b: MusicSource) => sourceKey(a) === sourceKey(b);
 
 export class MusicPlayer {
   private ctx: AudioContext | null = null;
@@ -119,6 +119,8 @@ export class MusicPlayer {
       };
     }
 
+    if (state.source.kind === "youtube") return this.youtubeVoice(key, state, state.source.id);
+
     // Tautan audio langsung: elemen <audio>, volume diatur langsung (tanpa Web Audio agar
     // berkas dari domain lain tetap bisa diputar walau servernya tidak mengizinkan CORS).
     const el = new Audio();
@@ -162,6 +164,70 @@ export class MusicPlayer {
     voice.setSink(getPrefs().speakerDeviceId);
     el.src = state.source.url;
     void el.play().catch(() => {});
+    return voice;
+  }
+
+  /**
+   * YouTube: pemutar tersembunyi (iframe) yang dikendalikan lewat postMessage IFrame API.
+   * Volume 0..100 mengikuti jarak ke speaker; posisi awal sama untuk semua orang.
+   */
+  private youtubeVoice(key: string, state: MusicState, id: string): Voice {
+    const start = Math.floor(this.songTime(state));
+    const frame = document.createElement("iframe");
+    frame.className = "yt-audio";
+    frame.title = "YouTube audio";
+    frame.allow = "autoplay; encrypted-media";
+    frame.setAttribute("aria-hidden", "true");
+    frame.tabIndex = -1;
+    frame.src =
+      `https://www.youtube-nocookie.com/embed/${id}?enablejsapi=1&autoplay=1&start=${start}` +
+      `&loop=1&playlist=${id}&controls=0&playsinline=1&origin=${encodeURIComponent(location.origin)}`;
+    document.body.appendChild(frame);
+    let volume = -1;
+    const post = (func: string, args: unknown[] = []) =>
+      frame.contentWindow?.postMessage(JSON.stringify({ event: "command", func, args }), "*");
+    const onMsg = (e: MessageEvent) => {
+      if (e.source !== frame.contentWindow || typeof e.data !== "string") return;
+      try {
+        const data = JSON.parse(e.data) as { event?: string };
+        if (data.event === "onError") {
+          voice.failed = true;
+          this.publish(true);
+        }
+      } catch {}
+    };
+    window.addEventListener("message", onMsg);
+    frame.addEventListener("load", () => {
+      frame.contentWindow?.postMessage(JSON.stringify({ event: "listening", id: key }), "*");
+      post("playVideo");
+      if (volume >= 0) post("setVolume", [volume]);
+    });
+    let lastSent = 0;
+    const voice: Voice & { retry: () => void } = {
+      key,
+      state,
+      level: 0,
+      silentSince: null,
+      failed: false,
+      setLevel(v) {
+        this.level = v;
+        const next = Math.round(Math.max(0, Math.min(1, v)) * 100);
+        // Kirim ulang berkala: perintah sebelum pemutar siap bisa hilang.
+        if (next !== volume || Date.now() - lastSent > 2000) {
+          volume = next;
+          lastSent = Date.now();
+          post("setVolume", [next]);
+          if (next > 0) post("unMute");
+        }
+      },
+      retry() {
+        post("playVideo");
+      },
+      destroy() {
+        window.removeEventListener("message", onMsg);
+        frame.remove();
+      },
+    };
     return voice;
   }
 

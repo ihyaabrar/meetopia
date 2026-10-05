@@ -443,8 +443,8 @@
   "music.station.piano.desc": "Arpeggio piano yang tenang.",
   "music.station.retro": "Kafe 8-bit",
   "music.station.retro.desc": "Nada game retro yang ceria.",
-  "music.customLink": "Tautan audio sendiri",
-  "music.linkHint": "Tautan langsung ke berkas atau siaran audio (https, mis. .mp3 atau .ogg). Tautan YouTube dan Spotify tidak bisa diputar.",
+  "music.customLink": "Tautan YouTube atau audio",
+  "music.linkHint": "Tempel tautan YouTube (hanya suaranya yang diputar) atau tautan langsung ke berkas/siaran audio (https). Video yang pemiliknya melarang embed tidak bisa diputar.",
   "music.myVolume": "Volume untukmu",
   "music.myVolumeHint": "Hanya mengubah yang kamu dengar, bukan orang lain.",
   "music.mute": "Bisukan musik",
@@ -625,5 +625,7 @@
   "media.screenHide": "Sembunyikan layar",
   "media.screenShow": "Tampilkan layar {name}",
   "media.stopSharing": "Berhenti berbagi layar",
-  "media.err.connFailed": "Suara/layar ke rekan tidak tersambung. Jaringan kalian mungkin memblokir koneksi langsung; coba jaringan lain, atau admin perlu menambahkan server TURN (NEXT_PUBLIC_ICE_SERVERS)."
+  "media.err.connFailed": "Suara/layar ke rekan tidak tersambung. Jaringan kalian mungkin memblokir koneksi langsung; coba jaringan lain, atau admin perlu menambahkan server TURN (NEXT_PUBLIC_ICE_SERVERS).",
+  "music.youtube": "YouTube",
+  "music.linkPlaceholder": "https://youtu.be/... atau https://contoh.com/lagu.mp3"
 }

@@ -2798,6 +2798,18 @@ input.switch:checked::before {
   margin: 2px 0 0;
 }
 
+/* Pemutar YouTube tersembunyi untuk speaker (hanya suara). */
+.yt-audio {
+  position: fixed;
+  left: -400px;
+  bottom: 0;
+  width: 200px;
+  height: 200px;
+  opacity: 0;
+  pointer-events: none;
+  border: 0;
+}
+
 /* ---------- TV: nonton YouTube bersama ---------- */
 .modal.tv-modal {
   max-width: 880px;

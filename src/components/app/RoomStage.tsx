@@ -711,7 +711,9 @@ export function RoomStage({
                   ? t("music.failed")
                   : nowPlaying.source.kind === "station"
                     ? t(`music.station.${nowPlaying.source.id}`)
-                    : t("music.customLink")}
+                    : nowPlaying.source.kind === "youtube"
+                      ? t("music.youtube")
+                      : t("music.customLink")}
               </b>
               <span className="vol-bars" aria-hidden>
                 {[0.15, 0.4, 0.7].map((th) => (
