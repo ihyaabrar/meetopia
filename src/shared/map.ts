@@ -25,10 +25,20 @@ export type ObjectKind =
   | "tv"
   | "beanbag"
   | "cooler"
-  | "art";
+  | "art"
+  | "speaker";
 
 export type ObjectAction =
-  "sit" | "openSharedNotes" | "openPrivateNotes" | "showTips" | "buy" | "brew" | "read" | "drink" | "watch";
+  | "sit"
+  | "openSharedNotes"
+  | "openPrivateNotes"
+  | "showTips"
+  | "buy"
+  | "brew"
+  | "read"
+  | "drink"
+  | "watch"
+  | "music";
 
 export interface MapObject {
   id: string;
@@ -44,6 +54,8 @@ export interface MapObject {
   /** Kunci terjemahan nama objek. Bila ada, objek bisa diinteraksi (FR-74). */
   label?: string;
   actions?: ObjectAction[];
+  /** Khusus speaker: jangkauan suara musik (bawaan SPEAKER_AUDIO di shared/music). */
+  audio?: AudioConfig;
 }
 
 export interface Zone {
@@ -90,7 +102,7 @@ export const FLOOR_CHARS: Record<string, FloorKind> = {
   d: "door",
 };
 
-export const TEMPLATE_REV = 2;
+export const TEMPLATE_REV = 3;
 
 export const DEFAULT_AUDIO: AudioConfig = { fullVolumeRadius: 1.5, radius: 6, curve: 1.4 };
 
@@ -275,6 +287,16 @@ function buildTemplate(): MapData {
   add({ kind: "lamp", x: 42, y: 17, w: 1, h: 1, solid: true });
   add({ kind: "lamp", x: 24, y: 13, w: 1, h: 1, solid: true });
   add({ kind: "art", x: 34, y: 11, w: 2, h: 1, solid: false });
+  add({
+    kind: "speaker",
+    x: 38,
+    y: 22,
+    w: 1,
+    h: 1,
+    solid: true,
+    label: "object.speaker",
+    actions: ["music"],
+  });
   add({ kind: "art", x: 38, y: 11, w: 2, h: 1, solid: false });
 
   return {

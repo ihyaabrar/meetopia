@@ -222,3 +222,97 @@ test("Ruang privat: masuk perlu ketuk bila sedang dipakai (FR-23, FR-31)", async
     return [...d.room.snapshot.peers.values()].filter((p) => p.y < 11).length === 2;
   });
 });
+
+type MusicDebug = {
+  room: {
+    self: { x: number; y: number; moving: boolean } | null;
+    snapshot: { music: Record<string, unknown> };
+  };
+  music: { getSnapshot: () => Array<{ volume: number }> };
+  walkTo: (p: { x: number; y: number }) => void;
+};
+
+/** Jalan ke titik (x, y) lewat pencari jalur yang sama dengan ketukan di peta, lalu tunggu sampai berhenti. */
+async function walk(page: Page, x: number, y: number) {
+  await page.evaluate(
+    ([x, y]) => (window as unknown as { __meetopia: MusicDebug }).__meetopia.walkTo({ x, y }),
+    [x, y],
+  );
+  await page.waitForFunction(
+    ([x, y]) => {
+      const s = (window as unknown as { __meetopia: MusicDebug }).__meetopia.room.self!;
+      return !s.moving && Math.hypot(s.x - x, s.y - y) < 1.2;
+    },
+    [x, y],
+    { timeout: 30_000 },
+  );
+}
+
+const musicVolume = (page: Page) =>
+  page.evaluate(() => {
+    const a = (window as unknown as { __meetopia: MusicDebug }).__meetopia.music.getSnapshot();
+    return a.length ? a[0].volume : 0;
+  });
+
+test("Speaker: musik makin pelan saat menjauh, hilang di luar jangkauan", async ({ browser }) => {
+  const a = await (await browser.newContext()).newPage();
+  const b = await pageB(browser);
+  const stamp = Date.now();
+  await register(a, `a${stamp}@contoh.id`, "Ayu");
+  await a.waitForURL(/\/app/);
+  await a.getByRole("button", { name: "Mengerti!" }).click();
+  await a.getByRole("button", { name: "Buat grup" }).first().click();
+  await a.getByLabel("Nama grup").fill("Kafe Musik");
+  await a.getByRole("button", { name: "Buat", exact: true }).click();
+  await enterRoom(a);
+  await a.getByRole("button", { name: "Undang anggota" }).first().click();
+  await a.getByRole("button", { name: "Buat tautan undangan" }).click();
+  const link = (await a.getByTestId("invite-link").textContent())!.trim();
+  await a.keyboard.press("Escape");
+
+  await register(b, `b${stamp}@contoh.id`, "Bima");
+  await b.waitForURL(/\/app/);
+  await b.goto(link);
+  await b.getByRole("button", { name: "Gabung grup" }).click();
+  await b.waitForURL(/\/app\?g=/);
+  await enterRoom(b);
+
+  // A mendekati speaker di lounge dan memutar stasiun bawaan
+  await walk(a, 38.5, 23.5);
+  await a.locator(".hint-pop").getByRole("button", { name: "Atur musik" }).click();
+  await a.getByRole("button", { name: /Lo-fi santai/ }).click();
+  await expect(a.getByText("Diputar oleh Ayu")).toBeVisible();
+  await a.keyboard.press("Escape");
+
+  // B di lobi: status musik diterima, tapi terlalu jauh untuk terdengar
+  await b.waitForFunction(
+    () =>
+      Object.keys((window as unknown as { __meetopia: MusicDebug }).__meetopia.room.snapshot.music).length ===
+      1,
+  );
+  await b.waitForTimeout(400);
+  expect(await musicVolume(b)).toBe(0);
+
+  // Dekat speaker: terdengar keras
+  await walk(b, 36.5, 23.5);
+  await expect.poll(() => musicVolume(b)).toBeGreaterThan(0.75);
+  await expect(b.locator(".hud-chip.music")).toContainText("Lo-fi santai");
+  const near = await musicVolume(b);
+
+  // Menjauh ke ujung lounge: lebih pelan tapi masih terdengar
+  await walk(b, 28.5, 24.5);
+  await expect.poll(() => musicVolume(b)).toBeLessThan(near);
+  const far = await musicVolume(b);
+  expect(far).toBeGreaterThan(0);
+  expect(far).toBeLessThan(0.5);
+
+  // A menghentikan musik: hilang untuk semua orang
+  await a.locator(".hint-pop").getByRole("button", { name: "Atur musik" }).click();
+  await a.getByRole("button", { name: "Hentikan" }).click();
+  await b.waitForFunction(
+    () =>
+      Object.keys((window as unknown as { __meetopia: MusicDebug }).__meetopia.room.snapshot.music).length ===
+      0,
+  );
+  await expect(b.locator(".hud-chip.music")).toHaveCount(0);
+});

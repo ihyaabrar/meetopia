@@ -23,6 +23,16 @@ import { findPath, nearestFree, type Point } from "@/shared/pathfinding";
 import { STATUSES, audiblePeers, type PresenceStatus } from "@/shared/proximity";
 import { EMOTES, type Direction, type Presence } from "@/shared/protocol";
 import { Minimap } from "./Minimap";
+import { speakerVolume } from "@/shared/music";
+import { getPrefs, setPrefs, usePrefs } from "@/client/prefs";
+import type { MusicPlayer } from "@/client/music";
+
+const noSub = () => () => {};
+const NO_AUDIBLE: never[] = [];
+const noAudible = () => NO_AUDIBLE;
+const motionQuery =
+  typeof window !== "undefined" ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+const reducedMotion = () => getPrefs().reducedMotion || !!motionQuery?.matches;
 
 const SPEED = 4.2; // tile per detik
 const SEND_INTERVAL = 90;
@@ -31,6 +41,8 @@ const now = () => performance.now() / 1000;
 interface Props {
   room: RoomClient;
   media: MediaManager;
+  music: MusicPlayer | null;
+  onOpenSpeaker: (objectId: string) => void;
   snap: RoomSnapshot;
   onAction: (action: ObjectAction, obj: MapObject) => void;
   onPeerClick: (peer: Presence) => void;
@@ -57,6 +69,8 @@ function dirFrom(dx: number, dy: number, fallback: Direction): Direction {
 export function RoomStage({
   room,
   media,
+  music,
+  onOpenSpeaker,
   snap,
   onAction,
   onPeerClick,
@@ -73,6 +87,12 @@ export function RoomStage({
   useEffect(() => {
     snapRef.current = snap;
   }, [snap]);
+  const prefs = usePrefs();
+  const audible = useSyncExternalStore(music?.subscribe ?? noSub, music?.getSnapshot ?? noAudible, noAudible);
+  const nowPlaying = audible.reduce<(typeof audible)[number] | null>(
+    (best, a) => (!best || a.volume > best.volume ? a : best),
+    null,
+  );
   const map = snap.map!;
   const self = snap.selfId ? snap.peers.get(snap.selfId) : undefined;
 
@@ -337,6 +357,12 @@ export function RoomStage({
         links,
         privateZone: me ? privateZoneAt(map, me.x, me.y) : null,
         showRadius: !!me && (me.moving || st.path.length > 0),
+        speakers: Object.values(s.music).flatMap((m) => {
+          const obj = map.objects.find((o) => o.id === m.objectId);
+          if (!obj) return [];
+          return [{ obj, level: me ? speakerVolume(map, obj, me.x, me.y).volume : 0 }];
+        }),
+        reducedMotion: reducedMotion(),
       });
 
       // Posisi popup petunjuk objek
@@ -455,6 +481,11 @@ export function RoomStage({
       });
       return;
     }
+    if (action === "music") {
+      // Dekati speaker dulu: hanya orang di dekatnya yang bisa mengganti musik.
+      walkTo({ x: obj.x + obj.w / 2, y: obj.y + obj.h + 0.2 }, () => onAction(action, obj));
+      return;
+    }
     onAction(action, obj);
   };
 
@@ -523,6 +554,39 @@ export function RoomStage({
           <Icon name="users" size={14} /> {t("room.nearby", { n: nearby })}
         </span>
         {snap.conn !== "open" && <span className="hud-chip warn">⟳ {t(`conn.${snap.conn}`)}</span>}
+        {nowPlaying && (
+          <span className={`hud-chip music ${nowPlaying.failed ? "warn" : ""}`}>
+            <button
+              className="chip-link"
+              onClick={() => onOpenSpeaker(nowPlaying.objectId)}
+              title={t("music.open")}
+            >
+              <Icon name="music" size={14} />
+              <b>
+                {nowPlaying.failed
+                  ? t("music.failed")
+                  : nowPlaying.source.kind === "station"
+                    ? t(`music.station.${nowPlaying.source.id}`)
+                    : t("music.customLink")}
+              </b>
+              <span className="vol-bars" aria-hidden>
+                {[0.15, 0.4, 0.7].map((th) => (
+                  <i key={th} data-on={!prefs.musicMuted && nowPlaying.volume > th} />
+                ))}
+              </span>
+            </button>
+            <button
+              className="icon-btn"
+              style={{ width: 26, height: 26 }}
+              aria-pressed={prefs.musicMuted}
+              aria-label={prefs.musicMuted ? t("music.unmute") : t("music.mute")}
+              title={prefs.musicMuted ? t("music.unmute") : t("music.mute")}
+              onClick={() => setPrefs({ musicMuted: !prefs.musicMuted })}
+            >
+              <Icon name={prefs.musicMuted ? "x" : "volume"} size={14} />
+            </button>
+          </span>
+        )}
         {self?.media.screen && (
           <span className="hud-chip danger">
             <Icon name="screen" size={14} /> {t("media.youPresent")}

@@ -4,6 +4,7 @@
  */
 import type { ChatMessage, ClientMessage, Presence, ServerMessage, SharedNote } from "@/shared/protocol";
 import type { MapData } from "@/shared/map";
+import type { MusicState } from "@/shared/music";
 
 export type ConnState = "connecting" | "open" | "reconnecting" | "closed";
 
@@ -13,6 +14,10 @@ export interface RoomSnapshot {
   peers: Map<string, Presence>;
   map: MapData | null;
   sharedNote: SharedNote | null;
+  /** Musik yang sedang diputar per speaker (id objek). */
+  music: Record<string, MusicState>;
+  /** Selisih jam server dan jam lokal (ms), untuk menyinkronkan posisi lagu. */
+  clockOffset: number;
   /** Kode galat konfigurasi server (mis. env Vercel belum diisi); bila ada, tidak dicoba ulang. */
   configError?: string;
   version: number;
@@ -63,6 +68,8 @@ export class RoomClient {
     peers: new Map(),
     map: null,
     sharedNote: null,
+    music: {},
+    clockOffset: 0,
     version: 0,
   };
 
@@ -287,6 +294,12 @@ export class RoomClient {
         return this.commit({ map: m.map });
       case "groupChanged":
         return this.emit("groupChanged", undefined);
+      case "music": {
+        const music = { ...this.snapshot.music };
+        if (m.state) music[m.objectId] = m.state;
+        else delete music[m.objectId];
+        return this.commit({ music });
+      }
       case "kicked":
         this.closedByUser = true;
         this.commit({ conn: "closed" });

@@ -17,6 +17,7 @@ export const PERMISSIONS = {
   sendChannelMessage: "member",
   useMedia: "guest",
   editSharedNote: "member",
+  controlMusic: "member",
   createInvite: "admin",
   manageGroup: "admin",
   manageMembers: "admin",

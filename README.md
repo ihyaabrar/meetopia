@@ -103,17 +103,31 @@ Railway, Render, Fly.io, atau VPS: `npm run build && npm start` dengan `DATABASE
 
 Logo memakai **konsep 7 (Minimalist)**: dua daun pintu (satu hijau terbuka, satu gelap tertutup dengan gagang) sebagai "pintu" ke ruang kerja virtual, dengan tagline _Work • Talk • Together_. Komponennya di `src/components/Logo.tsx`, favicon di `src/app/icon.svg`.
 
-Arah tampilan ada di [`DESIGN.md`](DESIGN.md) (diisi dari jawaban pemilik proyek): gelap-hangat ala Discord sebagai bawaan, hijau logo hanya sebagai aksen (tombol utama, status aktif, mic menyala, item terpilih), tema terang dan "ikuti sistem" bisa dipilih di Profil, plus pilihan kontras tinggi. UI diperiksa dengan aturan [antislop](https://github.com/miqdadbadjuber/anti-slop): tanpa gradien/glow/blur dekoratif, tanpa emoji sebagai ikon, tanpa em dash, kontras teks lolos WCAG AA, target sentuh 44px.
+Arah tampilan ada di [`DESIGN.md`](DESIGN.md) (diisi dari jawaban pemilik proyek): gelap-hangat ala Discord sebagai bawaan, hijau logo hanya sebagai aksen (tombol utama, status aktif, mic menyala, item terpilih), tema terang dan "ikuti sistem" bisa dipilih di Pengaturan, Tampilan, plus pilihan kontras tinggi. UI diperiksa dengan aturan [antislop](https://github.com/miqdadbadjuber/anti-slop): tanpa gradien/glow/blur dekoratif, tanpa emoji sebagai ikon, tanpa em dash, kontras teks lolos WCAG AA, target sentuh 44px.
 
 ### Grafis in-game
 
 Semua aset digambar prosedural (tanpa gambar pihak lain), di `src/client/art/` dan `src/client/scene.ts`:
 
 - **Dunia:** lantai bertekstur per area (papan kayu, karpet ruang rapat, ubin batu lobi), dinding 3/4 dengan jendela dan cahaya matahari, bayangan di kaki dinding, lukisan dinding, label area.
-- **Perabot:** meja dengan monitor, kursi kantor, sofa, bean bag, rak buku, papan tulis, mesin penjual, mesin kopi, dispenser, TV, lampu, tanaman (3 jenis), meja resepsionis berlogo. Perabot tinggi diurutkan kedalamannya bersama avatar, jadi avatar bisa berjalan di belakangnya.
+- **Perabot:** meja dengan monitor, kursi kantor, sofa, bean bag, rak buku, papan tulis, mesin penjual, mesin kopi, dispenser, TV, lampu, tanaman (3 jenis), meja resepsionis berlogo, speaker kayu (lampu menyala dan not musik melayang saat diputar). Perabot tinggi diurutkan kedalamannya bersama avatar, jadi avatar bisa berjalan di belakangnya.
 - **Avatar:** gaya chibi dengan hoodie, animasi jalan, napas dan kedip, tampak depan/samping/belakang.
 - **Efek:** cincin hijau saat seseorang berbicara (dari level suara WebRTC), garis putus-putus ke orang yang bisa kamu dengar, lingkaran radius suara saat berjalan, riak klik, debu langkah, cahaya lampu/layar, sorotan saat berada di ruang privat (area lain diredupkan), emote 👋🎉 dan balon chat "Sekitar" di atas kepala, label nama yang tidak saling bertumpuk.
 - **HUD:** chip area saat ini dan jumlah orang di dekatmu, peta mini (klik untuk berjalan), dock kontrol, popup petunjuk objek.
+
+### Speaker musik
+
+Di lounge ada speaker (`src/shared/music.ts`, `src/client/music.ts`). Anggota yang berdiri di dekatnya bisa memutar salah satu dari empat stasiun bawaan (Lo-fi santai, Ambient fokus, Piano sore, Kafe 8-bit) atau tautan audio langsung (https, mis. `.mp3`). Tautan YouTube dan Spotify tidak bisa diputar.
+
+- **Makin jauh makin pelan:** volume dihitung di tiap browser dari jarak ke speaker. Penuh sampai 2,5 tile, lalu turun dan hilang di 12 tile. Dari area lain, suara teredam dinding (35%), dan ruang privat tidak mendengar speaker di luar.
+- **Sinkron:** status speaker disimpan di Redis (`music:<groupId>`). Posisi lagu dihitung dari jam server, jadi semua orang mendengar bagian yang sama.
+- **Tanpa berkas dan lisensi pihak ketiga:** stasiun bawaan disintesis dengan Web Audio (`src/client/musicSynth.ts`). Speaker yang tidak terdengar dihentikan setelah 4 detik agar hemat CPU.
+- Setiap orang bisa mengatur atau membisukan volume musik untuk dirinya sendiri (chip musik di layar ruangan, atau Pengaturan, Suara & video).
+
+## Pengaturan
+
+- **Pengguna** (ikon roda di bilah bawah): Akun saya (nama, ganti kata sandi, ekspor data, hapus akun), Avatar, Tampilan (tema, bahasa, kontras tinggi, kurangi gerakan), Suara & video (perangkat, volume orang lain dan musik, peredam bising, mic saat masuk), Notifikasi (bunyi ketuk/DM, notifikasi browser). Preferensi perangkat disimpan di browser.
+- **Grup** (roda di samping nama grup, atau klik kanan ikon grup): Ringkasan (ikon warna + simbol, nama, deskripsi), Ruangan (audio jarak), Kanal (buat, ganti nama, hapus), Anggota & peran, Undangan, Zona bahaya (serahkan kepemilikan, hapus grup, atau keluar).
 
 Grup lama ikut mendapat dekorasi baru otomatis (`templateRev` di data peta), pengaturan audionya tetap.
 

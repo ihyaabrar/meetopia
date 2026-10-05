@@ -21,6 +21,7 @@ const TALL: ObjectKind[] = [
   "tv",
   "desk",
   "welcome",
+  "speaker",
 ];
 export const isTall = (k: ObjectKind) => TALL.includes(k);
 
@@ -530,6 +531,41 @@ export function drawObject(ctx: CanvasRenderingContext2D, o: MapObject) {
       ctx.moveTo(mx + 1, y);
       ctx.bezierCurveTo(mx - 3, y - 4, mx + 5, y - 7, mx + 1, y - 11);
       ctx.stroke();
+      break;
+    }
+
+    case "speaker": {
+      // Speaker lantai kayu: tweeter kecil di atas, woofer besar di bawah.
+      const cx = x + T / 2;
+      groundShadow(ctx, cx, y + T - 4, 13, 4, 0.28);
+      const top = y - 22;
+      const bw = 24;
+      rr(ctx, cx - bw / 2, top, bw, T + 18, 5);
+      fillStroke(ctx, woodGrad(ctx, top, y + T, C.woodDark));
+      // panel depan
+      rr(ctx, cx - bw / 2 + 3, top + 4, bw - 6, T + 9, 3);
+      fillStroke(ctx, "#3a3632", 1.2);
+      for (const [cy, r] of [
+        [top + 11, 4.2],
+        [top + 30, 8],
+      ] as const) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        fillStroke(ctx, "#24211f", 1.3, "#6b645c");
+        ctx.beginPath();
+        ctx.arc(cx, cy, r * 0.45, 0, Math.PI * 2);
+        ctx.fillStyle = "#4d4842";
+        ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,0.18)";
+        ctx.beginPath();
+        ctx.arc(cx - r * 0.35, cy - r * 0.35, r * 0.22, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // lampu indikator (menyala saat diputar; digambar ulang di adegan)
+      ctx.fillStyle = "#5a5550";
+      ctx.beginPath();
+      ctx.arc(cx + 7, top + 41, 1.5, 0, Math.PI * 2);
+      ctx.fill();
       break;
     }
 

@@ -128,6 +128,8 @@ function HeroMap() {
         links: [],
         privateZone: null,
         showRadius: false,
+        speakers: map.objects.filter((o) => o.kind === "speaker").map((obj) => ({ obj, level: 0.7 })),
+        reducedMotion: false,
       });
       raf = requestAnimationFrame(frame);
     };

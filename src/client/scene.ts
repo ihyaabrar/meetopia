@@ -34,6 +34,9 @@ export interface SceneFrame {
   links: Array<{ x: number; y: number; volume: number }>;
   privateZone: Zone | null;
   showRadius: boolean;
+  /** Speaker yang sedang memutar musik; `level` 0..1 = seberapa keras terdengar oleh diri sendiri. */
+  speakers: Array<{ obj: MapObject; level: number }>;
+  reducedMotion: boolean;
 }
 
 const T = TILE;
@@ -227,6 +230,9 @@ export class Scene {
       ctx.restore();
     }
 
+    // Speaker yang sedang memutar: lampu indikator dan not musik melayang
+    for (const sp of f.speakers) this.drawSpeakerFx(ctx, sp.obj, sp.level, time, f.reducedMotion);
+
     // Cahaya lampu & layar
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
@@ -291,6 +297,67 @@ export class Scene {
       this.vignette = { w: W, h: H, c };
     }
     ctx.drawImage(this.vignette.c, 0, 0);
+  }
+
+  private drawSpeakerFx(
+    ctx: CanvasRenderingContext2D,
+    o: MapObject,
+    level: number,
+    time: number,
+    still: boolean,
+  ) {
+    const cx = (o.x + 0.5) * T;
+    const top = o.y * T - 22;
+    ctx.save();
+    ctx.fillStyle = "#7cc48a";
+    ctx.beginPath();
+    ctx.arc(cx + 7, top + 41, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+    if (!still) {
+      // Woofer bergetar mengikuti ketukan
+      const beat = Math.pow(Math.max(0, Math.sin(time * Math.PI * 2.4)), 6);
+      ctx.strokeStyle = `rgba(124,196,138,${0.25 + beat * 0.45})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(cx, top + 30, 9 + beat * 2.5, 0, Math.PI * 2);
+      ctx.stroke();
+      // Tiga not melayang bergiliran; lebih jelas bila terdengar lebih keras
+      for (let i = 0; i < 3; i++) {
+        const k = (time * 0.45 + i / 3) % 1;
+        const nx = cx + Math.sin((k + i) * Math.PI * 2) * 8 + (i - 1) * 7;
+        const ny = top - 6 - k * 34;
+        ctx.globalAlpha = Math.min(1, (1 - k) * 1.6) * (0.45 + Math.min(1, level) * 0.55);
+        this.drawNote(ctx, nx, ny, i % 2 === 0);
+      }
+    }
+    ctx.restore();
+  }
+
+  /** Not musik digambar sebagai bentuk (bukan karakter emoji). */
+  private drawNote(ctx: CanvasRenderingContext2D, x: number, y: number, double: boolean) {
+    ctx.fillStyle = "#fff";
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.4;
+    const heads = double ? [x - 4, x + 4] : [x];
+    for (const hx of heads) {
+      ctx.beginPath();
+      ctx.ellipse(hx, y, 3.2, 2.4, -0.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(hx + 2.8, y - 0.5);
+      ctx.lineTo(hx + 2.8, y - 10);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    if (double) {
+      ctx.moveTo(x - 1.2, y - 10);
+      ctx.lineTo(x + 6.8, y - 11.5);
+    } else {
+      ctx.moveTo(x + 2.8, y - 10);
+      ctx.quadraticCurveTo(x + 7, y - 7, x + 5.5, y - 3.5);
+    }
+    ctx.stroke();
   }
 
   private drawPerson(ctx: CanvasRenderingContext2D, v: PersonView, time: number) {

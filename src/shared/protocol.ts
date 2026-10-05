@@ -4,6 +4,7 @@ import type { AvatarConfig } from "./avatar";
 import { STATUSES, type PresenceStatus } from "./proximity";
 import type { MapData } from "./map";
 import type { Role } from "./roles";
+import { musicSourceSchema, type MusicState } from "./music";
 
 export type Direction = "up" | "down" | "left" | "right";
 
@@ -86,13 +87,28 @@ export const clientMessageSchema = z.discriminatedUnion("t", [
   }),
   z.object({ t: z.literal("knockReply"), knockId: z.string().max(64), accept: z.boolean() }),
   z.object({ t: z.literal("emote"), emoji: z.enum(EMOTES) }),
+  z.object({
+    t: z.literal("music"),
+    objectId: z.string().max(64),
+    action: z.enum(["play", "stop"]),
+    source: musicSourceSchema.optional(),
+  }),
   z.object({ t: z.literal("ping") }),
 ]);
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
 
 export type ServerMessage =
-  | { t: "welcome"; selfId: string; peers: Presence[]; map: MapData; sharedNote: SharedNote }
+  | {
+      t: "welcome";
+      selfId: string;
+      peers: Presence[];
+      map: MapData;
+      sharedNote: SharedNote;
+      music: MusicState[];
+      /** Jam server (ms) untuk menyinkronkan posisi lagu. */
+      serverNow: number;
+    }
   | { t: "join"; peer: Presence }
   | { t: "update"; peer: Presence }
   | { t: "leave"; id: string; conn: string }
@@ -106,6 +122,7 @@ export type ServerMessage =
   | { t: "sharedNote"; note: SharedNote }
   | { t: "map"; map: MapData }
   | { t: "groupChanged" }
+  | { t: "music"; objectId: string; state: MusicState | null; serverNow: number }
   | { t: "kicked"; reason: string }
   | { t: "error"; code: string }
   | { t: "pong" };

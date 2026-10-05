@@ -122,4 +122,5 @@ export const keys = {
   lastPosition: (groupId: string, userId: string) => `lastpos:${groupId}:${userId}`,
   roomChannel: (groupId: string) => `room:${groupId}`,
   knock: (knockId: string) => `knock:${knockId}`,
+  music: (groupId: string) => `music:${groupId}`,
 };

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { RoomClient, type RoomSnapshot } from "@/client/roomClient";
 import { MediaManager } from "@/client/media";
+import { MusicPlayer } from "@/client/music";
 import { api } from "@/client/api";
 import { applyPrefsToDocument, getPrefs } from "@/client/prefs";
 import { desktopNotify, playSound } from "@/client/sounds";
@@ -12,7 +13,7 @@ import { Logo, LogoMark } from "@/components/Logo";
 import { Icon, type IconName } from "@/components/Icon";
 import { AvatarCanvas } from "@/components/AvatarCanvas";
 import { Modal } from "@/components/Modal";
-import { zoneAt, type ObjectAction } from "@/shared/map";
+import { zoneAt, type MapObject, type ObjectAction } from "@/shared/map";
 import type { Point } from "@/shared/pathfinding";
 import type { Presence } from "@/shared/protocol";
 import { can } from "@/shared/roles";
@@ -25,6 +26,7 @@ import { Tips } from "./Tips";
 import { CreateGroup } from "./CreateGroup";
 import { UserSettings, type UserSection } from "./UserSettings";
 import { GroupSettings, type GroupSection } from "./GroupSettings";
+import { SpeakerPanel } from "./SpeakerPanel";
 import { GroupIcon } from "@/components/GroupIcon";
 import type { ChatTarget, GroupDetail, GroupSummary, Me, MemberInfo } from "./types";
 
@@ -34,6 +36,8 @@ const EMPTY_SNAP: RoomSnapshot = {
   peers: new Map(),
   map: null,
   sharedNote: null,
+  music: {},
+  clockOffset: 0,
   version: 0,
 };
 const noopSubscribe = () => () => {};
@@ -55,6 +59,8 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
   const [detail, setDetail] = useState<GroupDetail | null>(null);
   const [room, setRoom] = useState<RoomClient | null>(null);
   const [media, setMedia] = useState<MediaManager | null>(null);
+  const [music, setMusic] = useState<MusicPlayer | null>(null);
+  const [speaker, setSpeaker] = useState<MapObject | null>(null);
   const [chatTarget, setChatTarget] = useState<ChatTarget>({ kind: "nearby" });
   const [dmTabs, setDmTabs] = useState<string[]>([]);
   const [notes, setNotes] = useState<null | "private" | "shared">(null);
@@ -131,12 +137,20 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
     });
     const r = new RoomClient(activeId);
     const m = new MediaManager(r);
+    const mp = new MusicPlayer(r);
     setRoom(r);
     setMedia(m);
+    setMusic(mp);
+    setSpeaker(null);
     void r.connect();
     // Hook debug untuk tes e2e dan pengukuran spike (hanya di pengembangan).
     if (process.env.NODE_ENV !== "production")
-      (window as unknown as { __meetopia?: unknown }).__meetopia = { room: r, media: m };
+      (window as unknown as { __meetopia?: unknown }).__meetopia = {
+        room: r,
+        media: m,
+        music: mp,
+        walkTo: (p: Point) => walkToRef.current?.(p),
+      };
     if (!sessionStorage.getItem("mt_device_checked")) {
       setJoining(true);
       setModal("devices");
@@ -148,6 +162,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
       });
     }
     return () => {
+      mp.destroy();
       m.destroy();
       r.close();
     };
@@ -201,10 +216,9 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
         if (prefs.soundDm) playSound("dm");
         if (prefs.desktopNotify) desktopNotify(m.senderName, m.body.slice(0, 140));
       }),
-      room.on(
-        "error",
-        (code) => code === "rateLimited" && toast({ text: t("error.rateLimited"), kind: "error" }),
-      ),
+      room.on("error", (code) => {
+        if (code === "rateLimited" || code === "tooFar") toast({ text: t(`error.${code}`), kind: "error" });
+      }),
       room.on("kicked", (reason) => {
         if (reason === "replaced") {
           toast({
@@ -257,8 +271,10 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
     setChatTarget({ kind: "dm", userId });
   };
 
-  const onAction = (action: ObjectAction) => {
+  const onAction = (action: ObjectAction, obj: MapObject) => {
     switch (action) {
+      case "music":
+        return setSpeaker(obj);
       case "openSharedNotes":
         return setNotes("shared");
       case "openPrivateNotes":
@@ -492,6 +508,11 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
               <RoomStage
                 room={room}
                 media={media}
+                music={music}
+                onOpenSpeaker={(id) => {
+                  const o = snap.map?.objects.find((x) => x.id === id);
+                  if (o) setSpeaker(o);
+                }}
                 snap={snap}
                 onAction={onAction}
                 onPeerClick={(p) => {
@@ -664,6 +685,9 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
         />
       )}
       {modal === "tips" && <Tips onClose={() => setModal(null)} />}
+      {speaker && room && (
+        <SpeakerPanel room={room} snap={snap} obj={speaker} role={role} onClose={() => setSpeaker(null)} />
+      )}
       {peerCard && (
         <Modal
           title={peerCard.member.name}

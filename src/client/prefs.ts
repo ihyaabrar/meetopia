@@ -15,6 +15,8 @@ export interface Prefs {
   othersVolume: number;
   /** Pengali volume musik dari speaker di ruangan, 0..1. */
   musicVolume: number;
+  /** Bisukan semua speaker untuk diri sendiri (tombol di layar ruangan). */
+  musicMuted: boolean;
   soundKnock: boolean;
   soundDm: boolean;
   soundMention: boolean;
@@ -31,6 +33,7 @@ export const DEFAULT_PREFS: Prefs = {
   noiseSuppression: true,
   othersVolume: 1,
   musicVolume: 0.7,
+  musicMuted: false,
   soundKnock: true,
   soundDm: true,
   soundMention: true,

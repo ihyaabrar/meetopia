@@ -888,6 +888,56 @@ input[type="checkbox"] {
 .hud-chip.warn {
   color: #e3b25c;
 }
+.hud-chip.music {
+  padding: 2px 3px 2px 4px;
+  gap: 2px;
+}
+.hud-chip .icon-btn {
+  color: #a8a097;
+}
+.hud-chip .icon-btn:hover {
+  color: #ede8e1;
+  background: rgba(255, 255, 255, 0.08);
+}
+.chip-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 13px;
+}
+.chip-link:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.vol-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+.vol-bars i {
+  width: 3px;
+  border-radius: 1px;
+  background: rgba(237, 232, 225, 0.25);
+}
+.vol-bars i:nth-child(1) {
+  height: 5px;
+}
+.vol-bars i:nth-child(2) {
+  height: 8px;
+}
+.vol-bars i:nth-child(3) {
+  height: 12px;
+}
+.vol-bars i[data-on="true"] {
+  background: #7cc48a;
+}
 .hud-tr {
   position: absolute;
   top: 10px;
@@ -1969,6 +2019,78 @@ input.switch:checked::before {
 }
 .context-menu button.danger {
   color: #ef7a6f;
+}
+
+/* ---------- Speaker musik ---------- */
+.now-playing {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--bg);
+}
+.now-playing b {
+  display: block;
+}
+.now-playing .hint {
+  display: block;
+  margin: 0;
+}
+.np-icon {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--surface-hover);
+  color: var(--text-muted);
+}
+.now-playing[data-playing="true"] .np-icon {
+  background: var(--accent);
+  color: #fff;
+}
+.station-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+}
+.station {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-muted);
+}
+.station b {
+  display: block;
+  color: var(--text);
+  font-weight: 600;
+}
+.station .hint {
+  display: block;
+  margin: 2px 0 0;
+}
+.station svg {
+  margin-top: 2px;
+}
+.station:hover:not(:disabled) {
+  border-color: var(--text-muted);
+}
+.station[aria-pressed="true"] {
+  border: 2px solid var(--accent-fg);
+  padding: 9px 11px;
+  color: var(--accent-fg);
+}
+.station:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 /* ---------- Layar sentuh: target minimal 44px (R-03) ---------- */
