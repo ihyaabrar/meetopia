@@ -31,6 +31,7 @@ export interface Me {
   locale: string;
   highContrast: boolean;
   emailVerified: boolean;
+  emailVerification: boolean;
 }
 
 export type ChatTarget =

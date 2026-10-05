@@ -5,7 +5,7 @@ import { ApiError, ok, parseBody, rateLimit, route } from "@/server/api";
 import { hashPassword, setSessionCookie } from "@/server/auth";
 import { newId } from "@/server/ids";
 import { sendVerificationEmail } from "@/server/emailTokens";
-import { isDev } from "@/server/env";
+import { emailVerificationEnabled, isDev } from "@/server/env";
 import { sanitizeAvatar } from "@/shared/avatar";
 import { isLocale } from "@/i18n";
 
@@ -36,7 +36,9 @@ export const POST = route(async (req) => {
       locale,
     ],
   );
-  const link = await sendVerificationEmail({ id, email, name: body.name, locale });
+  const link = emailVerificationEnabled()
+    ? await sendVerificationEmail({ id, email, name: body.name, locale })
+    : undefined;
   await setSessionCookie(id, 1);
   // Tanpa SMTP saat pengembangan, tautan dikembalikan agar mudah diuji.
   return ok({ id, devVerifyLink: isDev && !process.env.SMTP_URL ? link : undefined });

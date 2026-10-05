@@ -9,6 +9,9 @@ export class ConfigError extends Error {
 
 export const onVercel = !!process.env.VERCEL;
 
+/** Verifikasi email dimatikan dulu (keputusan pemilik). Nyalakan dengan EMAIL_VERIFICATION=on. */
+export const emailVerificationEnabled = () => process.env.EMAIL_VERIFICATION === "on";
+
 export function authSecret(): Uint8Array {
   const s = process.env.AUTH_SECRET;
   if (!s) {

@@ -145,9 +145,11 @@ export function ProfileModal({
       <div className="list-row" style={{ marginTop: 8 }}>
         <div className="grow">
           <b>{me.email}</b>
-          <div className="hint">{me.emailVerified ? t("profile.verified") : t("profile.notVerified")}</div>
+          {me.emailVerification && (
+            <div className="hint">{me.emailVerified ? t("profile.verified") : t("profile.notVerified")}</div>
+          )}
         </div>
-        {!me.emailVerified && (
+        {me.emailVerification && !me.emailVerified && (
           <button className="btn secondary small" onClick={resend}>
             {t("profile.resend")}
           </button>

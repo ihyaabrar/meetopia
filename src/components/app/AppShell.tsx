@@ -428,7 +428,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
             </button>
           )}
         </header>
-        {!me.emailVerified && !bannerHidden && (
+        {me.emailVerification && !me.emailVerified && !bannerHidden && (
           <div className="banner" role="status">
             <Icon name="mail" size={16} />
             <span className="grow">{t("profile.verifyBanner", { email: me.email })}</span>
