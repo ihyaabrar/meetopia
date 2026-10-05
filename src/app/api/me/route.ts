@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { sql } from "@/server/db";
 import { ApiError, ok, parseBody, requireUser, route } from "@/server/api";
-import { clearSessionCookie, verifyPassword } from "@/server/auth";
+import { activeStatus, clearSessionCookie, verifyPassword } from "@/server/auth";
 import { listGroups } from "@/server/repo";
 import { publishToRoom } from "@/realtime/bus";
 import { sanitizeAvatar } from "@/shared/avatar";
@@ -18,6 +18,8 @@ const patchSchema = z.object({
   avatar: z.unknown().optional(),
   locale: z.enum(LOCALES).optional(),
   highContrast: z.boolean().optional(),
+  statusText: z.string().trim().max(80).nullable().optional(),
+  statusExpiresAt: z.iso.datetime({ offset: true }).nullable().optional(),
 });
 
 export const PATCH = route(async (req) => {
@@ -25,17 +27,27 @@ export const PATCH = route(async (req) => {
   const body = await parseBody(req, patchSchema);
   const name = body.name ?? user.name;
   const avatar = body.avatar !== undefined ? sanitizeAvatar(body.avatar) : user.avatar;
-  await sql("UPDATE users SET name = $2, avatar = $3, locale = $4, high_contrast = $5 WHERE id = $1", [
-    user.id,
-    name,
-    JSON.stringify(avatar),
-    body.locale ?? user.locale,
-    body.highContrast ?? user.highContrast,
-  ]);
+  const statusChanged = body.statusText !== undefined;
+  const status = statusChanged
+    ? activeStatus(body.statusText || null, body.statusText ? (body.statusExpiresAt ?? null) : null)
+    : { statusText: user.statusText, statusExpiresAt: user.statusExpiresAt };
+  await sql(
+    `UPDATE users SET name = $2, avatar = $3, locale = $4, high_contrast = $5, status_text = $6,
+       status_expires_at = $7 WHERE id = $1`,
+    [
+      user.id,
+      name,
+      JSON.stringify(avatar),
+      body.locale ?? user.locale,
+      body.highContrast ?? user.highContrast,
+      status.statusText,
+      status.statusExpiresAt,
+    ],
+  );
   // FR-11: perubahan avatar terlihat semua orang di setiap ruangan dalam 1 detik.
-  if (body.name !== undefined || body.avatar !== undefined) {
+  if (body.name !== undefined || body.avatar !== undefined || statusChanged) {
     for (const g of await listGroups(user.id)) {
-      await publishToRoom(g.id, { control: { kind: "profile", userId: user.id, name, avatar } });
+      await publishToRoom(g.id, { control: { kind: "profile", userId: user.id, name, avatar, ...status } });
     }
   }
   return ok({
@@ -45,6 +57,7 @@ export const PATCH = route(async (req) => {
       avatar,
       locale: body.locale ?? user.locale,
       highContrast: body.highContrast ?? user.highContrast,
+      ...status,
     },
   });
 });

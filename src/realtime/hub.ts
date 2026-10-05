@@ -11,6 +11,7 @@ import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocketServer, WebSocket } from "ws";
 import { verifyRealtimeToken } from "@/server/tokens";
+import { activeStatus } from "@/shared/status";
 import { getKv, keys, type Kv } from "@/server/kv";
 import { one } from "@/server/db";
 import { newId } from "@/server/ids";
@@ -48,6 +49,9 @@ interface Conn {
   emoteTimes: number[];
   musicTimes: number[];
   lastPosSave: number;
+  statusExpiresAt: number | null;
+  /** Status "rapat" dipasang otomatis karena masuk ruang privat (dicabut saat keluar). */
+  autoMeeting: boolean;
 }
 
 interface Room {
@@ -132,10 +136,12 @@ export class RealtimeHub {
       send(ws, { t: "error", code: "forbidden" });
       return ws.close(4003);
     }
-    const user = await one<{ name: string; avatar: unknown }>(
-      "SELECT name, avatar FROM users WHERE id = $1",
-      [auth.userId],
-    );
+    const user = await one<{
+      name: string;
+      avatar: unknown;
+      status_text: string | null;
+      status_expires_at: string | Date | null;
+    }>("SELECT name, avatar, status_text, status_expires_at FROM users WHERE id = $1", [auth.userId]);
     if (!user) return ws.close(4001);
 
     const room = await this.loadRoom(auth.groupId);
@@ -155,6 +161,7 @@ export class RealtimeHub {
       pos = this.freeSpawn(room, all);
     }
 
+    const status = activeStatus(user.status_text, user.status_expires_at);
     const presence: Presence = {
       id: auth.userId,
       conn: newId(),
@@ -168,6 +175,7 @@ export class RealtimeHub {
       sitting: false,
       status: "active",
       manualStatus: false,
+      statusText: status.statusText,
       // Aturan 8: mikrofon dan kamera mati saat masuk.
       media: { mic: false, cam: false, screen: false },
       allowedZone: privateZoneAt(room.map, pos.x, pos.y)?.id ?? null,
@@ -193,6 +201,8 @@ export class RealtimeHub {
       emoteTimes: [],
       musicTimes: [],
       lastPosSave: 0,
+      statusExpiresAt: status.statusExpiresAt ? Date.parse(status.statusExpiresAt) : null,
+      autoMeeting: false,
     };
     room.conns.set(auth.userId, conn);
     await this.writePresence(conn);
@@ -357,6 +367,7 @@ export class RealtimeHub {
         p.dir = m.dir;
         p.moving = m.moving;
         if (m.moving) p.sitting = false;
+        this.autoMeetingStatus(room, conn);
         await this.broadcastUpdate(conn);
         if (!m.moving || Date.now() - conn.lastPosSave > 10_000) {
           conn.lastPosSave = Date.now();
@@ -378,6 +389,7 @@ export class RealtimeHub {
         p.status = m.status;
         p.manualStatus = m.manual;
         conn.autoAway = false;
+        conn.autoMeeting = false;
         if (m.status !== "busy") p.allowedPeers = [];
         return this.broadcastUpdate(conn);
 
@@ -432,9 +444,77 @@ export class RealtimeHub {
       case "music":
         return this.onMusic(room, conn, m);
 
+      case "teleport":
+        return this.onTeleport(room, conn, m.toUserId);
+
       case "knockReply":
         return this.onKnockReply(room, conn, m);
     }
+  }
+
+  /** Masuk ruang privat (rapat) otomatis menjadi "sedang rapat"; keluar mengembalikan "aktif". */
+  private autoMeetingStatus(room: Room, conn: Conn) {
+    const p = conn.presence;
+    const inMeeting = !!privateZoneAt(room.map, p.x, p.y);
+    if (inMeeting && p.status === "active") {
+      p.status = "meeting";
+      conn.autoMeeting = true;
+    } else if (!inMeeting && conn.autoMeeting) {
+      if (p.status === "meeting") p.status = "active";
+      conn.autoMeeting = false;
+    }
+  }
+
+  /**
+   * Lompat ke dekat rekan (FR-32): ditolak bila rekan sedang sibuk (kecuali sudah diizinkan lewat ketuk),
+   * atau bila rekan ada di ruang privat yang belum mengizinkan kita.
+   */
+  private async onTeleport(room: Room, conn: Conn, toUserId: string) {
+    const p = conn.presence;
+    const others = (await this.readPresence(room)).filter((o) => o.id !== conn.userId);
+    const target = others.find((o) => o.id === toUserId);
+    const reject = (reason: "busy" | "privateZone" | "noSpace" | "offline") =>
+      send(conn.ws, { t: "teleportRejected", reason });
+    if (!target) return reject("offline");
+    const allowed = target.allowedPeers.includes(p.id) || p.allowedPeers.includes(target.id);
+    if (target.status === "busy" && !allowed) return reject("busy");
+    const zone = privateZoneAt(room.map, target.x, target.y);
+    if (zone && p.allowedZone !== zone.id && !allowed) return reject("privateZone");
+
+    // Tile kosong terdekat di sekitar rekan, di area yang sama.
+    const tx = Math.floor(target.x);
+    const ty = Math.floor(target.y);
+    let spot: { x: number; y: number } | null = null;
+    for (let r = 1; r <= 3 && !spot; r++)
+      for (const [dx, dy] of [
+        [r, 0],
+        [-r, 0],
+        [0, r],
+        [0, -r],
+        [r, r],
+        [-r, r],
+        [r, -r],
+        [-r, -r],
+      ]) {
+        const x = tx + dx + 0.5;
+        const y = ty + dy + 0.5;
+        if (!this.isWalkable(room, x, y)) continue;
+        if (privateZoneAt(room.map, x, y)?.id !== zone?.id) continue;
+        if (others.some((o) => Math.hypot(o.x - x, o.y - y) < 0.8)) continue;
+        spot = { x, y };
+        break;
+      }
+    if (!spot) return reject("noSpace");
+    if (zone) p.allowedZone = zone.id;
+    else if (privateZoneAt(room.map, p.x, p.y)) p.allowedZone = null;
+    p.x = spot.x;
+    p.y = spot.y;
+    p.moving = false;
+    p.sitting = false;
+    p.dir = target.x > spot.x ? "right" : target.x < spot.x ? "left" : target.y > spot.y ? "down" : "up";
+    this.autoMeetingStatus(room, conn);
+    send(conn.ws, { t: "teleported", x: spot.x, y: spot.y, toName: target.name });
+    await this.broadcastUpdate(conn);
   }
 
   private async readMusic(room: Room): Promise<MusicState[]> {
@@ -631,6 +711,8 @@ export class RealtimeHub {
       case "profile":
         conn.presence.name = ctl.name;
         conn.presence.avatar = ctl.avatar;
+        conn.presence.statusText = ctl.statusText;
+        conn.statusExpiresAt = ctl.statusExpiresAt ? Date.parse(ctl.statusExpiresAt) : null;
         return this.broadcastUpdate(conn);
       case "grantZone":
         conn.presence.allowedZone = ctl.zoneId;
@@ -646,6 +728,13 @@ export class RealtimeHub {
     for (const room of this.rooms.values()) {
       for (const conn of room.conns.values()) {
         const p = conn.presence;
+        // Status kustom yang sudah lewat waktunya dihapus dari tampilan.
+        if (conn.statusExpiresAt && now >= conn.statusExpiresAt) {
+          conn.statusExpiresAt = null;
+          p.statusText = null;
+          await this.broadcastUpdate(conn);
+          continue;
+        }
         // FR-30: otomatis "jauh dari layar" setelah 5 menit tanpa aktivitas dalam aplikasi.
         if (p.status === "active" && now - p.lastActive > AWAY_AFTER_MS) {
           p.status = "away";

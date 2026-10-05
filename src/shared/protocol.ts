@@ -29,6 +29,8 @@ export interface Presence {
   status: PresenceStatus;
   /** Status diatur manual (tidak ditimpa otomatis "jauh"). */
   manualStatus: boolean;
+  /** Status kustom, mis. "Fokus sampai jam 3". */
+  statusText: string | null;
   media: MediaState;
   allowedZone: string | null;
   allowedPeers: string[];
@@ -87,6 +89,7 @@ export const clientMessageSchema = z.discriminatedUnion("t", [
   }),
   z.object({ t: z.literal("knockReply"), knockId: z.string().max(64), accept: z.boolean() }),
   z.object({ t: z.literal("emote"), emoji: z.enum(EMOTES) }),
+  z.object({ t: z.literal("teleport"), toUserId: z.string().max(64) }),
   z.object({
     t: z.literal("music"),
     objectId: z.string().max(64),
@@ -122,6 +125,8 @@ export type ServerMessage =
   | { t: "sharedNote"; note: SharedNote }
   | { t: "map"; map: MapData }
   | { t: "groupChanged" }
+  | { t: "teleported"; x: number; y: number; toName: string }
+  | { t: "teleportRejected"; reason: "busy" | "privateZone" | "noSpace" | "offline" }
   | { t: "music"; objectId: string; state: MusicState | null; serverNow: number }
   | { t: "kicked"; reason: string }
   | { t: "error"; code: string }

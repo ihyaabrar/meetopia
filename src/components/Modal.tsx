@@ -9,12 +9,15 @@ export function Modal({
   onClose,
   children,
   wide,
+  bare,
 }: {
   title: string;
   sub?: string;
   onClose: () => void;
   children: React.ReactNode;
   wide?: boolean;
+  /** Tanpa judul bawaan dan tanpa padding (untuk kartu dengan tata letak sendiri). */
+  bare?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -32,13 +35,13 @@ export function Modal({
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
         ref={ref}
-        className={`modal ${wide ? "wide" : ""}`}
+        className={`modal ${wide ? "wide" : ""} ${bare ? "bare" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
       >
-        <h2>{title}</h2>
-        {sub && <p className="sub">{sub}</p>}
+        {!bare && <h2>{title}</h2>}
+        {!bare && sub && <p className="sub">{sub}</p>}
         {children}
       </div>
     </div>

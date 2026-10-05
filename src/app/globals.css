@@ -762,6 +762,10 @@ input[type="checkbox"] {
   font-size: 14px;
 }
 .user-bar .who span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 12px;
   color: var(--text-muted);
 }
@@ -2091,6 +2095,115 @@ input.switch:checked::before {
 .station:disabled {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+/* ---------- Kartu profil ---------- */
+.modal.bare {
+  padding: 0;
+  overflow: hidden auto;
+  max-width: 380px;
+}
+.profile-card {
+  position: relative;
+}
+.pc-banner {
+  height: 72px;
+  opacity: 0.85;
+}
+.pc-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(20, 19, 18, 0.55);
+  color: #ede8e1;
+}
+.pc-close:hover {
+  background: rgba(20, 19, 18, 0.8);
+}
+.pc-avatar {
+  margin: -48px 0 0 16px;
+}
+.pc-avatar .avatar-wrap {
+  display: inline-block;
+  padding: 5px;
+  border-radius: 50%;
+  background: var(--surface);
+}
+.pc-avatar .status-dot {
+  width: 20px;
+  height: 20px;
+  right: 6px;
+  bottom: 6px;
+  border: 4px solid var(--surface);
+}
+.pc-body {
+  padding: 6px 18px 18px;
+}
+.pc-body h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.pc-status-text {
+  margin: 4px 0 0;
+}
+.pc-facts {
+  margin: 14px 0 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--bg);
+  display: grid;
+  gap: 10px;
+}
+.pc-facts div {
+  display: grid;
+  gap: 2px;
+}
+.pc-facts dt {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.pc-facts dd {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-dot.inline {
+  position: static;
+  width: 10px;
+  height: 10px;
+  border: none;
+}
+.pc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.pc-actions .btn {
+  flex: 1 1 auto;
+}
+.pc-volume {
+  margin: 14px 0 0;
+}
+.user-chip {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  margin: -4px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.user-chip:hover {
+  background: var(--surface-hover);
 }
 
 /* ---------- Layar sentuh: target minimal 44px (R-03) ---------- */

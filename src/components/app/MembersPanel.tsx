@@ -41,8 +41,8 @@ export function MembersPanel({ members, presence, selfId, onSelect, onClose, loc
             )}
           </b>
           <span>
-            {t(`status.${status}`)}
-            {p && locate?.(p) && ` · ${locate(p)}`}
+            {p?.statusText ??
+              (p && locate?.(p) ? `${t(`status.${status}`)} · ${locate(p)}` : t(`status.${status}`))}
           </span>
         </span>
         {/* Seperti Discord: ikon hanya saat mic mati; mic menyala tidak perlu penanda tambahan. */}

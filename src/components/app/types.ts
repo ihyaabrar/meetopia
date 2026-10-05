@@ -15,6 +15,7 @@ export interface MemberInfo {
   name: string;
   avatar: AvatarConfig;
   role: Role;
+  joinedAt?: string;
 }
 
 export interface GroupDetail {
@@ -42,6 +43,8 @@ export interface Me {
   highContrast: boolean;
   emailVerified: boolean;
   emailVerification: boolean;
+  statusText: string | null;
+  statusExpiresAt: string | null;
 }
 
 export type ChatTarget =

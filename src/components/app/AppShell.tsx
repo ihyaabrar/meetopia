@@ -12,7 +12,6 @@ import { ToastProvider, useToast } from "@/components/Toasts";
 import { Logo, LogoMark } from "@/components/Logo";
 import { Icon, type IconName } from "@/components/Icon";
 import { AvatarCanvas } from "@/components/AvatarCanvas";
-import { Modal } from "@/components/Modal";
 import { zoneAt, type MapObject, type ObjectAction } from "@/shared/map";
 import type { Point } from "@/shared/pathfinding";
 import type { Presence } from "@/shared/protocol";
@@ -27,6 +26,9 @@ import { CreateGroup } from "./CreateGroup";
 import { UserSettings, type UserSection } from "./UserSettings";
 import { GroupSettings, type GroupSection } from "./GroupSettings";
 import { SpeakerPanel } from "./SpeakerPanel";
+import { ProfileCard } from "./ProfileCard";
+import { StatusEditor } from "./StatusEditor";
+import { setPrefs, usePrefs } from "@/client/prefs";
 import { GroupIcon } from "@/components/GroupIcon";
 import type { ChatTarget, GroupDetail, GroupSummary, Me, MemberInfo } from "./types";
 
@@ -65,8 +67,9 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
   const [dmTabs, setDmTabs] = useState<string[]>([]);
   const [notes, setNotes] = useState<null | "private" | "shared">(null);
   const [modal, setModal] = useState<
-    null | "create" | "profile" | "settings" | "invites" | "devices" | "tips"
+    null | "create" | "profile" | "settings" | "invites" | "devices" | "tips" | "status"
   >(null);
+  const prefs = usePrefs();
   const [userSection, setUserSection] = useState<UserSection>("account");
   const [groupSection, setGroupSection] = useState<GroupSection | undefined>(undefined);
   const [railMenu, setRailMenu] = useState<{ group: GroupSummary; x: number; y: number } | null>(null);
@@ -206,6 +209,10 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
         });
       }),
       room.on("screenRejected", () => media.screenRejected()),
+      room.on("teleported", (m) => toast({ text: t("peer.teleported", { name: m.toName }) })),
+      room.on("teleportRejected", (m) =>
+        toast({ text: t(`peer.teleportRejected.${m.reason}`), kind: "error" }),
+      ),
       room.on("groupChanged", () => {
         void loadDetail(room.groupId);
         void refreshGroups();
@@ -294,8 +301,29 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
   };
 
   const selectPeer = (member: MemberInfo, presence?: Presence) => {
-    if (member.id === me.id) return openUserSettings("avatar");
     setPeerCard({ member, presence });
+  };
+  const selfMember: MemberInfo = detail?.members.find((m) => m.id === me.id) ?? {
+    id: me.id,
+    name: me.name,
+    avatar: me.avatar,
+    role,
+  };
+  const card = peerCard
+    ? (() => {
+        const isSelf = peerCard.member.id === me.id;
+        const presence = isSelf ? self : (snap.peers.get(peerCard.member.id) ?? peerCard.presence);
+        return { isSelf, presence, busy: presence?.status === "busy" };
+      })()
+    : null;
+  const isSelf = !!card?.isSelf;
+  const presence = card?.presence;
+  const busy = !!card?.busy;
+  const close = () => setPeerCard(null);
+  const walkToPresence = (p: Presence) => walkToRef.current?.({ x: p.x + 1, y: p.y });
+  const zoneName = (p?: Presence) => {
+    const z = p && snap.map ? zoneAt(snap.map, p.x, p.y) : null;
+    return z ? t(z.label) : null;
   };
 
   const switchGroup = (id: string) => {
@@ -417,14 +445,21 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
           )}
         </div>
         <div className="user-bar">
-          <span className="avatar-wrap">
-            <AvatarCanvas avatar={me.avatar} size={34} face />
-            <span className={`status-dot s-${self?.status ?? "offline"}`} />
-          </span>
-          <span className="who">
-            <b>{me.name}</b>
-            <span>{self ? t(`status.${self.status}`) : t("status.offline")}</span>
-          </span>
+          <button
+            className="user-chip"
+            onClick={() => setPeerCard({ member: selfMember, presence: self })}
+            aria-label={t("pc.myProfile")}
+            title={t("pc.myProfile")}
+          >
+            <span className="avatar-wrap">
+              <AvatarCanvas avatar={me.avatar} size={34} face />
+              <span className={`status-dot s-${self?.status ?? "offline"}`} />
+            </span>
+            <span className="who">
+              <b>{me.name}</b>
+              <span>{me.statusText ?? (self ? t(`status.${self.status}`) : t("status.offline"))}</span>
+            </span>
+          </button>
           <button
             className="icon-btn"
             onClick={() => openUserSettings()}
@@ -688,56 +723,112 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
       {speaker && room && (
         <SpeakerPanel room={room} snap={snap} obj={speaker} role={role} onClose={() => setSpeaker(null)} />
       )}
+      {modal === "status" && <StatusEditor me={me} onClose={() => setModal(null)} onSaved={setMe} />}
       {peerCard && (
-        <Modal
-          title={peerCard.member.name}
-          sub={peerCard.presence ? t(`status.${peerCard.presence.status}`) : t("status.offline")}
-          onClose={() => setPeerCard(null)}
+        <ProfileCard
+          member={peerCard.member}
+          presence={presence}
+          isSelf={isSelf}
+          statusText={isSelf ? me.statusText : (presence?.statusText ?? null)}
+          location={zoneName(presence)}
+          onClose={close}
         >
-          <div style={{ display: "grid", placeItems: "center", marginBottom: 12 }}>
-            <AvatarCanvas avatar={peerCard.presence?.avatar ?? peerCard.member.avatar} size={110} />
-            <span className="badge">{t(`role.${peerCard.member.role}`)}</span>
-          </div>
-          <div className="modal-actions" style={{ justifyContent: "center" }}>
-            <button
-              className="btn secondary"
-              onClick={() => {
-                openDm(peerCard.member.id);
-                setPeerCard(null);
-              }}
-            >
-              <Icon name="chat" size={18} /> {t("peer.message")}
-            </button>
-            {peerCard.presence && (
+          {isSelf ? (
+            <div className="pc-actions">
               <button
                 className="btn secondary"
                 onClick={() => {
-                  walkToRef.current?.({ x: peerCard.presence!.x + 1, y: peerCard.presence!.y });
-                  setPeerCard(null);
+                  close();
+                  setModal("status");
                 }}
               >
-                <Icon name="pin" size={18} /> {t("peer.walkTo")}
+                <Icon name="smile" size={18} /> {me.statusText ? t("cs.edit") : t("cs.set")}
               </button>
-            )}
-            {peerCard.presence?.status === "busy" && (
               <button
-                className="btn"
+                className="btn secondary"
                 onClick={() => {
-                  room?.send({ t: "knock", toUserId: peerCard.member.id });
-                  toast({ text: t("knock.sent") });
-                  setPeerCard(null);
+                  close();
+                  openUserSettings("avatar");
                 }}
               >
-                <Icon name="knock" size={18} /> {t("knock.knock")}
+                <Icon name="edit" size={18} /> {t("us.editAvatar")}
               </button>
-            )}
-          </div>
-          {peerCard.presence?.status === "busy" && (
-            <p className="hint" style={{ textAlign: "center" }}>
-              {t("peer.busyHint")}
-            </p>
+            </div>
+          ) : (
+            <>
+              <div className="pc-actions">
+                <button
+                  className="btn secondary"
+                  onClick={() => {
+                    openDm(peerCard.member.id);
+                    close();
+                  }}
+                >
+                  <Icon name="chat" size={18} /> {t("peer.message")}
+                </button>
+                {presence && (
+                  <button
+                    className="btn secondary"
+                    onClick={() => {
+                      walkToPresence(presence);
+                      close();
+                    }}
+                  >
+                    <Icon name="pin" size={18} /> {t("peer.walkTo")}
+                  </button>
+                )}
+                {presence && !busy && (
+                  <button
+                    className="btn secondary"
+                    onClick={() => {
+                      room?.send({ t: "teleport", toUserId: peerCard.member.id });
+                      close();
+                    }}
+                  >
+                    <Icon name="teleport" size={18} /> {t("peer.teleport")}
+                  </button>
+                )}
+                {busy && (
+                  <button
+                    className="btn"
+                    onClick={() => {
+                      room?.send({ t: "knock", toUserId: peerCard.member.id });
+                      toast({ text: t("knock.sent") });
+                      close();
+                    }}
+                  >
+                    <Icon name="knock" size={18} /> {t("knock.knock")}
+                  </button>
+                )}
+              </div>
+              {busy && <p className="hint">{t("peer.busyHint")}</p>}
+              {presence && (
+                <div className="field pc-volume">
+                  <label htmlFor="pc-vol">
+                    {t("pc.volume")}: <b>{Math.round((prefs.peerVolumes[peerCard.member.id] ?? 1) * 100)}%</b>
+                  </label>
+                  <input
+                    id="pc-vol"
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={prefs.peerVolumes[peerCard.member.id] ?? 1}
+                    onChange={(e) =>
+                      setPrefs({
+                        peerVolumes: {
+                          ...prefs.peerVolumes,
+                          [peerCard.member.id]: Number(e.target.value),
+                        },
+                      })
+                    }
+                  />
+                  <span className="hint">{t("pc.volumeHint")}</span>
+                </div>
+              )}
+            </>
           )}
-        </Modal>
+        </ProfileCard>
       )}
     </div>
   );

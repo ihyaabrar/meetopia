@@ -198,7 +198,13 @@ export function RoomStage({
 
   useEffect(() => {
     registerWalkTo((p) => walkTo(p));
-  }, [registerWalkTo, walkTo]);
+    // Setelah lompat ke rekan, rute jalan yang lama tidak berlaku lagi.
+    return room.on("teleported", () => {
+      state.current.path = [];
+      state.current.target = null;
+      state.current.onArrive = null;
+    });
+  }, [registerWalkTo, walkTo, room]);
 
   useEffect(() => {
     const offs = [

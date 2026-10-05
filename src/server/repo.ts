@@ -20,6 +20,7 @@ export interface Member {
   name: string;
   avatar: AvatarConfig;
   role: Role;
+  joinedAt: string;
 }
 
 export interface Channel {
@@ -129,12 +130,24 @@ export async function channelInGroup(channelId: string, groupId: string): Promis
 }
 
 export async function listMembers(groupId: string): Promise<Member[]> {
-  const rows = await sql<{ id: string; name: string; avatar: unknown; role: Role }>(
-    `SELECT u.id, u.name, u.avatar, m.role FROM memberships m JOIN users u ON u.id = m.user_id
+  const rows = await sql<{
+    id: string;
+    name: string;
+    avatar: unknown;
+    role: Role;
+    created_at: string | Date;
+  }>(
+    `SELECT u.id, u.name, u.avatar, m.role, m.created_at FROM memberships m JOIN users u ON u.id = m.user_id
      WHERE m.group_id = $1 ORDER BY u.name`,
     [groupId],
   );
-  return rows.map((r) => ({ ...r, avatar: sanitizeAvatar(r.avatar) }));
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    role: r.role,
+    avatar: sanitizeAvatar(r.avatar),
+    joinedAt: new Date(r.created_at).toISOString(),
+  }));
 }
 
 export async function getMap(groupId: string): Promise<MapData> {

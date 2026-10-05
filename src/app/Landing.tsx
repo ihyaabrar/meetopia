@@ -41,6 +41,7 @@ function HeroMap() {
         sitting: false,
         status: statuses[i],
         manualStatus: false,
+        statusText: null,
         media: { mic: i % 3 !== 2, cam: false, screen: false },
         allowedZone: null,
         allowedPeers: [],

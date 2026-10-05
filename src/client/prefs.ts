@@ -17,6 +17,8 @@ export interface Prefs {
   musicVolume: number;
   /** Bisukan semua speaker untuk diri sendiri (tombol di layar ruangan). */
   musicMuted: boolean;
+  /** Volume per orang (id pengguna -> 0..1), diatur dari kartu profil. */
+  peerVolumes: Record<string, number>;
   soundKnock: boolean;
   soundDm: boolean;
   soundMention: boolean;
@@ -34,6 +36,7 @@ export const DEFAULT_PREFS: Prefs = {
   othersVolume: 1,
   musicVolume: 0.7,
   musicMuted: false,
+  peerVolumes: {},
   soundKnock: true,
   soundDm: true,
   soundMention: true,

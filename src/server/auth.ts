@@ -8,6 +8,9 @@ import { cookies } from "next/headers";
 import { authSecret, emailVerificationEnabled } from "./env";
 import { one } from "./db";
 import type { AvatarConfig } from "@/shared/avatar";
+import { activeStatus } from "@/shared/status";
+
+export { activeStatus };
 
 export const SESSION_COOKIE = "mt_session";
 const SESSION_DAYS = 30;
@@ -22,6 +25,9 @@ export interface SessionUser {
   emailVerified: boolean;
   /** Apakah fitur verifikasi email aktif; bila tidak, UI tidak menampilkan apa pun soal verifikasi. */
   emailVerification: boolean;
+  /** Status kustom yang masih berlaku (null bila kosong atau sudah kedaluwarsa). */
+  statusText: string | null;
+  statusExpiresAt: string | null;
 }
 
 export const hashPassword = (pw: string) => bcrypt.hash(pw, 10);
@@ -61,6 +67,8 @@ interface UserRow {
   high_contrast: boolean;
   email_verified_at: string | null;
   session_version: number;
+  status_text?: string | null;
+  status_expires_at?: string | Date | null;
 }
 
 export function toSessionUser(r: UserRow): SessionUser {
@@ -73,6 +81,7 @@ export function toSessionUser(r: UserRow): SessionUser {
     highContrast: r.high_contrast,
     emailVerified: !!r.email_verified_at,
     emailVerification: emailVerificationEnabled(),
+    ...activeStatus(r.status_text, r.status_expires_at),
   };
 }
 

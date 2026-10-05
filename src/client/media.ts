@@ -316,7 +316,8 @@ export class MediaManager {
       link.lastWanted = now;
       if (Math.abs(link.volume - volume) > 0.01) changed = true;
       link.volume = volume;
-      link.audioEl.volume = Math.max(0, Math.min(1, volume * this.masterVolume));
+      const personal = getPrefs().peerVolumes[peer.id] ?? 1;
+      link.audioEl.volume = Math.max(0, Math.min(1, volume * this.masterVolume * personal));
       const sendsVideo = videoIds.has(peer.id);
       if (sendsVideo !== link.sendsVideo) {
         link.sendsVideo = sendsVideo;

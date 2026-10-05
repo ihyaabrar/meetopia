@@ -35,6 +35,8 @@ type EventMap = {
   error: string;
   welcome: void;
   groupChanged: void;
+  teleported: Extract<ServerMessage, { t: "teleported" }>;
+  teleportRejected: Extract<ServerMessage, { t: "teleportRejected" }>;
 };
 
 type Listener<K extends keyof EventMap> = (e: EventMap[K]) => void;
@@ -294,6 +296,11 @@ export class RoomClient {
         return this.commit({ map: m.map });
       case "groupChanged":
         return this.emit("groupChanged", undefined);
+      case "teleported":
+        this.updateSelf({ x: m.x, y: m.y, moving: false, sitting: false });
+        return this.emit("teleported", m);
+      case "teleportRejected":
+        return this.emit("teleportRejected", m);
       case "music": {
         const music = { ...this.snapshot.music };
         if (m.state) music[m.objectId] = m.state;

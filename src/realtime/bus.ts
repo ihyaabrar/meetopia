@@ -11,7 +11,14 @@ import type { Role } from "@/shared/roles";
 export type Control =
   | { kind: "replaced"; userId: string; conn: string }
   | { kind: "membership"; userId: string; role: Role | null }
-  | { kind: "profile"; userId: string; name: string; avatar: AvatarConfig }
+  | {
+      kind: "profile";
+      userId: string;
+      name: string;
+      avatar: AvatarConfig;
+      statusText: string | null;
+      statusExpiresAt: string | null;
+    }
   | { kind: "grantZone"; userId: string; zoneId: string }
   | { kind: "grantPeer"; userId: string; peerId: string }
   | { kind: "map"; map: MapData }
