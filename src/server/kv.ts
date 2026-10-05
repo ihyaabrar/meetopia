@@ -4,6 +4,7 @@
  * Pengembangan: implementasi dalam memori (hanya valid untuk satu proses).
  */
 import { EventEmitter } from "node:events";
+import { redisUrl } from "./env";
 
 export interface Kv {
   hset(key: string, field: string, value: string): Promise<void>;
@@ -110,7 +111,7 @@ const g = globalThis as unknown as { __meetopiaKv?: Promise<Kv> };
 
 export function getKv(): Promise<Kv> {
   if (!g.__meetopiaKv) {
-    const url = process.env.REDIS_URL;
+    const url = redisUrl();
     g.__meetopiaKv = url ? createRedisKv(url) : Promise.resolve(new MemoryKv());
   }
   return g.__meetopiaKv;

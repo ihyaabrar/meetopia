@@ -91,7 +91,7 @@ Vercel tidak menyimpan file dan tiap koneksi bisa jatuh ke instance berbeda, jad
 5. **Deployments → Redeploy** (env baru hanya terbaca setelah deploy ulang).
 6. Buka `https://alamatmu/api/health`. Semua harus `true`/`"ok"`; kalau ada yang `false`, itulah env yang belum benar.
 
-Tabel database dibuat otomatis saat permintaan pertama. Server real-time berjalan di endpoint `/api/ws` memakai `experimental_upgradeWebSocket()` dari `@vercel/functions` (fitur beta Vercel). Koneksi ditutup Vercel setiap 300 detik (batas paket Hobby); klien menyambung ulang otomatis dan posisi dipulihkan dari Redis. Endpoint ini belum bisa diuji di luar Vercel; kalau ternyata bermasalah, pakai cadangan di bawah.
+Integrasi Marketplace Vercel (Neon, Upstash) mengisi env secara otomatis; nama `POSTGRES_URL` dan `KV_URL` juga diterima sebagai pengganti `DATABASE_URL` dan `REDIS_URL`. Pilih region Singapore untuk Neon, Upstash, dan **Settings → Functions → Function Region** agar latensi dari Indonesia rendah. Tabel database dibuat otomatis saat permintaan pertama. Server real-time berjalan di endpoint `/api/ws` memakai `experimental_upgradeWebSocket()` dari `@vercel/functions` (fitur beta Vercel). Koneksi ditutup Vercel setiap 300 detik (batas paket Hobby); klien menyambung ulang otomatis dan posisi dipulihkan dari Redis. Endpoint ini belum bisa diuji di luar Vercel; kalau ternyata bermasalah, pakai cadangan di bawah.
 
 **Cadangan: server real-time terpisah.** Jalankan `npm run start:realtime` di host Node (Railway, Fly.io, Render) dengan `DATABASE_URL`, `REDIS_URL`, `AUTH_SECRET` yang sama, lalu isi `NEXT_PUBLIC_REALTIME_URL` di Vercel dengan alamatnya (mis. `wss://meetopia-rt.fly.dev`).
 

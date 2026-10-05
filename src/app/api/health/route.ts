@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/server/db";
-import { onVercel } from "@/server/env";
+import { onVercel, redisUrl } from "@/server/env";
 
 /**
  * Cek konfigurasi server tanpa membuka rahasia apa pun. Buka /api/health setelah deploy
@@ -21,7 +21,7 @@ export async function GET() {
     database,
     databaseError,
     authSecret: !!process.env.AUTH_SECRET,
-    redis: !!process.env.REDIS_URL,
+    redis: !!redisUrl(),
     appUrl: !!process.env.APP_URL,
     realtime: process.env.NEXT_PUBLIC_REALTIME_URL ? "external" : "builtin",
   };

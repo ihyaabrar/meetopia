@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { SCHEMA_SQL } from "./schema";
-import { ConfigError, onVercel } from "./env";
+import { ConfigError, databaseUrl, onVercel } from "./env";
 
 export interface Db {
   query<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]>;
@@ -15,7 +15,7 @@ export interface Db {
 const g = globalThis as unknown as { __meetopiaDb?: Promise<Db> };
 
 async function create(): Promise<Db> {
-  const url = process.env.DATABASE_URL;
+  const url = databaseUrl();
   let db: Db;
   let exec: (sql: string) => Promise<unknown>;
   if (url) {

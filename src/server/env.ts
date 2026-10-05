@@ -25,3 +25,11 @@ export function appUrl(req?: Request): string {
 }
 
 export const isDev = process.env.NODE_ENV !== "production";
+
+/**
+ * URL database & Redis. Selain nama standar, nama dari integrasi Marketplace Vercel juga diterima
+ * (Neon: POSTGRES_URL; Upstash/KV: KV_URL), jadi env yang diisi otomatis langsung terpakai.
+ */
+export const databaseUrl = () => process.env.DATABASE_URL || process.env.POSTGRES_URL || "";
+export const redisUrl = () =>
+  process.env.REDIS_URL || process.env.KV_URL || process.env.UPSTASH_REDIS_URL || "";
