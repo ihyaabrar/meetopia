@@ -320,7 +320,7 @@
   "us.account": "Akun saya",
   "us.avatar": "Avatar",
   "us.appearance": "Tampilan",
-  "us.voice": "Suara & video",
+  "us.voice": "Audio & Video",
   "us.notifications": "Notifikasi",
   "us.editAvatar": "Ubah avatar",
   "us.security": "Keamanan",
@@ -605,5 +605,18 @@
   "landing.ctaEnter": "Masuk ke Workspace",
   "landing.ctaCreate": "Buat Workspace",
   "landing.f4.title": "Seru & Personal",
-  "landing.f4.body": "Avatar chibi, musik dari speaker, dan nonton YouTube bareng di TV."
+  "landing.f4.body": "Avatar chibi, musik dari speaker, dan nonton YouTube bareng di TV.",
+  "us.profile": "Profil",
+  "us.privacy": "Privasi",
+  "us.about": "Tentang",
+  "us.aboutPrivacy": "Privasi",
+  "us.aboutKeys": "Pintasan keyboard",
+  "us.aboutKeysHint": "WASD atau panah untuk berjalan, E untuk berinteraksi dengan objek terdekat, Enter di peta juga bisa.",
+  "us.roomSettings": "Pengaturan ruang",
+  "us.showMinimap": "Tampilkan minimap",
+  "us.showNames": "Tampilkan nama pengguna",
+  "us.showNamesHint": "Label nama di atas avatar orang lain. Namamu sendiri tetap tampil.",
+  "us.avatarAnimation": "Animasi avatar",
+  "us.notifSounds": "Suara notifikasi",
+  "us.avatarAnimationHint": "Gerak napas, kedip, dan efek di ruangan. Matikan bila ingin tampilan lebih tenang."
 }

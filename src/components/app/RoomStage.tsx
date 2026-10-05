@@ -405,6 +405,7 @@ export function RoomStage({
           return [{ obj, level: me ? speakerVolume(map, obj, me.x, me.y).volume : 0 }];
         }),
         reducedMotion: reducedMotion(),
+        showNames: getPrefs().showNames,
         playingTvs: Object.keys(s.tv).flatMap((id) => map.objects.filter((o) => o.id === id)),
         lockedZones: Object.fromEntries(Object.entries(s.locks).filter(([, l]) => l.locked)),
       });
@@ -725,7 +726,7 @@ export function RoomStage({
       </div>
 
       <div className="hud-tr">
-        {scene && (
+        {scene && prefs.showMinimap && (
           <Minimap
             scene={scene}
             getPeople={() => {

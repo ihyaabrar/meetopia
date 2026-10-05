@@ -320,7 +320,7 @@
   "us.account": "My account",
   "us.avatar": "Avatar",
   "us.appearance": "Appearance",
-  "us.voice": "Voice & video",
+  "us.voice": "Audio & Video",
   "us.notifications": "Notifications",
   "us.editAvatar": "Edit avatar",
   "us.security": "Security",
@@ -605,5 +605,18 @@
   "landing.ctaEnter": "Enter your workspace",
   "landing.ctaCreate": "Create a workspace",
   "landing.f4.title": "Fun & personal",
-  "landing.f4.body": "Chibi avatars, music from speakers, and YouTube watch parties on the TV."
+  "landing.f4.body": "Chibi avatars, music from speakers, and YouTube watch parties on the TV.",
+  "us.profile": "Profile",
+  "us.privacy": "Privacy",
+  "us.about": "About",
+  "us.aboutPrivacy": "Privacy",
+  "us.aboutKeys": "Keyboard shortcuts",
+  "us.aboutKeysHint": "WASD or arrow keys to walk, E to interact with the nearest object, Enter on the map works too.",
+  "us.roomSettings": "Room settings",
+  "us.showMinimap": "Show minimap",
+  "us.showNames": "Show user names",
+  "us.showNamesHint": "Name labels above other people's avatars. Your own name always shows.",
+  "us.avatarAnimation": "Avatar animation",
+  "us.notifSounds": "Notification sounds",
+  "us.avatarAnimationHint": "Breathing, blinking and room effects. Turn off for a calmer view."
 }

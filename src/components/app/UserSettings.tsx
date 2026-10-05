@@ -15,13 +15,14 @@ import { Icon } from "@/components/Icon";
 import { useDevices, useMicLevel } from "./useMicLevel";
 import type { Me } from "./types";
 
-export type UserSection = "account" | "avatar" | "appearance" | "voice" | "notifications";
+export type UserSection =
+  "profile" | "notifications" | "appearance" | "voice" | "privacy" | "security" | "about";
 
 /** Pengaturan pengguna: akun, avatar, tampilan, suara & video, notifikasi (masing-masing terpisah). */
 export function UserSettings({
   me,
   media,
-  initial = "account",
+  initial = "profile",
   onClose,
   onSaved,
 }: {
@@ -35,11 +36,13 @@ export function UserSettings({
   const router = useRouter();
   const [section, setSection] = useState<UserSection>(initial);
   const sections: SettingsSection<UserSection>[] = [
-    { id: "account", label: t("us.account"), icon: "user", group: t("us.groupUser") },
-    { id: "avatar", label: t("us.avatar"), icon: "smile" },
-    { id: "appearance", label: t("us.appearance"), icon: "palette", group: t("us.groupApp") },
-    { id: "voice", label: t("us.voice"), icon: "mic" },
+    { id: "profile", label: t("us.profile"), icon: "user" },
     { id: "notifications", label: t("us.notifications"), icon: "bell" },
+    { id: "appearance", label: t("us.appearance"), icon: "palette" },
+    { id: "voice", label: t("us.voice"), icon: "mic" },
+    { id: "privacy", label: t("us.privacy"), icon: "lock" },
+    { id: "security", label: t("us.security"), icon: "alert" },
+    { id: "about", label: t("us.about"), icon: "help" },
   ];
   const logout = async () => {
     await api("/api/auth/logout", { method: "POST" });
@@ -62,10 +65,16 @@ export function UserSettings({
         </div>
       }
     >
-      {section === "account" && (
-        <AccountSection me={me} onSaved={onSaved} goAvatar={() => setSection("avatar")} />
+      {section === "profile" && (
+        <>
+          <AccountSection me={me} onSaved={onSaved} part="profile" />
+          <h3 className="settings-h3">{t("us.avatar")}</h3>
+          <AvatarSection me={me} onSaved={onSaved} />
+        </>
       )}
-      {section === "avatar" && <AvatarSection me={me} onSaved={onSaved} />}
+      {section === "security" && <AccountSection me={me} onSaved={onSaved} part="security" />}
+      {section === "privacy" && <AccountSection me={me} onSaved={onSaved} part="privacy" />}
+      {section === "about" && <AboutSection />}
       {section === "appearance" && <AppearanceSection me={me} onSaved={onSaved} />}
       {section === "voice" && <VoiceSection media={media} />}
       {section === "notifications" && <NotificationSection />}
@@ -127,11 +136,11 @@ export function Toggle({
 function AccountSection({
   me,
   onSaved,
-  goAvatar,
+  part,
 }: {
   me: Me;
   onSaved: (me: Me) => void;
-  goAvatar: () => void;
+  part: "profile" | "security" | "privacy";
 }) {
   const { t } = useI18n();
   const router = useRouter();
@@ -187,159 +196,193 @@ function AccountSection({
   return (
     <>
       {status.view}
-      <div className="profile-banner">
-        <span className="avatar-wrap">
-          <AvatarCanvas avatar={me.avatar} size={72} face />
-        </span>
-        <div className="grow">
-          <b>{me.name}</b>
-          <span className="hint">{me.email}</span>
-        </div>
-        <button className="btn secondary small" onClick={goAvatar}>
-          <Icon name="edit" size={15} /> {t("us.editAvatar")}
-        </button>
-      </div>
-
-      <section className="setting-card">
-        <div className="field">
-          <label htmlFor="us-name">{t("auth.displayName")}</label>
-          <div className="row">
-            <input
-              id="us-name"
-              className="input"
-              maxLength={40}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-            <button
-              className="btn"
-              disabled={busy || !name.trim() || name.trim() === me.name}
-              onClick={saveName}
-            >
-              {t("common.save")}
-            </button>
-          </div>
-        </div>
-        <div className="setting-row">
-          <div className="grow">
-            <b>{t("auth.email")}</b>
-            <span className="hint">
-              {me.email}
-              {me.emailVerification &&
-                ` · ${me.emailVerified ? t("profile.verified") : t("profile.notVerified")}`}
+      {part === "profile" && (
+        <>
+          <div className="profile-banner">
+            <span className="avatar-wrap">
+              <AvatarCanvas avatar={me.avatar} size={72} face />
             </span>
+            <div className="grow">
+              <b>{me.name}</b>
+              <span className="hint">{me.email}</span>
+            </div>
           </div>
-          {me.emailVerification && !me.emailVerified && (
-            <button className="btn secondary small" onClick={resend}>
-              {t("profile.resend")}
-            </button>
-          )}
-        </div>
-      </section>
 
-      <h3 className="settings-h3">{t("us.security")}</h3>
-      <section className="setting-card">
-        <div className="setting-row">
-          <div className="grow">
-            <b>{t("auth.password")}</b>
-            <span className="hint">{t("us.passwordHint")}</span>
-          </div>
-          {!pwOpen && (
-            <button className="btn secondary small" onClick={() => setPwOpen(true)}>
-              {t("us.changePassword")}
-            </button>
-          )}
-        </div>
-        {pwOpen && (
-          <form
-            className="pw-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void changePassword();
-            }}
-          >
-            {(
-              [
-                ["current", "us.currentPassword", "current-password"],
-                ["next", "us.newPassword", "new-password"],
-                ["confirm", "us.confirmPassword", "new-password"],
-              ] as const
-            ).map(([k, label, ac]) => (
-              <div className="field" key={k}>
-                <label htmlFor={`us-pw-${k}`}>{t(label)}</label>
+          <section className="setting-card">
+            <div className="field">
+              <label htmlFor="us-name">{t("auth.displayName")}</label>
+              <div className="row">
                 <input
-                  id={`us-pw-${k}`}
-                  type="password"
+                  id="us-name"
                   className="input"
-                  autoComplete={ac}
-                  minLength={k === "current" ? undefined : 8}
-                  required
-                  value={pw[k]}
-                  onChange={(e) => setPw({ ...pw, [k]: e.target.value })}
+                  maxLength={40}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                 />
+                <button
+                  className="btn"
+                  disabled={busy || !name.trim() || name.trim() === me.name}
+                  onClick={saveName}
+                >
+                  {t("common.save")}
+                </button>
               </div>
-            ))}
-            {pwMismatch && <p className="error-text">{t("us.passwordMismatch")}</p>}
-            <p className="hint">{t("us.passwordOthersOut")}</p>
-            <div className="row">
-              <span className="spacer" />
-              <button type="button" className="btn secondary small" onClick={() => setPwOpen(false)}>
-                {t("common.cancel")}
-              </button>
-              <button className="btn small" disabled={busy || pwMismatch || pw.next.length < 8}>
+            </div>
+            <div className="setting-row">
+              <div className="grow">
+                <b>{t("auth.email")}</b>
+                <span className="hint">
+                  {me.email}
+                  {me.emailVerification &&
+                    ` · ${me.emailVerified ? t("profile.verified") : t("profile.notVerified")}`}
+                </span>
+              </div>
+              {me.emailVerification && !me.emailVerified && (
+                <button className="btn secondary small" onClick={resend}>
+                  {t("profile.resend")}
+                </button>
+              )}
+            </div>
+          </section>
+        </>
+      )}
+
+      {part === "security" && (
+        <section className="setting-card">
+          <div className="setting-row">
+            <div className="grow">
+              <b>{t("auth.password")}</b>
+              <span className="hint">{t("us.passwordHint")}</span>
+            </div>
+            {!pwOpen && (
+              <button className="btn secondary small" onClick={() => setPwOpen(true)}>
                 {t("us.changePassword")}
               </button>
-            </div>
-          </form>
-        )}
-      </section>
-
-      <h3 className="settings-h3">{t("us.data")}</h3>
-      <section className="setting-card">
-        <div className="setting-row">
-          <div className="grow">
-            <b>{t("profile.export")}</b>
-            <span className="hint">{t("us.exportHint")}</span>
+            )}
           </div>
-          <a className="btn secondary small" href="/api/me/export">
-            {t("us.download")}
-          </a>
-        </div>
-      </section>
-
-      <h3 className="settings-h3 danger">{t("us.dangerZone")}</h3>
-      <section className="setting-card danger">
-        <div className="setting-row">
-          <div className="grow">
-            <b>{t("profile.delete")}</b>
-            <span className="hint">{t("profile.deleteWarn")}</span>
-          </div>
-          {!deleting && (
-            <button className="btn danger-outline small" onClick={() => setDeleting(true)}>
-              {t("profile.delete")}
-            </button>
+          {pwOpen && (
+            <form
+              className="pw-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void changePassword();
+              }}
+            >
+              {(
+                [
+                  ["current", "us.currentPassword", "current-password"],
+                  ["next", "us.newPassword", "new-password"],
+                  ["confirm", "us.confirmPassword", "new-password"],
+                ] as const
+              ).map(([k, label, ac]) => (
+                <div className="field" key={k}>
+                  <label htmlFor={`us-pw-${k}`}>{t(label)}</label>
+                  <input
+                    id={`us-pw-${k}`}
+                    type="password"
+                    className="input"
+                    autoComplete={ac}
+                    minLength={k === "current" ? undefined : 8}
+                    required
+                    value={pw[k]}
+                    onChange={(e) => setPw({ ...pw, [k]: e.target.value })}
+                  />
+                </div>
+              ))}
+              {pwMismatch && <p className="error-text">{t("us.passwordMismatch")}</p>}
+              <p className="hint">{t("us.passwordOthersOut")}</p>
+              <div className="row">
+                <span className="spacer" />
+                <button type="button" className="btn secondary small" onClick={() => setPwOpen(false)}>
+                  {t("common.cancel")}
+                </button>
+                <button className="btn small" disabled={busy || pwMismatch || pw.next.length < 8}>
+                  {t("us.changePassword")}
+                </button>
+              </div>
+            </form>
           )}
-        </div>
-        {deleting && (
-          <div className="row" style={{ marginTop: 10 }}>
-            <input
-              type="password"
-              className="input"
-              placeholder={t("auth.password")}
-              aria-label={t("auth.password")}
-              value={delPw}
-              onChange={(e) => setDelPw(e.target.value)}
-            />
-            <button className="btn secondary small" onClick={() => setDeleting(false)}>
-              {t("common.cancel")}
-            </button>
-            <button className="btn danger small" disabled={!delPw || busy} onClick={deleteAccount}>
-              {t("profile.deleteConfirm")}
-            </button>
-          </div>
-        )}
-      </section>
+        </section>
+      )}
+
+      {part === "privacy" && (
+        <>
+          <h3 className="settings-h3" style={{ marginTop: 0 }}>
+            {t("us.data")}
+          </h3>
+          <section className="setting-card">
+            <div className="setting-row">
+              <div className="grow">
+                <b>{t("profile.export")}</b>
+                <span className="hint">{t("us.exportHint")}</span>
+              </div>
+              <a className="btn secondary small" href="/api/me/export">
+                {t("us.download")}
+              </a>
+            </div>
+          </section>
+
+          <h3 className="settings-h3 danger">{t("us.dangerZone")}</h3>
+          <section className="setting-card danger">
+            <div className="setting-row">
+              <div className="grow">
+                <b>{t("profile.delete")}</b>
+                <span className="hint">{t("profile.deleteWarn")}</span>
+              </div>
+              {!deleting && (
+                <button className="btn danger-outline small" onClick={() => setDeleting(true)}>
+                  {t("profile.delete")}
+                </button>
+              )}
+            </div>
+            {deleting && (
+              <div className="row" style={{ marginTop: 10 }}>
+                <input
+                  type="password"
+                  className="input"
+                  placeholder={t("auth.password")}
+                  aria-label={t("auth.password")}
+                  value={delPw}
+                  onChange={(e) => setDelPw(e.target.value)}
+                />
+                <button className="btn secondary small" onClick={() => setDeleting(false)}>
+                  {t("common.cancel")}
+                </button>
+                <button className="btn danger small" disabled={!delPw || busy} onClick={deleteAccount}>
+                  {t("profile.deleteConfirm")}
+                </button>
+              </div>
+            )}
+          </section>
+        </>
+      )}
     </>
+  );
+}
+
+function AboutSection() {
+  const t = useI18n().t;
+  return (
+    <section className="setting-card about">
+      <div className="setting-row">
+        <div className="grow">
+          <b>Meetopia</b>
+          <span className="hint">Work • Talk • Together</span>
+        </div>
+      </div>
+      <div className="setting-row">
+        <div className="grow">
+          <b>{t("us.aboutPrivacy")}</b>
+          <span className="hint">{t("devices.privacy")}</span>
+        </div>
+      </div>
+      <div className="setting-row">
+        <div className="grow">
+          <b>{t("us.aboutKeys")}</b>
+          <span className="hint">{t("us.aboutKeysHint")}</span>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -457,12 +500,35 @@ function AppearanceSection({ me, onSaved }: { me: Me; onSaved: (me: Me) => void 
             void patch({ highContrast: v });
           }}
         />
+      </section>
+
+      <h3 className="settings-h3">{t("us.roomSettings")}</h3>
+      <section className="setting-card">
+        <Toggle
+          id="us-minimap"
+          label={t("us.showMinimap")}
+          checked={prefs.showMinimap}
+          onChange={(v) => setPrefs({ showMinimap: v })}
+        />
+        <Toggle
+          id="us-names"
+          label={t("us.showNames")}
+          hint={t("us.showNamesHint")}
+          checked={prefs.showNames}
+          onChange={(v) => setPrefs({ showNames: v })}
+        />
         <Toggle
           id="us-motion"
-          label={t("us.reducedMotion")}
-          hint={t("us.reducedMotionHint")}
-          checked={prefs.reducedMotion}
-          onChange={(v) => setPrefs({ reducedMotion: v })}
+          label={t("us.avatarAnimation")}
+          hint={t("us.avatarAnimationHint")}
+          checked={!prefs.reducedMotion}
+          onChange={(v) => setPrefs({ reducedMotion: !v })}
+        />
+        <Toggle
+          id="us-sounds"
+          label={t("us.notifSounds")}
+          checked={prefs.soundKnock || prefs.soundDm || prefs.soundMention}
+          onChange={(v) => setPrefs({ soundKnock: v, soundDm: v, soundMention: v })}
         />
       </section>
     </>

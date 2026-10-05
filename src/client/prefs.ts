@@ -25,6 +25,9 @@ export interface Prefs {
   /** Notifikasi browser saat tab tidak aktif. */
   desktopNotify: boolean;
   reducedMotion: boolean;
+  showMinimap: boolean;
+  /** Label nama di atas avatar. */
+  showNames: boolean;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -42,6 +45,8 @@ export const DEFAULT_PREFS: Prefs = {
   soundMention: true,
   desktopNotify: false,
   reducedMotion: false,
+  showMinimap: true,
+  showNames: true,
 };
 
 const KEY = "mt_prefs";

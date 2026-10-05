@@ -97,14 +97,14 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
   useEffect(() => {
     groupsRef.current = groups;
   }, [groups]);
-  const [userSection, setUserSection] = useState<UserSection>("account");
+  const [userSection, setUserSection] = useState<UserSection>("profile");
   const [groupSection, setGroupSection] = useState<GroupSection | undefined>(undefined);
   const [railMenu, setRailMenu] = useState<{ group: GroupSummary; x: number; y: number } | null>(null);
   const openGroupSettings = (s?: GroupSection) => {
     setGroupSection(s);
     setModal("settings");
   };
-  const openUserSettings = (s: UserSection = "account") => {
+  const openUserSettings = (s: UserSection = "profile") => {
     setUserSection(s);
     setModal("profile");
   };
@@ -671,8 +671,8 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
                   {(
                     [
                       ["smile", me.statusText ? "cs.edit" : "cs.set", () => setModal("status")],
-                      ["edit", "pp.editProfile", () => openUserSettings("account")],
-                      ["user", "pp.changeAvatar", () => openUserSettings("avatar")],
+                      ["edit", "pp.editProfile", () => openUserSettings("profile")],
+                      ["user", "pp.changeAvatar", () => openUserSettings("profile")],
                       ["settings", "pp.settings", () => openUserSettings("appearance")],
                     ] as const
                   ).map(([icon, label, run]) => (
@@ -955,7 +955,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
                 className="btn secondary"
                 onClick={() => {
                   close();
-                  openUserSettings("avatar");
+                  openUserSettings("profile");
                 }}
               >
                 <Icon name="edit" size={18} /> {t("us.editAvatar")}

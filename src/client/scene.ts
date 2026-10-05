@@ -41,6 +41,8 @@ export interface SceneFrame {
   lockedZones?: Record<string, unknown>;
   /** TV yang sedang memutar video. */
   playingTvs?: MapObject[];
+  /** Label nama di atas avatar (bawaan tampil). */
+  showNames?: boolean;
 }
 
 const T = TILE;
@@ -307,7 +309,7 @@ export class Scene {
         ly = hit.y - 23;
       }
       placed.push({ x0, x1, y: ly });
-      this.drawLabels(ctx, v, time, ly);
+      this.drawLabels(ctx, v, time, ly, f.showNames !== false || v.isSelf);
     }
 
     // Vignette layar
@@ -499,10 +501,22 @@ export class Scene {
     }
   }
 
-  private drawLabels(ctx: CanvasRenderingContext2D, v: PersonView, time: number, ly: number) {
+  private drawLabels(
+    ctx: CanvasRenderingContext2D,
+    v: PersonView,
+    time: number,
+    ly: number,
+    showName: boolean,
+  ) {
+    ctx.save();
+    if (showName) this.drawNamePill(ctx, v, ly);
+    this.drawOverhead(ctx, v, time, ly);
+    ctx.restore();
+  }
+
+  private drawNamePill(ctx: CanvasRenderingContext2D, v: PersonView, ly: number) {
     const p = v.p;
     const px = v.x * T;
-    ctx.save();
     ctx.font = "600 11px Outfit, system-ui, sans-serif";
     ctx.textBaseline = "middle";
     const tw = ctx.measureText(p.name).width;
@@ -554,7 +568,12 @@ export class Scene {
       ctx.lineTo(sx + 2, ly + 5);
       ctx.stroke();
     }
+  }
 
+  /** Emote dan balon chat di atas kepala (tetap tampil walau label nama disembunyikan). */
+  private drawOverhead(ctx: CanvasRenderingContext2D, v: PersonView, time: number, ly: number) {
+    const p = v.p;
+    const px = v.x * T;
     let topY = ly - 14;
 
     // Emote
@@ -612,6 +631,5 @@ export class Scene {
         ctx.globalAlpha = 1;
       }
     }
-    ctx.restore();
   }
 }
