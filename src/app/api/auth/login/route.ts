@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { authSecret } from "@/server/env";
 import { one } from "@/server/db";
 import { ApiError, ok, parseBody, rateLimit, route } from "@/server/api";
 import { setSessionCookie, verifyPassword } from "@/server/auth";
@@ -6,6 +7,7 @@ import { setSessionCookie, verifyPassword } from "@/server/auth";
 const schema = z.object({ email: z.string().max(200), password: z.string().max(200) });
 
 export const POST = route(async (req) => {
+  authSecret(); // gagal lebih awal bila AUTH_SECRET belum diisi, sebelum ada data yang disimpan
   const body = await parseBody(req, schema);
   const email = body.email.toLowerCase().trim();
   rateLimit(`login:${email}`, 10, 15 * 60_000);

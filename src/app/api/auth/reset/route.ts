@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { authSecret } from "@/server/env";
 import { one } from "@/server/db";
 import { ApiError, ok, parseBody, route } from "@/server/api";
 import { hashPassword, setSessionCookie } from "@/server/auth";
@@ -7,6 +8,7 @@ import { consumeEmailToken } from "@/server/emailTokens";
 const schema = z.object({ token: z.string().max(200), password: z.string().min(8).max(200) });
 
 export const POST = route(async (req) => {
+  authSecret(); // gagal lebih awal bila AUTH_SECRET belum diisi, sebelum ada data yang disimpan
   const body = await parseBody(req, schema);
   const userId = await consumeEmailToken(body.token, "reset");
   if (!userId) throw new ApiError(400, "invalidToken");
