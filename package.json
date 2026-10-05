@@ -1,0 +1,50 @@
+{
+  "name": "meetopia",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Meetopia - kantor virtual 2D berbasis browser",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --ignore ./.next --ignore ./.data server.ts",
+    "build": "next build",
+    "start": "NODE_ENV=production tsx server.ts",
+    "start:realtime": "NODE_ENV=production tsx src/realtime/standalone.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:multi": "playwright test -c playwright.multi.config.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "bcryptjs": "^3.0.3",
+    "ioredis": "^6.0.0",
+    "jose": "^6.2.12",
+    "next": "^16.3.8",
+    "nodemailer": "^10.0.15",
+    "pg": "^8.23.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tsx": "^4.23.15",
+    "ws": "^8.22.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56",
+    "@types/node": "^26.6.4",
+    "@types/nodemailer": "^8.0.2",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/ws": "^8.18.2",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.8",
+    "prettier": "^3.9.9",
+    "typescript": "5.9",
+    "vitest": "^5.0.3"
+  }
+}

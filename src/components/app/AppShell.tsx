@@ -1,0 +1,583 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { RoomClient, type RoomSnapshot } from "@/client/roomClient";
+import { MediaManager } from "@/client/media";
+import { api } from "@/client/api";
+import { useI18n } from "@/i18n/client";
+import { ToastProvider, useToast } from "@/components/Toasts";
+import { Logo, LogoMark } from "@/components/Logo";
+import { Icon } from "@/components/Icon";
+import { AvatarCanvas } from "@/components/AvatarCanvas";
+import { Modal } from "@/components/Modal";
+import type { ObjectAction } from "@/shared/map";
+import type { Point } from "@/shared/pathfinding";
+import type { Presence } from "@/shared/protocol";
+import { can } from "@/shared/roles";
+import { RoomStage } from "./RoomStage";
+import { ChatPanel } from "./ChatPanel";
+import { MembersPanel } from "./MembersPanel";
+import { NotesPanel } from "./NotesPanel";
+import { DeviceCheck } from "./DeviceCheck";
+import { Tips } from "./Tips";
+import { CreateGroup } from "./CreateGroup";
+import { ProfileModal } from "./ProfileModal";
+import { GroupSettings } from "./GroupSettings";
+import type { ChatTarget, GroupDetail, GroupSummary, Me, MemberInfo } from "./types";
+
+const EMPTY_SNAP: RoomSnapshot = {
+  conn: "closed",
+  selfId: null,
+  peers: new Map(),
+  map: null,
+  sharedNote: null,
+  version: 0,
+};
+const noopSubscribe = () => () => {};
+
+export function AppShell(props: { initialUser: Me; initialGroups: GroupSummary[] }) {
+  return (
+    <ToastProvider>
+      <Shell {...props} />
+    </ToastProvider>
+  );
+}
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups: GroupSummary[] }) {
+  const { t } = useI18n();
+  const toast = useToast();
+  const [me, setMe] = useState(initialUser);
+  const [groups, setGroups] = useState(initialGroups);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<GroupDetail | null>(null);
+  const [room, setRoom] = useState<RoomClient | null>(null);
+  const [media, setMedia] = useState<MediaManager | null>(null);
+  const [chatTarget, setChatTarget] = useState<ChatTarget>({ kind: "nearby" });
+  const [dmTabs, setDmTabs] = useState<string[]>([]);
+  const [notes, setNotes] = useState<null | "private" | "shared">(null);
+  const [modal, setModal] = useState<
+    null | "create" | "profile" | "settings" | "invites" | "devices" | "tips"
+  >(null);
+  const [joining, setJoining] = useState(false);
+  const [peerCard, setPeerCard] = useState<{ member: MemberInfo; presence?: Presence } | null>(null);
+  const [showNav, setShowNav] = useState(false);
+  const [showMembers, setShowMembers] = useState(false);
+  const [devLink, setDevLink] = useState<string | null>(null);
+  const walkToRef = useRef<((p: Point) => void) | null>(null);
+  const registerWalkTo = useCallback((fn: (p: Point) => void) => {
+    walkToRef.current = fn;
+  }, []);
+
+  // Grup awal dari URL (?g=) atau grup pertama.
+  useEffect(() => {
+    const g = new URLSearchParams(location.search).get("g");
+    setActiveId(g && initialGroups.some((x) => x.id === g) ? g : (initialGroups[0]?.id ?? null));
+    setDevLink(sessionStorage.getItem("mt_dev_verify"));
+    try {
+      if (!localStorage.getItem("mt_tips_seen")) {
+        localStorage.setItem("mt_tips_seen", "1");
+        setModal("tips");
+      }
+    } catch {}
+  }, [initialGroups]);
+
+  const refreshGroups = useCallback(async () => {
+    const r = await api<{ groups: GroupSummary[] }>("/api/groups");
+    setGroups(r.groups);
+    return r.groups;
+  }, []);
+
+  const loadDetail = useCallback(async (id: string) => {
+    try {
+      const d = await api<GroupDetail>(`/api/groups/${id}`);
+      setDetail((cur) => (cur && cur.group.id !== id ? cur : d));
+      return d;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Pindah grup tanpa memuat ulang halaman (FR-70, FR-71). Audio ruangan sebelumnya diputus.
+  useEffect(() => {
+    if (!activeId) {
+      setDetail(null);
+      return;
+    }
+    const url = new URL(location.href);
+    url.searchParams.set("g", activeId);
+    history.replaceState(null, "", url);
+    setDetail(null);
+    setDmTabs([]);
+    setNotes(null);
+    void loadDetail(activeId).then((d) => {
+      if (d?.channels[0]) setChatTarget({ kind: "channel", id: d.channels[0].id });
+    });
+    const r = new RoomClient(activeId);
+    const m = new MediaManager(r);
+    setRoom(r);
+    setMedia(m);
+    void r.connect();
+    // Hook debug untuk tes e2e dan pengukuran spike (hanya di pengembangan).
+    if (process.env.NODE_ENV !== "production")
+      (window as unknown as { __meetopia?: unknown }).__meetopia = { room: r, media: m };
+    if (!sessionStorage.getItem("mt_device_checked")) {
+      setJoining(true);
+      setModal("devices");
+    }
+    return () => {
+      m.destroy();
+      r.close();
+    };
+  }, [activeId, loadDetail]);
+
+  const snap = useSyncExternalStore(
+    room?.subscribe ?? noopSubscribe,
+    room?.getSnapshot ?? (() => EMPTY_SNAP),
+    () => EMPTY_SNAP,
+  );
+
+  // Event ruangan: ketuk, layar, dikeluarkan, galat media.
+  useEffect(() => {
+    if (!room || !media) return;
+    media.setErrorHandler((e) => toast({ text: t(`media.err.${e}`), kind: "error" }));
+    const offs = [
+      room.on("knock", (k) => {
+        const zone = k.zoneId ? room.snapshot.map?.zones.find((z) => z.id === k.zoneId) : null;
+        toast({
+          text: zone
+            ? t("knock.incomingZone", { name: k.fromName, zone: t(zone.label) })
+            : t("knock.incoming", { name: k.fromName }),
+          sticky: true,
+          action: {
+            label: t("knock.accept"),
+            run: () => room.send({ t: "knockReply", knockId: k.knockId, accept: true }),
+          },
+          secondary: {
+            label: t("knock.decline"),
+            run: () => room.send({ t: "knockReply", knockId: k.knockId, accept: false }),
+          },
+        });
+      }),
+      room.on("knockResult", (r) => {
+        if (!r.knockId) return toast({ text: t("knock.enterFree") });
+        toast({
+          text: r.accept ? t("knock.accepted", { name: r.byName }) : t("knock.declined", { name: r.byName }),
+          kind: r.accept ? "info" : "error",
+        });
+      }),
+      room.on("screenRejected", () => media.screenRejected()),
+      room.on(
+        "error",
+        (code) => code === "rateLimited" && toast({ text: t("error.rateLimited"), kind: "error" }),
+      ),
+      room.on("kicked", (reason) => {
+        if (reason === "replaced") {
+          toast({
+            text: t("conn.replaced"),
+            sticky: true,
+            action: { label: t("conn.reconnect"), run: () => void room.connect() },
+          });
+          return;
+        }
+        toast({ text: t(`conn.kicked.${reason}`), kind: "error" });
+        void refreshGroups().then((gs) => setActiveId(gs[0]?.id ?? null));
+      }),
+    ];
+    return () => offs.forEach((o) => o());
+  }, [room, media, t, toast, refreshGroups]);
+
+  // Aktivitas dalam aplikasi (bukan pelacakan layar/keystroke): cukup tanda "masih di sini" tiap 30 detik.
+  useEffect(() => {
+    if (!room) return;
+    let last = 0;
+    const onAct = () => {
+      const now = Date.now();
+      if (now - last > 30_000) {
+        last = now;
+        room.send({ t: "activity" });
+      }
+    };
+    window.addEventListener("pointerdown", onAct);
+    window.addEventListener("keydown", onAct);
+    return () => {
+      window.removeEventListener("pointerdown", onAct);
+      window.removeEventListener("keydown", onAct);
+    };
+  }, [room]);
+
+  // Daftar anggota diperbarui saat ada yang baru bergabung lewat undangan.
+  const presenceIds = useMemo(() => [...snap.peers.keys()].sort().join(","), [snap.peers]);
+  useEffect(() => {
+    if (!detail || !activeId) return;
+    const known = new Set(detail.members.map((m) => m.id));
+    if ([...snap.peers.keys()].some((id) => !known.has(id))) void loadDetail(activeId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presenceIds]);
+
+  const self = snap.selfId ? snap.peers.get(snap.selfId) : undefined;
+  const role = detail?.role ?? "guest";
+
+  const openDm = (userId: string) => {
+    setDmTabs((l) => (l.includes(userId) ? l : [...l, userId]));
+    setChatTarget({ kind: "dm", userId });
+  };
+
+  const onAction = (action: ObjectAction) => {
+    switch (action) {
+      case "openSharedNotes":
+        return setNotes("shared");
+      case "openPrivateNotes":
+        return setNotes("private");
+      case "showTips":
+        return setModal("tips");
+      case "buy":
+      case "brew":
+        return toast({ text: t("action.comingSoon") });
+      case "read":
+        return toast({ text: t("action.readResult") });
+    }
+  };
+
+  const selectPeer = (member: MemberInfo, presence?: Presence) => {
+    if (member.id === me.id) return setModal("profile");
+    setPeerCard({ member, presence });
+  };
+
+  const switchGroup = (id: string) => {
+    setActiveId(id);
+    setShowNav(false);
+  };
+
+  const onlineCount = snap.peers.size;
+  const activeGroup = groups.find((g) => g.id === activeId);
+
+  return (
+    <div
+      className={`app ${showNav ? "show-nav" : ""} ${showMembers ? "show-members" : ""} ${detail ? "" : "no-members"}`}
+    >
+      <nav className="rail" aria-label={t("nav.groups")}>
+        <div className="rail-home" title="Meetopia">
+          <LogoMark size={36} title="Meetopia" />
+        </div>
+        <span className="rail-sep" />
+        {groups.map((g) => (
+          <button
+            key={g.id}
+            className="rail-item"
+            aria-current={g.id === activeId}
+            onClick={() => switchGroup(g.id)}
+            title={g.name}
+            aria-label={g.name}
+          >
+            {initials(g.name)}
+          </button>
+        ))}
+        <button
+          className="rail-item add"
+          onClick={() => setModal("create")}
+          title={t("group.createTitle")}
+          aria-label={t("group.createTitle")}
+        >
+          +
+        </button>
+      </nav>
+
+      <aside className="sidebar" aria-label={t("nav.channels")}>
+        <div className="sidebar-head">
+          <span className="name">{activeGroup?.name ?? "Meetopia"}</span>
+          {detail && (
+            <button
+              className="icon-btn"
+              onClick={() => setModal("settings")}
+              aria-label={t("settings.open")}
+              title={t("settings.open")}
+            >
+              <Icon name="settings" size={18} />
+            </button>
+          )}
+        </div>
+        <div className="sidebar-body">
+          {detail && (
+            <>
+              <div className="section-title">{t("nav.textChannels")}</div>
+              {detail.channels.map((c) => (
+                <button
+                  key={c.id}
+                  className="nav-item"
+                  aria-current={chatTarget.kind === "channel" && chatTarget.id === c.id}
+                  onClick={() => {
+                    setChatTarget({ kind: "channel", id: c.id });
+                    setShowNav(false);
+                  }}
+                >
+                  <span className="hash">#</span> {c.name}
+                </button>
+              ))}
+              <button className="nav-item" aria-current={!!notes} onClick={() => setNotes("shared")}>
+                <span className="hash">#</span> {t("nav.notes")}
+              </button>
+              <div className="section-title">{t("nav.room")}</div>
+              <div className="room-card">
+                <div className="row">
+                  <Icon name="door" />
+                  <b style={{ flex: 1 }}>{t("nav.office")}</b>
+                  <span
+                    className={`status-dot s-${snap.conn === "open" ? "active" : "away"}`}
+                    style={{ position: "static" }}
+                  />
+                </div>
+                <div className="count">{t("nav.inRoom", { n: onlineCount })}</div>
+                <button
+                  className="btn small secondary"
+                  style={{ marginTop: 8, width: "100%" }}
+                  onClick={() => setModal("devices")}
+                >
+                  <Icon name="speaker" size={16} /> {t("devices.title")}
+                </button>
+              </div>
+              {can(role, "createInvite") && (
+                <button className="nav-item" onClick={() => setModal("invites")} style={{ marginTop: 8 }}>
+                  <Icon name="link" size={16} /> {t("invite.inviteMembers")}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+        <div className="user-bar">
+          <span className="avatar-wrap">
+            <AvatarCanvas avatar={me.avatar} size={34} face />
+            <span className={`status-dot s-${self?.status ?? "offline"}`} />
+          </span>
+          <span className="who">
+            <b>{me.name}</b>
+            <span>{self ? t(`status.${self.status}`) : t("status.offline")}</span>
+          </span>
+          <button
+            className="icon-btn"
+            onClick={() => setModal("profile")}
+            aria-label={t("profile.title")}
+            title={t("profile.title")}
+          >
+            <Icon name="settings" size={18} />
+          </button>
+        </div>
+      </aside>
+
+      <main className="main">
+        <header className="main-head">
+          <button
+            className="icon-btn mobile-only"
+            onClick={() => setShowNav(true)}
+            aria-label={t("nav.open")}
+          >
+            <Icon name="menu" />
+          </button>
+          <h2>{activeGroup ? `${activeGroup.name} · ${t("nav.office")}` : "Meetopia"}</h2>
+          {detail && (
+            <button
+              className="icon-btn"
+              onClick={() => setShowMembers((v) => !v)}
+              aria-label={t("members.title")}
+              aria-expanded={showMembers}
+            >
+              <Icon name="users" />
+            </button>
+          )}
+        </header>
+        {!me.emailVerified && (
+          <div className="banner" role="status">
+            ✉️ {t("profile.verifyBanner", { email: me.email })}
+            {devLink && (
+              <a href={devLink} style={{ wordBreak: "break-all" }}>
+                {t("profile.devVerify")}
+              </a>
+            )}
+          </div>
+        )}
+        {!activeId ? (
+          <div className="welcome-main">
+            <div className="card" style={{ padding: 32, maxWidth: 460 }}>
+              <Logo size={40} tagline />
+              <h2 style={{ marginTop: 24 }}>{t("welcome.title")}</h2>
+              <p className="hint">{t("welcome.body")}</p>
+              <button className="btn" onClick={() => setModal("create")}>
+                <Icon name="plus" size={18} /> {t("group.createTitle")}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="split" style={{ position: "relative" }}>
+            {room && media && snap.map ? (
+              <RoomStage
+                room={room}
+                media={media}
+                snap={snap}
+                onAction={onAction}
+                onPeerClick={(p) => {
+                  const m = detail?.members.find((x) => x.id === p.id) ?? {
+                    id: p.id,
+                    name: p.name,
+                    avatar: p.avatar,
+                    role: p.role,
+                  };
+                  selectPeer(m, p);
+                }}
+                onOpenDevices={() => setModal("devices")}
+                onOpenNotes={() => setNotes("private")}
+                onHelp={() => setModal("tips")}
+                registerWalkTo={registerWalkTo}
+              />
+            ) : (
+              <div className="stage" style={{ display: "grid", placeItems: "center" }}>
+                <span className="pill">
+                  ⟳ {t(snap.conn === "closed" ? "conn.closed" : "conn.connecting")}
+                </span>
+              </div>
+            )}
+            {detail && (
+              <ChatPanel
+                key={detail.group.id}
+                room={room}
+                detail={detail}
+                selfId={me.id}
+                role={role}
+                target={chatTarget}
+                setTarget={setChatTarget}
+                dmTabs={dmTabs}
+                closeDm={(id) => {
+                  setDmTabs((l) => l.filter((x) => x !== id));
+                  if (chatTarget.kind === "dm" && chatTarget.userId === id) setChatTarget({ kind: "nearby" });
+                }}
+                connected={snap.conn === "open"}
+              />
+            )}
+            {notes && detail && (
+              <NotesPanel
+                groupId={detail.group.id}
+                role={role}
+                shared={snap.sharedNote}
+                selfId={me.id}
+                tab={notes}
+                setTab={setNotes}
+                onClose={() => setNotes(null)}
+              />
+            )}
+          </div>
+        )}
+      </main>
+
+      {detail && (
+        <MembersPanel
+          members={detail.members}
+          presence={snap.peers}
+          selfId={me.id}
+          onSelect={selectPeer}
+          onClose={showMembers ? () => setShowMembers(false) : undefined}
+        />
+      )}
+      <div className="drawer-backdrop" onClick={() => (setShowNav(false), setShowMembers(false))} />
+
+      {modal === "create" && (
+        <CreateGroup
+          onClose={() => setModal(null)}
+          onCreated={async (id) => {
+            setModal(null);
+            await refreshGroups();
+            setActiveId(id);
+          }}
+        />
+      )}
+      {modal === "profile" && <ProfileModal me={me} onClose={() => setModal(null)} onSaved={setMe} />}
+      {(modal === "settings" || modal === "invites") && detail && (
+        <GroupSettings
+          detail={detail}
+          selfId={me.id}
+          initialTab={modal === "invites" ? "invites" : undefined}
+          onClose={() => setModal(null)}
+          onChanged={() => {
+            if (activeId) void loadDetail(activeId);
+            void refreshGroups();
+          }}
+          onLeft={async () => {
+            setModal(null);
+            const gs = await refreshGroups();
+            setActiveId(gs[0]?.id ?? null);
+          }}
+        />
+      )}
+      {modal === "devices" && media && (
+        <DeviceCheck
+          media={media}
+          joining={joining}
+          onDone={(micOn) => {
+            sessionStorage.setItem("mt_device_checked", "1");
+            setModal(null);
+            setJoining(false);
+            if (micOn) void media.setMic(true);
+          }}
+        />
+      )}
+      {modal === "tips" && <Tips onClose={() => setModal(null)} />}
+      {peerCard && (
+        <Modal
+          title={peerCard.member.name}
+          sub={peerCard.presence ? t(`status.${peerCard.presence.status}`) : t("status.offline")}
+          onClose={() => setPeerCard(null)}
+        >
+          <div style={{ display: "grid", placeItems: "center", marginBottom: 12 }}>
+            <AvatarCanvas avatar={peerCard.presence?.avatar ?? peerCard.member.avatar} size={110} />
+            <span className="badge">{t(`role.${peerCard.member.role}`)}</span>
+          </div>
+          <div className="modal-actions" style={{ justifyContent: "center" }}>
+            <button
+              className="btn secondary"
+              onClick={() => {
+                openDm(peerCard.member.id);
+                setPeerCard(null);
+              }}
+            >
+              <Icon name="chat" size={18} /> {t("peer.message")}
+            </button>
+            {peerCard.presence && (
+              <button
+                className="btn secondary"
+                onClick={() => {
+                  walkToRef.current?.({ x: peerCard.presence!.x + 1, y: peerCard.presence!.y });
+                  setPeerCard(null);
+                }}
+              >
+                <Icon name="pin" size={18} /> {t("peer.walkTo")}
+              </button>
+            )}
+            {peerCard.presence?.status === "busy" && (
+              <button
+                className="btn"
+                onClick={() => {
+                  room?.send({ t: "knock", toUserId: peerCard.member.id });
+                  toast({ text: t("knock.sent") });
+                  setPeerCard(null);
+                }}
+              >
+                <Icon name="knock" size={18} /> {t("knock.knock")}
+              </button>
+            )}
+          </div>
+          {peerCard.presence?.status === "busy" && (
+            <p className="hint" style={{ textAlign: "center" }}>
+              {t("peer.busyHint")}
+            </p>
+          )}
+        </Modal>
+      )}
+    </div>
+  );
+}
