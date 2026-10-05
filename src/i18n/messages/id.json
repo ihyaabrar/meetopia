@@ -535,5 +535,6 @@
   "tpl.changeConfirm": "Ganti ruangan menjadi {name}?",
   "tpl.current": "Sekarang",
   "avatar.hairStyle.long": "Panjang",
-  "avatar.hairStyle.curly": "Keriting"
+  "avatar.hairStyle.curly": "Keriting",
+  "chat.emoji": "Sisipkan emoji"
 }

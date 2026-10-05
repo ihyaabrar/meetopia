@@ -535,5 +535,6 @@
   "tpl.changeConfirm": "Change the room to {name}?",
   "tpl.current": "Current",
   "avatar.hairStyle.long": "Long",
-  "avatar.hairStyle.curly": "Curly"
+  "avatar.hairStyle.curly": "Curly",
+  "chat.emoji": "Insert emoji"
 }

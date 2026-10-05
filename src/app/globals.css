@@ -1276,8 +1276,8 @@ input[type="checkbox"] {
 
 /* ---------- Chat ---------- */
 .chat {
-  flex: 1 1 36%;
-  min-height: 170px;
+  flex: 1 1 40%;
+  min-height: 200px;
   display: flex;
   flex-direction: column;
   border-radius: 12px;
@@ -1285,8 +1285,8 @@ input[type="checkbox"] {
   overflow: hidden;
 }
 .chat.collapsed {
-  flex: 0 0 48px;
-  min-height: 48px;
+  flex: 0 0 auto;
+  min-height: 0;
 }
 .chat-tabs {
   display: flex;
@@ -1360,12 +1360,77 @@ input[type="checkbox"] {
 }
 .composer {
   display: flex;
+  align-items: center;
   gap: 8px;
-  padding: 8px 10px 10px;
+  padding: 8px;
 }
-.composer .btn {
+.chat:not(.collapsed) .composer {
+  border-top: 1px solid var(--border);
+}
+.composer .btn.send {
   width: 44px;
   padding: 0;
+}
+.chat-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 8px;
+  background: var(--surface-hover);
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chat-toggle:hover {
+  background: var(--surface-active);
+}
+.chat-toggle .lbl {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.composer-field {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+.composer-field .input {
+  padding-right: 44px;
+}
+.emoji-btn {
+  position: absolute;
+  right: 4px;
+}
+.emoji-pick {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(6, 36px);
+  gap: 2px;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--chrome);
+  border: 1px solid var(--chrome-border);
+  box-shadow: var(--overlay-shadow);
+}
+.emoji-pick button {
+  height: 36px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  font-size: 20px;
+  cursor: pointer;
+}
+.emoji-pick button:hover {
+  background: var(--chrome-hover);
 }
 .empty {
   margin: auto;
@@ -2512,7 +2577,8 @@ input.switch:checked::before {
   .dock-btn .lbl {
     display: none;
   }
-  .dock-dropdown .dropdown-value {
+  .dock-dropdown .dropdown-value,
+  .chat-toggle .lbl {
     display: none;
   }
   .emote-pop {

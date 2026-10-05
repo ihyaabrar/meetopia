@@ -122,9 +122,11 @@ test("MVP: grup, undangan, sinkron posisi, chat, catatan, mic, sambung ulang", a
   if (shots) await a.screenshot({ path: `${shots}/room-a.png` });
 
   // --- Chat kanal (M4)
-  await a.getByRole("tab", { name: /# umum/ }).click();
+  // Obrolan tertutup jadi bilah ketik; A langsung mengetik, B membuka obrolan untuk membaca.
   await a.getByPlaceholder("Kirim pesan ke #umum").fill("Halo tim! 👋");
   await a.keyboard.press("Enter");
+  await expect(b.locator(".chat-toggle .unread")).toBeVisible();
+  await b.getByRole("button", { name: "Buka obrolan" }).click();
   await b.getByRole("tab", { name: /# umum/ }).click();
   await expect(b.locator(".msg .body", { hasText: "Halo tim! 👋" })).toBeVisible();
 
@@ -355,9 +357,8 @@ test("Jenis ruangan: buat Rumah, lalu ganti ke Gaming house", async ({ browser }
   const selfX = () => a.evaluate(() => (window as unknown as { __meetopia: Debug }).__meetopia.room.self!.x);
   const x0 = await selfX();
   await a.keyboard.down("d");
-  await a.waitForTimeout(500);
+  await expect.poll(selfX, { timeout: 5_000 }).toBeGreaterThan(x0 + 1);
   await a.keyboard.up("d");
-  expect(await selfX()).toBeGreaterThan(x0 + 1);
   await expect(a.locator(".hud-tl")).toContainText("Ruang keluarga");
 
   // Kamar bisa dikunci dari dalam

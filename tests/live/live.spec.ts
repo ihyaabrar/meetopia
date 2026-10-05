@@ -81,7 +81,7 @@ test("live: daftar, grup, undangan, saling melihat, chat, catatan, lalu bersih-b
 
     // Chat kanal
     const text = `halo dari tes ${stamp}`;
-    await a.getByRole("tab", { name: /umum/ }).click();
+    await b.getByRole("button", { name: "Buka obrolan" }).click();
     await b.getByRole("tab", { name: /umum/ }).click();
     const t1 = Date.now();
     await a.getByPlaceholder(/Kirim pesan ke #umum/).fill(text);
@@ -101,6 +101,7 @@ test("live: daftar, grup, undangan, saling melihat, chat, catatan, lalu bersih-b
     // Riwayat chat tersimpan (batch ke Neon): muat ulang halaman B
     await b.waitForTimeout(2500);
     await b.reload();
+    await b.getByRole("button", { name: "Buka obrolan" }).click();
     await b.getByRole("tab", { name: /umum/ }).click();
     await expect(b.locator(".msg .body", { hasText: text })).toBeVisible({ timeout: 20_000 });
     log("riwayat chat tersimpan setelah muat ulang");
