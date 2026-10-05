@@ -2,6 +2,7 @@
  * Smoke test terhadap situs yang sudah dideploy (tanpa server lokal).
  *   LIVE_URL=https://meetopia-two.vercel.app npm run test:live
  * Membuat akun & grup tes lalu menghapusnya kembali.
+ * Harus dijalankan dari jaringan yang meneruskan WebSocket (proxy sandbox cloud tidak).
  */
 import base from "./playwright.config";
 import { defineConfig } from "@playwright/test";

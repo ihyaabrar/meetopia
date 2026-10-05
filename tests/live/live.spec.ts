@@ -3,7 +3,12 @@ import { expect, test, type Page } from "@playwright/test";
 const PASS = "rahasia-tes-123";
 
 async function register(page: Page, email: string, name: string) {
-  await page.goto("/register");
+  await page.goto("/register", { waitUntil: "domcontentloaded" });
+  // Tunggu React/Next.js aktif sebelum mengisi formulir (kalau belum, tombol mengirim formulir HTML biasa).
+  await page.waitForFunction(() => !!(window as unknown as { next?: unknown }).next, null, {
+    timeout: 60_000,
+  });
+  await page.waitForTimeout(500);
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Kata sandi").fill(PASS);
   await page.getByRole("button", { name: "Lanjut" }).click();
@@ -37,8 +42,9 @@ test("live: daftar, grup, undangan, saling melihat, chat, catatan, lalu bersih-b
     await a.getByRole("button", { name: "Buat grup" }).first().click();
     await a.getByLabel("Nama grup").fill(`Tes Claude ${stamp}`);
     await a.getByRole("button", { name: "Buat", exact: true }).click();
-    await enterRoom(a);
+    await a.waitForURL(/[?&]g=/);
     groupId = new URL(a.url()).searchParams.get("g");
+    await enterRoom(a);
     log(`A buat grup & masuk ruangan (${groupId})`);
 
     await a.getByRole("button", { name: "Undang anggota" }).first().click();
