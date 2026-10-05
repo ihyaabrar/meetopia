@@ -108,7 +108,10 @@ export class RoomClient {
         error?: string;
       };
       if (res.status === 503 && body.error) {
+        // Server belum dikonfigurasi: tampilkan pesannya, tapi tetap coba lagi berkala
+        // supaya halaman pulih sendiri setelah env diisi dan deploy ulang (tanpa muat ulang).
         this.commit({ conn: "closed", configError: body.error });
+        this.retryTimer = setTimeout(() => void this.connect(), 20_000);
         return;
       }
       if (!res.ok || !body.token) return this.scheduleReconnect();
@@ -209,7 +212,7 @@ export class RoomClient {
     switch (m.t) {
       case "welcome": {
         const peers = new Map(m.peers.map((p) => [p.id, p]));
-        this.commit({ conn: "open", selfId: m.selfId, peers, map: m.map, sharedNote: m.sharedNote });
+        this.commit({ conn: "open", selfId: m.selfId, peers, map: m.map, sharedNote: m.sharedNote, configError: undefined });
         if (this.disconnectedAt) {
           console.info(`[meetopia] tersambung lagi setelah ${Date.now() - this.disconnectedAt} ms`);
           this.disconnectedAt = null;
