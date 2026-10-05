@@ -14,7 +14,8 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "test:e2e:multi": "playwright test -c playwright.multi.config.ts"
+    "test:e2e:multi": "playwright test -c playwright.multi.config.ts",
+    "test:live": "playwright test -c playwright.live.config.ts"
   },
   "engines": {
     "node": ">=20"
