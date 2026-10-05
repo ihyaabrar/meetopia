@@ -1,5 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 
+/** Pilih tujuan dari menu "Pergi ke…" di dock. */
+async function goTo(page: import("@playwright/test").Page, zone: string) {
+  await page.getByRole("button", { name: "Pergi ke…" }).click();
+  await page.getByRole("option", { name: zone }).click();
+}
+
 const PASS = "rahasia-tes-123";
 
 async function register(page: Page, email: string, name: string) {
@@ -67,7 +73,7 @@ test("live: daftar, grup, undangan, saling melihat, chat, catatan, lalu bersih-b
     log(`A & B saling melihat di ruangan (${Date.now() - t0} ms)`);
 
     // Gerak: B pindah area, A melihat lokasi B berubah (WebSocket + Redis)
-    await b.getByLabel("Pergi ke…").selectOption("lounge");
+    await goTo(b, "Lounge");
     await expect(a.locator(".members .member", { hasText: "TesB" })).toContainText("Lounge", {
       timeout: 30_000,
     });

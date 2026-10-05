@@ -24,6 +24,7 @@ import { findPath, nearestFree, type Point } from "@/shared/pathfinding";
 import { STATUSES, audiblePeers, type PresenceStatus } from "@/shared/proximity";
 import { EMOTES, type Direction, type Presence } from "@/shared/protocol";
 import { Minimap } from "./Minimap";
+import { Dropdown } from "@/components/Dropdown";
 import { speakerVolume } from "@/shared/music";
 import { getPrefs, setPrefs, usePrefs } from "@/client/prefs";
 import type { MusicPlayer } from "@/client/music";
@@ -554,7 +555,8 @@ export function RoomStage({
     const typing = (el: EventTarget | null) =>
       el instanceof HTMLElement &&
       (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
-    const blocked = () => !!document.querySelector(".modal-backdrop, .settings, [role='menu']");
+    const blocked = () =>
+      !!document.querySelector(".modal-backdrop, .settings, [role='menu'], [role='listbox']");
     const down = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey || typing(e.target) || blocked()) return;
       const k = e.key.toLowerCase();
@@ -861,34 +863,36 @@ export function RoomStage({
           >
             <Icon name="smile" />
           </button>
-          <label className="dock-select" title={t("status.label")}>
-            <span className={`status-dot s-${self?.status ?? "active"}`} />
-            <span className="sr-only">{t("status.label")}</span>
-            <select
-              value={self?.status ?? "active"}
-              onChange={(e) => setStatus(e.target.value as PresenceStatus)}
-            >
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {t(`status.${s}`)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <Dropdown
+            className="dock-dropdown"
+            label={t("status.label")}
+            value={self?.status ?? "active"}
+            onChange={(v) => setStatus(v)}
+            items={STATUSES.map((st) => ({
+              value: st,
+              label: t(`status.${st}`),
+              lead: <span className={`status-dot inline s-${st}`} />,
+            }))}
+          />
         </div>
         <div className="dock-group">
-          <label className="dock-select hide-sm" title={t("room.goTo")}>
-            <Icon name="pin" size={16} />
-            <span className="sr-only">{t("room.goTo")}</span>
-            <select value="" onChange={(e) => e.target.value && goToZone(e.target.value)}>
-              <option value="">{t("room.goTo")}</option>
-              {map.zones.map((z) => (
-                <option key={z.id} value={z.id}>
-                  {t(z.label)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <Dropdown
+            className="dock-dropdown hide-sm"
+            label={t("room.goTo")}
+            value={zoneHere?.id ?? null}
+            onChange={(v) => goToZone(v)}
+            trigger={
+              <>
+                <Icon name="pin" size={16} />
+                <span className="dropdown-value">{zoneHere ? t(zoneHere.label) : t("room.goTo")}</span>
+              </>
+            }
+            items={map.zones.map((z) => ({
+              value: z.id,
+              label: t(z.label),
+              lead: <Icon name={snap.locks[z.id] ? "lock" : z.private ? "door" : "pin"} size={14} />,
+            }))}
+          />
           <button
             className="dock-btn"
             onClick={onOpenNotes}

@@ -1,5 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 
+/** Pilih tujuan dari menu "Pergi ke…" di dock. */
+async function goTo(page: import("@playwright/test").Page, zone: string) {
+  await page.getByRole("button", { name: "Pergi ke…" }).click();
+  await page.getByRole("option", { name: zone }).click();
+}
+
 type Debug = {
   room: {
     self: { id: string; x: number; y: number; media: { mic: boolean } } | null;
@@ -198,7 +204,7 @@ test("Ruang privat: dikunci dari dalam, orang luar harus ketuk (FR-23, FR-31)", 
   await a.keyboard.press("Escape");
 
   // A masuk ruang rapat lewat menu "Pergi ke…" (navigasi keyboard)
-  await a.getByLabel("Pergi ke…").selectOption("meeting");
+  await goTo(a, "Ruang rapat");
   await expect(a.getByText(/audio terisolasi/)).toBeVisible({ timeout: 20_000 });
   // A mengunci ruang rapat dari dalam
   await a.locator(".hud-tl").getByRole("button", { name: "Kunci" }).click();
@@ -212,7 +218,7 @@ test("Ruang privat: dikunci dari dalam, orang luar harus ketuk (FR-23, FR-31)", 
   await enterRoom(b);
 
   // B mencoba masuk: berhenti di depan pintu dan ditawari mengetuk
-  await b.getByLabel("Pergi ke…").selectOption("meeting");
+  await goTo(b, "Ruang rapat");
   await b.getByRole("button", { name: "Ketuk" }).click({ timeout: 20_000 });
   expect(
     await b.evaluate(() => (window as unknown as { __meetopia: Debug }).__meetopia.room.self!.y),
@@ -346,8 +352,7 @@ test("Jenis ruangan: buat Rumah, lalu ganti ke Gaming house", async ({ browser }
   expect(await template()).toBe("home");
 
   // Bergerak dengan WASD
-  const selfX = () =>
-    a.evaluate(() => (window as unknown as { __meetopia: Debug }).__meetopia.room.self!.x);
+  const selfX = () => a.evaluate(() => (window as unknown as { __meetopia: Debug }).__meetopia.room.self!.x);
   const x0 = await selfX();
   await a.keyboard.down("d");
   await a.waitForTimeout(500);
@@ -356,7 +361,7 @@ test("Jenis ruangan: buat Rumah, lalu ganti ke Gaming house", async ({ browser }
   await expect(a.locator(".hud-tl")).toContainText("Ruang keluarga");
 
   // Kamar bisa dikunci dari dalam
-  await a.getByLabel("Pergi ke…").selectOption("bedroom1");
+  await goTo(a, "Kamar 1");
   await expect(a.locator(".hud-tl")).toContainText("Kamar 1", { timeout: 20_000 });
   await a.locator(".hud-tl").getByRole("button", { name: "Kunci" }).click();
   await expect(a.getByText("dikunci oleh Rani")).toBeVisible();
