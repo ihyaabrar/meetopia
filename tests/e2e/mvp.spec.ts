@@ -415,3 +415,49 @@ test("Jenis ruangan: buat Rumah, lalu ganti ke Gaming house", async ({ browser }
   await expect(a.locator(".hud-tl")).toContainText("Lobi");
   await expect(a.getByText("dikunci PIN oleh Rani")).toHaveCount(0);
 });
+
+test("Berbagi layar: rekan di dekat melihat layar, bisa diperkecil dan disembunyikan", async ({
+  browser,
+}) => {
+  const a = await (await browser.newContext()).newPage();
+  const b = await pageB(browser);
+  const stamp = Date.now();
+  await register(a, `s${stamp}@contoh.id`, "Sari");
+  await a.waitForURL(/\/app/);
+  await a.getByRole("button", { name: "Mengerti!" }).click();
+  await a.getByRole("button", { name: "Buat workspace" }).first().click();
+  await a.getByLabel("Nama workspace").fill("Presentasi");
+  await a.getByRole("button", { name: "Buat", exact: true }).click();
+  await enterRoom(a);
+  await a.getByRole("button", { name: "Undang anggota" }).first().click();
+  await expect(a.getByTestId("invite-link")).toHaveValue(/\/invite\/[A-Z0-9]{6}$/);
+  const link = await a.getByTestId("invite-link").inputValue();
+  await a.keyboard.press("Escape");
+  await register(b, `t${stamp}@contoh.id`, "Tomi");
+  await b.waitForURL(/\/app/);
+  await b.goto(link);
+  await b.getByRole("button", { name: "Gabung workspace" }).click();
+  await b.waitForURL(/\/app\?g=/);
+  await enterRoom(b);
+
+  await a.getByRole("button", { name: "Bagikan layar" }).click();
+  await expect(a.locator(".screen-self video")).toBeVisible({ timeout: 15_000 });
+  await expect(b.locator(".screen-view video")).toBeVisible({ timeout: 20_000 });
+  await b.waitForFunction(
+    () => {
+      const v = document.querySelector(".screen-view video") as HTMLVideoElement | null;
+      return !!v && v.videoWidth > 0;
+    },
+    null,
+    { timeout: 20_000 },
+  );
+  // Penonton bisa memperkecil lalu menyembunyikan tampilan layar
+  await b.getByRole("button", { name: "Perkecil layar" }).click();
+  await expect(b.locator(".screen-view.mini")).toBeVisible();
+  await b.getByRole("button", { name: "Sembunyikan layar" }).click();
+  await expect(b.locator(".screen-view")).toHaveCount(0);
+  await expect(b.getByRole("button", { name: /Tampilkan layar Sari/ })).toBeVisible();
+  // Presenter berhenti: tombol tampilkan hilang
+  await a.getByRole("button", { name: "Berhenti berbagi layar" }).first().click();
+  await expect(b.getByRole("button", { name: /Tampilkan layar Sari/ })).toHaveCount(0, { timeout: 15_000 });
+});

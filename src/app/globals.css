@@ -1277,6 +1277,62 @@ input[type="checkbox"] {
   color: var(--chrome-text);
   font-size: 14px;
 }
+.screen-view .bar .icon-btn {
+  color: var(--chrome-muted);
+}
+.screen-view .bar .icon-btn:hover {
+  color: var(--chrome-text);
+  background: var(--chrome-hover);
+}
+.screen-view.mini {
+  inset: auto 12px 84px auto;
+  width: min(340px, calc(100% - 24px));
+  height: 220px;
+}
+.screen-view.mini .bar {
+  padding: 4px 6px 4px 12px;
+  font-size: 13px;
+}
+.screen-view:fullscreen {
+  border-radius: 0;
+}
+.screen-self {
+  position: absolute;
+  left: 12px;
+  bottom: 84px;
+  z-index: 5;
+  width: 240px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--chrome-deep);
+  box-shadow: var(--overlay-shadow);
+  color: var(--chrome-text);
+  font-size: 12px;
+}
+.screen-self .bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 6px 6px 10px;
+}
+.screen-self .live-dot {
+  background: var(--s-busy);
+}
+.screen-self video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  background: #000;
+}
+.chip-btn {
+  border: none;
+  cursor: pointer;
+  font: inherit;
+}
+.chip-btn:hover {
+  background: var(--chrome-2);
+}
 .screen-view .live-dot {
   background: var(--s-busy);
 }

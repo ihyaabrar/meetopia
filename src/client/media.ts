@@ -41,7 +41,13 @@ type Signal =
   | { type: "bye" };
 
 export type MediaError =
-  "micDenied" | "micNotFound" | "camDenied" | "camNotFound" | "screenFailed" | "screenRejected";
+  | "micDenied"
+  | "micNotFound"
+  | "camDenied"
+  | "camNotFound"
+  | "screenFailed"
+  | "screenRejected"
+  | "connFailed";
 
 function iceServers(): RTCIceServer[] {
   try {
@@ -82,6 +88,7 @@ export class MediaManager {
   private listeners = new Set<() => void>();
   remote: RemoteMedia[] = [];
   private onError: (e: MediaError) => void = () => {};
+  private lastConnWarn = 0;
   setErrorHandler(fn: (e: MediaError) => void) {
     this.onError = fn;
   }
@@ -328,6 +335,11 @@ export class MediaManager {
     for (const link of [...this.links.values()]) {
       const peer = snap.peers.get(link.peerId);
       const failed = link.pc.connectionState === "failed";
+      // Jaringan yang tidak bisa tersambung langsung (NAT ketat) butuh server TURN: beri tahu sekali per menit.
+      if (failed && now - this.lastConnWarn > 60_000) {
+        this.lastConnWarn = now;
+        this.onError("connFailed");
+      }
       if (!peer || failed || now - link.lastWanted > 2500) {
         this.closeLink(link, true);
         changed = true;

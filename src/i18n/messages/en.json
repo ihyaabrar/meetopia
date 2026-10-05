@@ -618,5 +618,12 @@
   "us.showNamesHint": "Name labels above other people's avatars. Your own name always shows.",
   "us.avatarAnimation": "Avatar animation",
   "us.notifSounds": "Notification sounds",
-  "us.avatarAnimationHint": "Breathing, blinking and room effects. Turn off for a calmer view."
+  "us.avatarAnimationHint": "Breathing, blinking and room effects. Turn off for a calmer view.",
+  "media.screenSmall": "Shrink screen",
+  "media.screenBig": "Enlarge screen",
+  "media.screenFull": "Full screen",
+  "media.screenHide": "Hide screen",
+  "media.screenShow": "Show {name}'s screen",
+  "media.stopSharing": "Stop sharing screen",
+  "media.err.connFailed": "Voice/screen couldn't connect to a teammate. Your network may block direct connections; try another network, or an admin needs to add a TURN server (NEXT_PUBLIC_ICE_SERVERS)."
 }

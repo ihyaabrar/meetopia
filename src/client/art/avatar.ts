@@ -251,8 +251,10 @@ function capPath(
 ) {
   const fringe = hy - r * 0.18;
   ctx.beginPath();
-  ctx.moveTo(x - r * 1.04, hy + r * 0.1);
-  ctx.bezierCurveTo(x - r * 1.18, hy - r * 1.05, x + r * 1.18, hy - r * 1.05, x + r * 1.04, hy + r * 0.1);
+  // Busur elips sedikit lebih besar dari kepala: puncak kepala selalu tertutup rambut.
+  ctx.moveTo(x - r * 1.06, hy + r * 0.1);
+  ctx.ellipse(x, hy - r * 0.04, r * 1.07, r * 1.04, 0, Math.PI, Math.PI * 2);
+  ctx.lineTo(x + r * 1.04, hy + r * 0.1);
   // pelipis kanan
   ctx.lineTo(x + r * 0.86, hy - r * 0.02);
   if (style === "spiky") {
@@ -310,8 +312,9 @@ function drawHair(
     // Tampak belakang: rambut menutupi hampir seluruh kepala
     const len = a.hair === "long" ? r * 1.3 : a.hair === "bob" ? r * 0.8 : r * 0.55;
     ctx.beginPath();
-    ctx.moveTo(x - r * 1.06, hy + r * 0.2);
-    ctx.bezierCurveTo(x - r * 1.2, hy - r * 1.08, x + r * 1.2, hy - r * 1.08, x + r * 1.06, hy + r * 0.2);
+    ctx.moveTo(x - r * 1.07, hy + r * 0.2);
+    ctx.ellipse(x, hy - r * 0.04, r * 1.08, r * 1.05, 0, Math.PI, Math.PI * 2);
+    ctx.lineTo(x + r * 1.07, hy + r * 0.2);
     ctx.lineTo(x + r * 0.98, hy + len);
     ctx.quadraticCurveTo(x, hy + len + 3 * s, x - r * 0.98, hy + len);
     ctx.closePath();

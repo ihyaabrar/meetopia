@@ -618,5 +618,12 @@
   "us.showNamesHint": "Label nama di atas avatar orang lain. Namamu sendiri tetap tampil.",
   "us.avatarAnimation": "Animasi avatar",
   "us.notifSounds": "Suara notifikasi",
-  "us.avatarAnimationHint": "Gerak napas, kedip, dan efek di ruangan. Matikan bila ingin tampilan lebih tenang."
+  "us.avatarAnimationHint": "Gerak napas, kedip, dan efek di ruangan. Matikan bila ingin tampilan lebih tenang.",
+  "media.screenSmall": "Perkecil layar",
+  "media.screenBig": "Perbesar layar",
+  "media.screenFull": "Layar penuh",
+  "media.screenHide": "Sembunyikan layar",
+  "media.screenShow": "Tampilkan layar {name}",
+  "media.stopSharing": "Berhenti berbagi layar",
+  "media.err.connFailed": "Suara/layar ke rekan tidak tersambung. Jaringan kalian mungkin memblokir koneksi langsung; coba jaringan lain, atau admin perlu menambahkan server TURN (NEXT_PUBLIC_ICE_SERVERS)."
 }

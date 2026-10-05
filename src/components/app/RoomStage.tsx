@@ -625,6 +625,17 @@ export function RoomStage({
   };
 
   const presenter = remote.find((r) => r.screen && snap.peers.get(r.peerId)?.media.screen);
+  // Tampilan layar rekan: penuh, kecil di pojok, atau disembunyikan (per presenter).
+  const [screenMode, setScreenMode] = useState<{ id: string; mode: "full" | "mini" | "hidden" } | null>(null);
+  const viewMode = presenter && screenMode?.id === presenter.peerId ? screenMode.mode : "full";
+  const setViewMode = (mode: "full" | "mini" | "hidden") =>
+    presenter && setScreenMode({ id: presenter.peerId, mode });
+  const screenRef = useRef<HTMLDivElement>(null);
+  const selfScreenOn = !!self?.media.screen;
+  const selfScreen = useMemo(
+    () => (selfScreenOn && media.screenTrack ? new MediaStream([media.screenTrack]) : null),
+    [selfScreenOn, media.screenTrack],
+  );
   const presenterName = presenter ? snap.peers.get(presenter.peerId)?.name : null;
   const videoPeers = remote.filter((r) => r.cam && snap.peers.get(r.peerId)?.media.cam).slice(0, 8);
   const zoneHere = self ? zoneAt(map, self.x, self.y) : null;
@@ -681,6 +692,11 @@ export function RoomStage({
         <span className="hud-chip subtle" title={t("room.nearbyHint")}>
           <Icon name="users" size={14} /> {t("room.nearby", { n: nearby })}
         </span>
+        {presenter && viewMode === "hidden" && (
+          <button className="hud-chip chip-btn" onClick={() => setViewMode("full")}>
+            <Icon name="screen" size={14} /> {t("media.screenShow", { name: presenterName ?? "" })}
+          </button>
+        )}
         {snap.conn !== "open" && <span className="hud-chip warn">⟳ {t(`conn.${snap.conn}`)}</span>}
         {nowPlaying && (
           <span className={`hud-chip music ${nowPlaying.failed ? "warn" : ""}`}>
@@ -712,14 +728,6 @@ export function RoomStage({
               onClick={() => setPrefs({ musicMuted: !prefs.musicMuted })}
             >
               <Icon name={prefs.musicMuted ? "x" : "volume"} size={14} />
-            </button>
-          </span>
-        )}
-        {self?.media.screen && (
-          <span className="hud-chip danger">
-            <Icon name="screen" size={14} /> {t("media.youPresent")}
-            <button className="btn small danger" onClick={() => void media.setScreen(false)}>
-              {t("media.stop")}
             </button>
           </span>
         )}
@@ -771,12 +779,53 @@ export function RoomStage({
         </div>
       )}
 
-      {presenter && (
-        <div className="screen-view">
+      {presenter && viewMode !== "hidden" && (
+        <div ref={screenRef} className={`screen-view ${viewMode === "mini" ? "mini" : ""}`}>
           <div className="bar">
-            <span className="live-dot" /> <b>{t("media.presenting", { name: presenterName ?? "" })}</b>
+            <span className="live-dot" />
+            <b className="grow">{t("media.presenting", { name: presenterName ?? "" })}</b>
+            <button
+              className="icon-btn"
+              onClick={() => setViewMode(viewMode === "mini" ? "full" : "mini")}
+              aria-label={viewMode === "mini" ? t("media.screenBig") : t("media.screenSmall")}
+              title={viewMode === "mini" ? t("media.screenBig") : t("media.screenSmall")}
+            >
+              <Icon name={viewMode === "mini" ? "monitor" : "chevron"} size={16} />
+            </button>
+            <button
+              className="icon-btn"
+              onClick={() => void screenRef.current?.requestFullscreen?.().catch(() => {})}
+              aria-label={t("media.screenFull")}
+              title={t("media.screenFull")}
+            >
+              <Icon name="screen" size={16} />
+            </button>
+            <button
+              className="icon-btn"
+              onClick={() => setViewMode("hidden")}
+              aria-label={t("media.screenHide")}
+              title={t("media.screenHide")}
+            >
+              <Icon name="x" size={16} />
+            </button>
           </div>
           <VideoEl stream={presenter.screen!} />
+        </div>
+      )}
+      {selfScreen && (
+        <div className="screen-self">
+          <div className="bar">
+            <span className="live-dot" />
+            <span className="grow">{t("media.youPresent")}</span>
+            <button
+              className="btn small danger"
+              onClick={() => void media.setScreen(false)}
+              aria-label={t("media.stopSharing")}
+            >
+              {t("media.stop")}
+            </button>
+          </div>
+          <VideoEl stream={selfScreen} muted />
         </div>
       )}
 
