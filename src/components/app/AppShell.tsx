@@ -10,7 +10,7 @@ import { applyPrefsToDocument, getPrefs } from "@/client/prefs";
 import { desktopNotify, playSound } from "@/client/sounds";
 import { useI18n } from "@/i18n/client";
 import { ToastProvider, useToast } from "@/components/Toasts";
-import { Logo, LogoMark } from "@/components/Logo";
+import { LogoMark } from "@/components/Logo";
 import { Icon, type IconName } from "@/components/Icon";
 import { AvatarCanvas } from "@/components/AvatarCanvas";
 import { zoneAt, type MapObject, type ObjectAction } from "@/shared/map";
@@ -30,6 +30,8 @@ import { SpeakerPanel } from "./SpeakerPanel";
 import { ProfileCard } from "./ProfileCard";
 import { StatusEditor } from "./StatusEditor";
 import { InviteModal } from "./InviteModal";
+import { WorkspacePicker } from "./WorkspacePicker";
+import { JoinWorkspace } from "./JoinWorkspace";
 import { Popover } from "@/components/Popover";
 import { timeAgo } from "@/i18n/relative";
 import {
@@ -80,8 +82,10 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
   const [dmTabs, setDmTabs] = useState<string[]>([]);
   const [notes, setNotes] = useState<null | "private" | "shared">(null);
   const [modal, setModal] = useState<
-    null | "create" | "profile" | "settings" | "invites" | "devices" | "tips" | "status"
+    null | "create" | "profile" | "settings" | "invites" | "devices" | "tips" | "status" | "join"
   >(null);
+  /** Beranda: halaman Pilih Workspace. */
+  const [home, setHome] = useState(initialGroups.length === 0);
   const prefs = usePrefs();
   const [headMenu, setHeadMenu] = useState<null | "notifs" | "profile">(null);
   const notifs = useNotifications();
@@ -388,6 +392,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
   };
 
   const switchGroup = (id: string) => {
+    setHome(false);
     setActiveId(id);
     setShowNav(false);
   };
@@ -397,18 +402,30 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
 
   return (
     <div
-      className={`app ${showNav ? "show-nav" : ""} ${showMembers ? "show-members" : ""} ${detail ? "" : "no-members"}`}
+      className={`app ${showNav ? "show-nav" : ""} ${showMembers ? "show-members" : ""} ${detail && !home ? "" : "no-members"} ${home ? "home" : ""}`}
     >
       <nav className="rail" aria-label={t("nav.groups")}>
         <div className="rail-home" title="Meetopia">
           <LogoMark size={36} title="Meetopia" />
         </div>
+        <button
+          className="rail-item nav"
+          aria-current={home}
+          onClick={() => {
+            setHome(true);
+            setShowNav(false);
+          }}
+          title={t("nav.home")}
+          aria-label={t("nav.home")}
+        >
+          <Icon name="home" size={22} />
+        </button>
         <span className="rail-sep" />
         {groups.map((g) => (
           <button
             key={g.id}
             className="rail-item"
-            aria-current={g.id === activeId}
+            aria-current={!home && g.id === activeId}
             onClick={() => switchGroup(g.id)}
             onContextMenu={(e) => {
               e.preventDefault();
@@ -693,17 +710,16 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
             </button>
           </div>
         )}
-        {!activeId ? (
-          <div className="welcome-main">
-            <div className="card" style={{ padding: 32, maxWidth: 460 }}>
-              <Logo size={40} tagline />
-              <h2 style={{ marginTop: 24 }}>{t("welcome.title")}</h2>
-              <p className="hint">{t("welcome.body")}</p>
-              <button className="btn" onClick={() => setModal("create")}>
-                <Icon name="plus" size={18} /> {t("group.createTitle")}
-              </button>
-            </div>
-          </div>
+        {home || !activeId ? (
+          <WorkspacePicker
+            groups={groups}
+            activeId={activeId}
+            avatar={me.avatar}
+            onOpen={switchGroup}
+            onCreate={() => setModal("create")}
+            onJoin={() => setModal("join")}
+            onBack={activeId ? () => setHome(false) : undefined}
+          />
         ) : (
           <div className="split" style={{ position: "relative" }}>
             {room && media && snap.map ? (
@@ -838,13 +854,23 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
           ]}
         />
       )}
+      {modal === "join" && (
+        <JoinWorkspace
+          onClose={() => setModal(null)}
+          onJoined={async (id) => {
+            setModal(null);
+            await refreshGroups();
+            switchGroup(id);
+          }}
+        />
+      )}
       {modal === "create" && (
         <CreateGroup
           onClose={() => setModal(null)}
           onCreated={async (id) => {
             setModal(null);
             await refreshGroups();
-            setActiveId(id);
+            switchGroup(id);
           }}
         />
       )}

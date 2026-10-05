@@ -8,6 +8,11 @@ export interface GroupSummary {
   role: Role;
   iconColor: string;
   iconSymbol: string;
+  description?: string;
+  template?: string;
+  memberCount?: number;
+  /** Jumlah orang yang sedang di ruangan (hanya dari GET /api/groups). */
+  inRoom?: number;
 }
 
 export interface MemberInfo {

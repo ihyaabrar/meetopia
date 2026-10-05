@@ -45,8 +45,8 @@ test("live: daftar, grup, undangan, saling melihat, chat, catatan, lalu bersih-b
   try {
     await register(a, `tes-claude-a-${stamp}@contoh.id`, "TesA");
     log("A daftar & masuk");
-    await a.getByRole("button", { name: "Buat grup" }).first().click();
-    await a.getByLabel("Nama grup").fill(`Tes Claude ${stamp}`);
+    await a.getByRole("button", { name: "Buat workspace" }).first().click();
+    await a.getByLabel("Nama workspace").fill(`Tes Claude ${stamp}`);
     await a.getByRole("button", { name: "Buat", exact: true }).click();
     await a.waitForURL(/[?&]g=/);
     groupId = new URL(a.url()).searchParams.get("g");
@@ -62,7 +62,7 @@ test("live: daftar, grup, undangan, saling melihat, chat, catatan, lalu bersih-b
 
     await register(b, `tes-claude-b-${stamp}@contoh.id`, "TesB");
     await b.goto(link);
-    await b.getByRole("button", { name: "Gabung grup" }).click();
+    await b.getByRole("button", { name: "Gabung workspace" }).click();
     await b.waitForURL(/\/app\?g=/);
     await enterRoom(b);
     log("B daftar, gabung lewat undangan, masuk ruangan");

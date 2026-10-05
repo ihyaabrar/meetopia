@@ -42,7 +42,8 @@ async function register(page: Page, email: string, name: string, path: string | 
 async function enterRoom(page: Page) {
   const tips = page.getByRole("button", { name: "Mengerti!" });
   if (await tips.isVisible().catch(() => false)) await tips.click();
-  await page.getByRole("button", { name: "Masuk ruangan" }).click();
+  // Saat dialog perangkat dirender ulang, tombol bisa sesaat terhitung dua kali.
+  await page.getByRole("button", { name: "Masuk ruangan" }).first().click();
   await expect(page.locator("canvas.map")).toBeVisible();
   await page.waitForFunction(
     () => (window as unknown as { __meetopia?: Debug }).__meetopia?.room.snapshot.conn === "open",
@@ -66,8 +67,8 @@ test("MVP: grup, undangan, sinkron posisi, chat, catatan, mic, sambung ulang", a
   const tips = a.getByRole("button", { name: "Mengerti!" });
   await tips.click();
   if (shots) await a.screenshot({ path: `${shots}/empty-app.png` });
-  await a.getByRole("button", { name: "Buat grup" }).first().click();
-  await a.getByLabel("Nama grup").fill("Tim Desain");
+  await a.getByRole("button", { name: "Buat workspace" }).first().click();
+  await a.getByLabel("Nama workspace").fill("Tim Desain");
   await a.getByRole("button", { name: "Buat", exact: true }).click();
   if (shots) await a.screenshot({ path: `${shots}/device-check.png` });
   await enterRoom(a);
@@ -87,7 +88,7 @@ test("MVP: grup, undangan, sinkron posisi, chat, catatan, mic, sambung ulang", a
   await b.waitForURL(/\/register\?next=/);
   await register(b, `dito${stamp}@contoh.id`, "Dito", null);
   await b.waitForURL(/\/invite\//);
-  await b.getByRole("button", { name: "Gabung grup" }).click();
+  await b.getByRole("button", { name: "Gabung workspace" }).click();
   await b.waitForURL(/\/app\?g=/);
   await enterRoom(b);
   await expect(a.getByText("Di ruangan (2)")).toBeVisible({ timeout: 10_000 });
@@ -200,8 +201,8 @@ test("Ruang privat: dikunci dari dalam, orang luar harus ketuk (FR-23, FR-31)", 
   await register(a, `a${stamp}@contoh.id`, "Ayu");
   await a.waitForURL(/\/app/);
   await a.getByRole("button", { name: "Mengerti!" }).click();
-  await a.getByRole("button", { name: "Buat grup" }).first().click();
-  await a.getByLabel("Nama grup").fill("Kantor Privat");
+  await a.getByRole("button", { name: "Buat workspace" }).first().click();
+  await a.getByLabel("Nama workspace").fill("Kantor Privat");
   await a.getByRole("button", { name: "Buat", exact: true }).click();
   await enterRoom(a);
   await a.getByRole("button", { name: "Undang anggota" }).first().click();
@@ -219,7 +220,7 @@ test("Ruang privat: dikunci dari dalam, orang luar harus ketuk (FR-23, FR-31)", 
   await register(b, `b${stamp}@contoh.id`, "Bima");
   await b.waitForURL(/\/app/);
   await b.goto(link);
-  await b.getByRole("button", { name: "Gabung grup" }).click();
+  await b.getByRole("button", { name: "Gabung workspace" }).click();
   await b.waitForURL(/\/app\?g=/);
   await enterRoom(b);
 
@@ -276,8 +277,8 @@ test("Speaker: musik makin pelan saat menjauh, hilang di luar jangkauan", async 
   await register(a, `a${stamp}@contoh.id`, "Ayu");
   await a.waitForURL(/\/app/);
   await a.getByRole("button", { name: "Mengerti!" }).click();
-  await a.getByRole("button", { name: "Buat grup" }).first().click();
-  await a.getByLabel("Nama grup").fill("Kafe Musik");
+  await a.getByRole("button", { name: "Buat workspace" }).first().click();
+  await a.getByLabel("Nama workspace").fill("Kafe Musik");
   await a.getByRole("button", { name: "Buat", exact: true }).click();
   await enterRoom(a);
   await a.getByRole("button", { name: "Undang anggota" }).first().click();
@@ -285,11 +286,14 @@ test("Speaker: musik makin pelan saat menjauh, hilang di luar jangkauan", async 
   const link = await a.getByTestId("invite-link").inputValue();
   await a.keyboard.press("Escape");
 
+  // B bergabung lewat kode undangan dari Beranda (Pilih Workspace)
+  const code = link.split("/").pop()!;
   await register(b, `b${stamp}@contoh.id`, "Bima");
   await b.waitForURL(/\/app/);
-  await b.goto(link);
-  await b.getByRole("button", { name: "Gabung grup" }).click();
-  await b.waitForURL(/\/app\?g=/);
+  await b.getByRole("button", { name: "Mengerti!" }).click();
+  await b.getByRole("button", { name: "Masuk", exact: true }).click();
+  await b.getByLabel("Kode undangan").fill(code.toLowerCase());
+  await b.getByRole("button", { name: "Gabung", exact: true }).click();
   await enterRoom(b);
 
   // A mendekati speaker di lounge dan memutar stasiun bawaan
@@ -344,8 +348,8 @@ test("Jenis ruangan: buat Rumah, lalu ganti ke Gaming house", async ({ browser }
   await register(a, `r${stamp}@contoh.id`, "Rani");
   await a.waitForURL(/\/app/);
   await a.getByRole("button", { name: "Mengerti!" }).click();
-  await a.getByRole("button", { name: "Buat grup" }).first().click();
-  await a.getByLabel("Nama grup").fill("Rumah Rani");
+  await a.getByRole("button", { name: "Buat workspace" }).first().click();
+  await a.getByLabel("Nama workspace").fill("Rumah Rani");
   await a.getByRole("radio", { name: /Rumah/ }).click();
   await a.getByRole("button", { name: "Buat", exact: true }).click();
   await enterRoom(a);
@@ -372,7 +376,7 @@ test("Jenis ruangan: buat Rumah, lalu ganti ke Gaming house", async ({ browser }
   await expect(a.getByText("dikunci oleh Rani")).toBeVisible();
 
   // Ganti jenis ruangan: semua orang dipindah ke titik muncul baru, kunci dibuka
-  await a.getByRole("button", { name: "Pengaturan grup" }).first().click();
+  await a.getByRole("button", { name: "Pengaturan workspace" }).first().click();
   await a.locator(".settings-nav").getByRole("button", { name: "Ruangan" }).click();
   await a.getByRole("radio", { name: /Gaming house/ }).click();
   await a.getByRole("button", { name: "Ganti jenis ruangan" }).click();

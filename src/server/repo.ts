@@ -20,6 +20,9 @@ export interface GroupSummary {
   role: Role;
   iconColor: string;
   iconSymbol: string;
+  description: string;
+  template: string;
+  memberCount: number;
 }
 
 export interface Member {
@@ -69,8 +72,14 @@ export async function listGroups(userId: string): Promise<GroupSummary[]> {
     role: Role;
     icon_color: string | null;
     icon_symbol: string;
+    description: string;
+    template: string | null;
+    member_count: number;
   }>(
-    `SELECT g.id, g.name, m.role, g.icon_color, g.icon_symbol FROM memberships m JOIN groups g ON g.id = m.group_id
+    `SELECT g.id, g.name, m.role, g.icon_color, g.icon_symbol, g.description,
+       mp.data->>'template' AS template,
+       (SELECT COUNT(*)::int FROM memberships x WHERE x.group_id = g.id) AS member_count
+     FROM memberships m JOIN groups g ON g.id = m.group_id LEFT JOIN maps mp ON mp.group_id = g.id
      WHERE m.user_id = $1 ORDER BY m.created_at`,
     [userId],
   );
@@ -80,6 +89,9 @@ export async function listGroups(userId: string): Promise<GroupSummary[]> {
     role: r.role,
     iconColor: r.icon_color ?? defaultGroupColor(r.id),
     iconSymbol: r.icon_symbol,
+    description: r.description ?? "",
+    template: r.template ?? "office",
+    memberCount: r.member_count,
   }));
 }
 
