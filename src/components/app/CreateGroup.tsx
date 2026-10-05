@@ -6,6 +6,8 @@ import { useT } from "@/i18n/client";
 import { Modal } from "@/components/Modal";
 import { GroupIconPicker } from "@/components/GroupIconPicker";
 import { GROUP_COLOR_KEYS, type GroupColor, type GroupSymbol } from "@/shared/groupIcon";
+import { TemplatePicker } from "@/components/TemplatePicker";
+import type { TemplateId } from "@/shared/templates";
 
 export function CreateGroup({
   onClose,
@@ -20,6 +22,7 @@ export function CreateGroup({
     color: GROUP_COLOR_KEYS[Math.floor(Math.random() * GROUP_COLOR_KEYS.length)],
     symbol: "initials",
   }));
+  const [template, setTemplate] = useState<TemplateId>("office");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const submit = async (e: React.FormEvent) => {
@@ -27,7 +30,7 @@ export function CreateGroup({
     setBusy(true);
     try {
       const r = await api<{ id: string }>("/api/groups", {
-        body: { name, iconColor: icon.color, iconSymbol: icon.symbol },
+        body: { name, iconColor: icon.color, iconSymbol: icon.symbol, template },
       });
       onCreated(r.id);
     } catch (err) {
@@ -36,7 +39,7 @@ export function CreateGroup({
     }
   };
   return (
-    <Modal title={t("group.createTitle")} sub={t("group.createSub")} onClose={onClose}>
+    <Modal title={t("group.createTitle")} sub={t("group.createSub")} onClose={onClose} wide>
       <form onSubmit={submit}>
         {error && <p className="error-text">{error}</p>}
         <div className="field">
@@ -52,7 +55,10 @@ export function CreateGroup({
           />
         </div>
         <GroupIconPicker name={name} color={icon.color} symbol={icon.symbol} onChange={setIcon} />
-        <p className="hint">{t("group.createIncludes")}</p>
+        <div className="section-title" style={{ paddingLeft: 0 }}>
+          {t("tpl.choose")}
+        </div>
+        <TemplatePicker value={template} onChange={setTemplate} />
         <div className="modal-actions">
           <button type="button" className="btn secondary" onClick={onClose}>
             {t("common.cancel")}

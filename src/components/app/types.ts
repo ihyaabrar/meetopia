@@ -32,6 +32,7 @@ export interface GroupDetail {
   channels: Array<{ id: string; name: string; kind: string }>;
   members: MemberInfo[];
   audio: AudioConfig;
+  template: string;
 }
 
 export interface Me {

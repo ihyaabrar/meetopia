@@ -3,7 +3,7 @@
  * emote, balon chat), garis koneksi suara, sorotan ruang privat, cahaya lampu, dan label nama.
  * Terpisah dari React agar loop gambar ringan dan mudah dirawat.
  */
-import { TILE, type MapData, type MapObject, type Zone } from "@/shared/map";
+import { TILE, isLockable, tileAt, type MapData, type MapObject, type Zone } from "@/shared/map";
 import type { Presence } from "@/shared/protocol";
 import { drawAvatar } from "./art/avatar";
 import { renderWorld, type WorldLayers } from "./art/world";
@@ -37,6 +37,8 @@ export interface SceneFrame {
   /** Speaker yang sedang memutar musik; `level` 0..1 = seberapa keras terdengar oleh diri sendiri. */
   speakers: Array<{ obj: MapObject; level: number }>;
   reducedMotion: boolean;
+  /** Ruangan yang sedang dikunci: gembok digambar di pintunya. */
+  lockedZones?: Record<string, unknown>;
 }
 
 const T = TILE;
@@ -77,11 +79,37 @@ export class Scene {
     return c;
   }
 
+  /** Pintu tiap ruangan yang bisa dikunci (pusat pintu dalam tile). */
+  private doors = new Map<string, Array<{ x: number; y: number }>>();
+
   constructor(
     public map: MapData,
     zoneLabel: (k: string) => string,
   ) {
     this.layers = renderWorld(map, zoneLabel);
+    for (const z of map.zones) {
+      if (!isLockable(z)) continue;
+      const tiles: Array<{ x: number; y: number }> = [];
+      for (let ty = z.y - 1; ty <= z.y + z.h; ty++)
+        for (let tx = z.x - 1; tx <= z.x + z.w; tx++) {
+          const inside = tx >= z.x && tx < z.x + z.w && ty >= z.y && ty < z.y + z.h;
+          if (!inside && tileAt(map, tx, ty) === "door") tiles.push({ x: tx, y: ty });
+        }
+      // Kelompokkan tile pintu yang bersebelahan menjadi satu pintu.
+      const groups: Array<Array<{ x: number; y: number }>> = [];
+      for (const t of tiles) {
+        const g = groups.find((gr) => gr.some((o) => Math.abs(o.x - t.x) + Math.abs(o.y - t.y) === 1));
+        if (g) g.push(t);
+        else groups.push([t]);
+      }
+      this.doors.set(
+        z.id,
+        groups.map((g) => ({
+          x: g.reduce((a, t) => a + t.x, 0) / g.length + 0.5,
+          y: g.reduce((a, t) => a + t.y, 0) / g.length + 0.5,
+        })),
+      );
+    }
     this.measure = document.createElement("canvas").getContext("2d")!;
   }
 
@@ -230,6 +258,10 @@ export class Scene {
       ctx.restore();
     }
 
+    // Gembok di pintu ruangan yang dikunci
+    for (const id of Object.keys(f.lockedZones ?? {}))
+      for (const d of this.doors.get(id) ?? []) this.drawPadlock(ctx, d.x * T, d.y * T);
+
     // Speaker yang sedang memutar: lampu indikator dan not musik melayang
     for (const sp of f.speakers) this.drawSpeakerFx(ctx, sp.obj, sp.level, time, f.reducedMotion);
 
@@ -330,6 +362,30 @@ export class Scene {
         this.drawNote(ctx, nx, ny, i % 2 === 0);
       }
     }
+    ctx.restore();
+  }
+
+  private drawPadlock(ctx: CanvasRenderingContext2D, x: number, y: number) {
+    ctx.save();
+    ctx.fillStyle = "rgba(15,12,10,0.22)";
+    ctx.beginPath();
+    ctx.arc(x, y + 2, 13, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#2b2623";
+    ctx.beginPath();
+    ctx.arc(x, y, 13, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#ede8e1";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y - 2.5, 3.6, Math.PI, 0);
+    ctx.stroke();
+    ctx.fillStyle = "#e3b25c";
+    ctx.beginPath();
+    ctx.roundRect(x - 5.5, y - 2.5, 11, 8.5, 2);
+    ctx.fill();
+    ctx.fillStyle = "#2b2623";
+    ctx.fillRect(x - 0.8, y + 0.3, 1.6, 3);
     ctx.restore();
   }
 

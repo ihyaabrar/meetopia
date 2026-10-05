@@ -39,6 +39,7 @@ const EMPTY_SNAP: RoomSnapshot = {
   map: null,
   sharedNote: null,
   music: {},
+  locks: {},
   clockOffset: 0,
   version: 0,
 };
@@ -209,7 +210,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
         });
       }),
       room.on("screenRejected", () => media.screenRejected()),
-      room.on("teleported", (m) => toast({ text: t("peer.teleported", { name: m.toName }) })),
+      room.on("teleported", (m) => m.toName && toast({ text: t("peer.teleported", { name: m.toName }) })),
       room.on("teleportRejected", (m) =>
         toast({ text: t(`peer.teleportRejected.${m.reason}`), kind: "error" }),
       ),
@@ -297,6 +298,14 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
         return toast({ text: t("action.drinkResult") });
       case "watch":
         return toast({ text: t("action.watchResult") });
+      case "cook":
+        return toast({ text: t("action.cookResult") });
+      case "play":
+        return toast({
+          text: t(obj.kind === "arcade" ? "action.arcadeResult" : "action.playResult", {
+            n: (Math.floor(Math.random() * 90) + 10) * 100,
+          }),
+        });
     }
   };
 

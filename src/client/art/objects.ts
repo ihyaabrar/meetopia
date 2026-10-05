@@ -22,6 +22,10 @@ const TALL: ObjectKind[] = [
   "desk",
   "welcome",
   "speaker",
+  "counter",
+  "fridge",
+  "arcade",
+  "gamingDesk",
 ];
 export const isTall = (k: ObjectKind) => TALL.includes(k);
 
@@ -566,6 +570,183 @@ export function drawObject(ctx: CanvasRenderingContext2D, o: MapObject) {
       ctx.beginPath();
       ctx.arc(cx + 7, top + 41, 1.5, 0, Math.PI * 2);
       ctx.fill();
+      break;
+    }
+
+    case "bed": {
+      // Ranjang tampak atas: kepala ranjang di atas, bantal, selimut berwarna
+      const blanket = ["#7d9fc9", "#8fbf8f", "#d99a9a", "#c9b27d"][Math.floor(v * 4)];
+      boxShadow(ctx, x + 3, y + 2, w - 6, h - 4, 6);
+      rr(ctx, x + 3, y + 2, w - 6, h - 4, 6);
+      fillStroke(ctx, woodGrad(ctx, y, y + h, C.woodDark));
+      rr(ctx, x + 6, y + 10, w - 12, h - 15, 4);
+      fillStroke(ctx, "#f7f5ec", 1.6);
+      rr(ctx, x + 10, y + 13, w - 20, 12, 5);
+      fillStroke(ctx, "#ffffff", 1.4);
+      rr(ctx, x + 6, y + 34, w - 12, h - 39, 4);
+      fillStroke(ctx, blanket, 1.6);
+      ctx.fillStyle = "rgba(255,255,255,0.22)";
+      rr(ctx, x + 6, y + 34, w - 12, 5, 3);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,0.12)";
+      ctx.lineWidth = 1;
+      for (let i = 1; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(x + 8, y + 34 + i * ((h - 39) / 3));
+        ctx.lineTo(x + w - 8, y + 34 + i * ((h - 39) / 3));
+        ctx.stroke();
+      }
+      break;
+    }
+
+    case "counter": {
+      // Lemari dapur: dinding keramik, meja abu-abu, kompor dan bak cuci
+      ctx.fillStyle = "#e9eef0";
+      ctx.fillRect(x + 1, y - 20, w - 2, 22);
+      ctx.strokeStyle = "rgba(120,140,150,0.35)";
+      ctx.lineWidth = 1;
+      for (let i = x + 9; i < x + w; i += 8) {
+        ctx.beginPath();
+        ctx.moveTo(i, y - 20);
+        ctx.lineTo(i, y + 2);
+        ctx.stroke();
+      }
+      for (let j = y - 12; j < y + 2; j += 8) {
+        ctx.beginPath();
+        ctx.moveTo(x + 1, j);
+        ctx.lineTo(x + w - 1, j);
+        ctx.stroke();
+      }
+      counter(ctx, x + 1, y, w - 2, 12, 16, "#d8d4cc", 3);
+      ctx.fillStyle = "rgba(0,0,0,0.18)";
+      for (let i = x + T; i < x + w - 4; i += T) ctx.fillRect(i, y + 14, 1, 14);
+      // kompor
+      const sx = x + 6;
+      rr(ctx, sx, y + 1, 26, 10, 2);
+      fillStroke(ctx, "#2f3133", 1.3);
+      ctx.strokeStyle = "#8b8f92";
+      for (const [cx, cy] of [
+        [sx + 7, y + 6],
+        [sx + 19, y + 6],
+      ]) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      // panci
+      ctx.beginPath();
+      ctx.arc(sx + 19, y + 3, 5, 0, Math.PI * 2);
+      fillStroke(ctx, "#c94f45", 1.3);
+      // bak cuci
+      const kx = x + w / 2 + 10;
+      rr(ctx, kx, y + 2, 22, 9, 3);
+      fillStroke(ctx, "#b8c2c8", 1.3);
+      ctx.strokeStyle = "#6f7a80";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(kx + 11, y + 2);
+      ctx.lineTo(kx + 11, y - 6);
+      ctx.lineTo(kx + 16, y - 6);
+      ctx.stroke();
+      break;
+    }
+
+    case "fridge": {
+      const fx = x + 3;
+      const fw = T - 6;
+      groundShadow(ctx, x + T / 2, y + T - 3, 13, 4, 0.25);
+      rr(ctx, fx, y - 30, fw, T + 26, 5);
+      fillStroke(ctx, "#eef1f2");
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(fx, y - 6);
+      ctx.lineTo(fx + fw, y - 6);
+      ctx.stroke();
+      ctx.fillStyle = "#9aa3a8";
+      ctx.fillRect(fx + fw - 6, y - 24, 2.5, 12);
+      ctx.fillRect(fx + fw - 6, y, 2.5, 14);
+      // magnet dan catatan
+      ctx.fillStyle = "#f2c46d";
+      ctx.fillRect(fx + 5, y - 22, 7, 8);
+      ctx.fillStyle = C.green;
+      ctx.beginPath();
+      ctx.arc(fx + 8, y - 23, 1.6, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+
+    case "arcade": {
+      const body = ["#5b54a6", "#1d6b73", "#a3415a", "#2f7d45"][Math.floor(v * 4)];
+      const ax = x + 3;
+      const aw = T - 6;
+      groundShadow(ctx, x + T / 2, y + T - 3, 13, 4, 0.28);
+      rr(ctx, ax, y - 34, aw, T + 30, 4);
+      fillStroke(ctx, body);
+      // papan nama (marquee)
+      rr(ctx, ax + 2, y - 32, aw - 4, 8, 2);
+      fillStroke(ctx, "#f2c46d", 1.2);
+      // layar
+      rr(ctx, ax + 4, y - 21, aw - 8, 16, 2);
+      fillStroke(ctx, "#1f2a38", 1.4);
+      ctx.fillStyle = "#7cc48a";
+      ctx.fillRect(ax + 7, y - 12, 4, 3);
+      ctx.fillStyle = "#ef7a6f";
+      ctx.fillRect(ax + 14, y - 17, 3, 3);
+      ctx.fillStyle = "#e9eef0";
+      ctx.fillRect(ax + 9, y - 8, 10, 1.5);
+      // panel kontrol
+      rr(ctx, ax - 1, y - 2, aw + 2, 8, 2);
+      fillStroke(ctx, shade(body, -0.25), 1.4);
+      ctx.fillStyle = INK;
+      ctx.beginPath();
+      ctx.arc(ax + 6, y + 1, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#ef7a6f";
+      ctx.beginPath();
+      ctx.arc(ax + aw - 9, y + 2, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#e3b25c";
+      ctx.beginPath();
+      ctx.arc(ax + aw - 4, y + 1, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+
+    case "gamingDesk": {
+      counter(ctx, x + 2, y + 2, w - 4, 20, 8, "#3a3646", 5);
+      // lampu RGB di tepi meja (warna statis, hijau ke ungu)
+      ctx.fillStyle = "#7cc48a";
+      ctx.fillRect(x + 6, y + 22, (w - 12) / 2, 2);
+      ctx.fillStyle = "#a98be0";
+      ctx.fillRect(x + w / 2, y + 22, (w - 12) / 2, 2);
+      // dua monitor
+      for (const [mx, tilt] of [
+        [x + w / 2 - 17, -0.06],
+        [x + w / 2 + 17, 0.06],
+      ] as const) {
+        ctx.save();
+        ctx.translate(mx, y);
+        ctx.rotate(tilt);
+        ctx.fillStyle = "#2b2623";
+        ctx.fillRect(-2, 0, 4, 10);
+        rr(ctx, -16, -18, 32, 20, 3);
+        fillStroke(ctx, "#1b1d22", 2);
+        ctx.fillStyle = v > 0.5 ? "#35609f" : "#5b54a6";
+        ctx.fillRect(-13, -15, 26, 14);
+        ctx.fillStyle = "rgba(255,255,255,0.55)";
+        ctx.fillRect(-10, -6, 8, 3);
+        ctx.fillStyle = "#7cc48a";
+        ctx.fillRect(2, -12, 6, 6);
+        ctx.restore();
+      }
+      // keyboard dan mouse
+      rr(ctx, x + w / 2 - 12, y + 13, 24, 6, 1.5);
+      fillStroke(ctx, "#1b1d22", 1.2);
+      ctx.fillStyle = "#a98be0";
+      ctx.fillRect(x + w / 2 - 10, y + 15, 20, 1);
+      rr(ctx, x + w / 2 + 16, y + 13, 5, 7, 2.5);
+      fillStroke(ctx, "#1b1d22", 1.2);
       break;
     }
 

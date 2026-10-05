@@ -10,6 +10,8 @@ import { SettingsShell, type SettingsSection } from "@/components/SettingsShell"
 import { can, canChangeRole, type Role } from "@/shared/roles";
 import { isGroupColor, isGroupSymbol, type GroupColor, type GroupSymbol } from "@/shared/groupIcon";
 import type { GroupDetail } from "./types";
+import { TemplatePicker } from "@/components/TemplatePicker";
+import { isTemplateId, type TemplateId } from "@/shared/templates";
 
 interface Invite {
   id: string;
@@ -192,11 +194,36 @@ function RoomSection({ detail, run }: Ctx) {
   const { t } = useI18n();
   const [audio, setAudio] = useState(detail.audio);
   const changed = JSON.stringify(audio) !== JSON.stringify(detail.audio);
+  const current: TemplateId = isTemplateId(detail.template) ? detail.template : "office";
+  const [template, setTemplate] = useState<TemplateId>(current);
   return (
     <>
       <h3 className="settings-h3" style={{ marginTop: 0 }}>
-        {t("settings.audio")}
+        {t("tpl.choose")}
       </h3>
+      <p className="hint">{t("tpl.changeHint")}</p>
+      <TemplatePicker value={template} onChange={setTemplate} current={current} />
+      {template !== current && (
+        <div className="row" style={{ marginTop: 10 }}>
+          <span className="spacer" />
+          <button className="btn secondary small" onClick={() => setTemplate(current)}>
+            {t("common.cancel")}
+          </button>
+          <button
+            className="btn small"
+            onClick={() =>
+              confirm(t("tpl.changeConfirm", { name: t(`tpl.${template}`) })) &&
+              run(
+                () => api(`/api/groups/${detail.group.id}`, { method: "PATCH", body: { template } }),
+                t("common.saved"),
+              )
+            }
+          >
+            {t("tpl.change")}
+          </button>
+        </div>
+      )}
+      <h3 className="settings-h3">{t("settings.audio")}</h3>
       <p className="hint">{t("settings.audioHint")}</p>
       <section className="setting-card">
         {(

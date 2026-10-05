@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { OFFICE_TEMPLATE } from "@/shared/map";
+import { OFFICE_TEMPLATE } from "@/shared/templates";
 import { audiblePeers, pairVolume, volumeForDistance, type Positioned } from "@/shared/proximity";
 
 const map = OFFICE_TEMPLATE;

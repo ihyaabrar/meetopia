@@ -16,7 +16,14 @@ import { getKv, keys, type Kv } from "@/server/kv";
 import { one } from "@/server/db";
 import { newId } from "@/server/ids";
 import * as repo from "@/server/repo";
-import { buildWalkable, distanceToObject, privateZoneAt, type MapData } from "@/shared/map";
+import {
+  buildWalkable,
+  distanceToObject,
+  isLockable,
+  privateZoneAt,
+  type MapData,
+  type Zone,
+} from "@/shared/map";
 import { SPEAKER_CONTROL_RANGE, type MusicState } from "@/shared/music";
 import { pairVolume } from "@/shared/proximity";
 import { sanitizeAvatar } from "@/shared/avatar";
@@ -27,6 +34,7 @@ import {
   type ClientMessage,
   type Presence,
   type ServerMessage,
+  type ZoneLock,
 } from "@/shared/protocol";
 import { publishToRoom, type Envelope } from "./bus";
 
@@ -157,7 +165,7 @@ export class RealtimeHub {
     // Jangan muncul di dalam ruang privat yang sedang dipakai orang lain.
     const all = (await this.readPresence(room)).filter((p) => p.id !== auth.userId);
     const z = privateZoneAt(room.map, pos.x, pos.y);
-    if (!saved || (z && all.some((p) => privateZoneAt(room.map, p.x, p.y)?.id === z.id))) {
+    if (!saved || (z && (await this.lockOf(room, z.id)))) {
       pos = this.freeSpawn(room, all);
     }
 
@@ -215,6 +223,7 @@ export class RealtimeHub {
       map: room.map,
       sharedNote: await repo.getSharedNote(auth.groupId),
       music: await this.readMusic(room),
+      locks: await this.readLocks(room),
       serverNow: Date.now(),
     });
     await publishToRoom(auth.groupId, { msg: { t: "join", peer: presence } });
@@ -307,6 +316,8 @@ export class RealtimeHub {
     const raw = await kv.hget(keys.presence(conn.groupId), conn.userId);
     if (raw && (JSON.parse(raw) as { p: Presence }).p.conn === conn.presence.conn) {
       await kv.hdel(keys.presence(conn.groupId), conn.userId);
+      const zone = privateZoneAt(room.map, conn.presence.x, conn.presence.y);
+      if (zone) await this.unlockIfEmpty(room, zone);
     }
     await publishToRoom(conn.groupId, { msg: { t: "leave", id: conn.userId, conn: conn.presence.conn } });
     // Di Vercel instance bisa dibekukan setelah koneksi terakhir tutup: simpan pesan sekarang.
@@ -350,18 +361,15 @@ export class RealtimeHub {
         if (!this.isWalkable(room, m.x, m.y))
           return send(conn.ws, { t: "moveRejected", x: p.x, y: p.y, reason: "privateZone" });
         const zone = privateZoneAt(room.map, m.x, m.y);
+        const prevZone = privateZoneAt(room.map, p.x, p.y);
         if (zone && p.allowedZone !== zone.id) {
-          const others = (await this.readPresence(room)).filter(
-            (o) => o.id !== conn.userId && privateZoneAt(room.map, o.x, o.y)?.id === zone.id,
-          );
-          if (others.length > 0) {
-            // Ruang privat terisi dan belum "diketuk": tolak di server (FR-23, FR-31).
+          // Ruang yang sedang dikunci dan belum "diketuk": tolak di server (FR-23, FR-31).
+          if (isLockable(zone) && (await this.lockOf(room, zone.id)))
             return send(conn.ws, { t: "moveRejected", x: p.x, y: p.y, reason: "privateZone" });
-          }
           p.allowedZone = zone.id;
         }
         // Izin masuk dicabut setelah benar-benar keluar dari ruang privat (bukan saat masih di depan pintu).
-        if (!zone && privateZoneAt(room.map, p.x, p.y)) p.allowedZone = null;
+        if (!zone && prevZone) p.allowedZone = null;
         p.x = m.x;
         p.y = m.y;
         p.dir = m.dir;
@@ -369,6 +377,7 @@ export class RealtimeHub {
         if (m.moving) p.sitting = false;
         this.autoMeetingStatus(room, conn);
         await this.broadcastUpdate(conn);
+        if (prevZone && prevZone.id !== zone?.id) await this.unlockIfEmpty(room, prevZone);
         if (!m.moving || Date.now() - conn.lastPosSave > 10_000) {
           conn.lastPosSave = Date.now();
           const kv = await this.kv();
@@ -447,9 +456,53 @@ export class RealtimeHub {
       case "teleport":
         return this.onTeleport(room, conn, m.toUserId);
 
+      case "lockZone": {
+        // Hanya orang yang sedang berada di dalam ruangan yang bisa mengunci/membukanya.
+        const zone = room.map.zones.find((z) => z.id === m.zoneId);
+        if (!zone || !isLockable(zone) || privateZoneAt(room.map, p.x, p.y)?.id !== zone.id) return;
+        const kv = await this.kv();
+        if (m.locked) {
+          const lock: ZoneLock = { by: conn.userId, byName: p.name };
+          await kv.hset(keys.locks(room.groupId), zone.id, JSON.stringify(lock));
+        } else await kv.hdel(keys.locks(room.groupId), zone.id);
+        return this.publishLocks(room);
+      }
+
       case "knockReply":
         return this.onKnockReply(room, conn, m);
     }
+  }
+
+  private async readLocks(room: Room): Promise<Record<string, ZoneLock>> {
+    const kv = await this.kv();
+    const raw = await kv.hgetall(keys.locks(room.groupId));
+    const out: Record<string, ZoneLock> = {};
+    for (const [id, v] of Object.entries(raw))
+      if (room.map.zones.some((z) => z.id === id && isLockable(z))) out[id] = JSON.parse(v) as ZoneLock;
+    return out;
+  }
+
+  private async lockOf(room: Room, zoneId: string): Promise<ZoneLock | null> {
+    const kv = await this.kv();
+    const raw = await kv.hget(keys.locks(room.groupId), zoneId);
+    return raw ? (JSON.parse(raw) as ZoneLock) : null;
+  }
+
+  private async publishLocks(room: Room) {
+    await publishToRoom(room.groupId, { msg: { t: "locks", locks: await this.readLocks(room) } });
+  }
+
+  /** Kunci dibuka otomatis saat orang terakhir keluar, agar ruangan tidak terkunci tanpa penghuni. */
+  private async unlockIfEmpty(room: Room, zone: Zone) {
+    if (!isLockable(zone) || !(await this.lockOf(room, zone.id))) return;
+    // Kehadiran orang yang baru pindah sudah ditulis sebelum fungsi ini dipanggil.
+    const inside = (await this.readPresence(room)).some(
+      (o) => privateZoneAt(room.map, o.x, o.y)?.id === zone.id,
+    );
+    if (inside) return;
+    const kv = await this.kv();
+    await kv.hdel(keys.locks(room.groupId), zone.id);
+    await this.publishLocks(room);
   }
 
   /** Masuk ruang privat (rapat) otomatis menjadi "sedang rapat"; keluar mengembalikan "aktif". */
@@ -479,7 +532,9 @@ export class RealtimeHub {
     const allowed = target.allowedPeers.includes(p.id) || p.allowedPeers.includes(target.id);
     if (target.status === "busy" && !allowed) return reject("busy");
     const zone = privateZoneAt(room.map, target.x, target.y);
-    if (zone && p.allowedZone !== zone.id && !allowed) return reject("privateZone");
+    if (zone && p.allowedZone !== zone.id && !allowed && (await this.lockOf(room, zone.id)))
+      return reject("privateZone");
+    const fromZone = privateZoneAt(room.map, p.x, p.y);
 
     // Tile kosong terdekat di sekitar rekan, di area yang sama.
     const tx = Math.floor(target.x);
@@ -515,6 +570,7 @@ export class RealtimeHub {
     this.autoMeetingStatus(room, conn);
     send(conn.ws, { t: "teleported", x: spot.x, y: spot.y, toName: target.name });
     await this.broadcastUpdate(conn);
+    if (fromZone && fromZone.id !== zone?.id) await this.unlockIfEmpty(room, fromZone);
   }
 
   private async readMusic(room: Room): Promise<MusicState[]> {
@@ -616,8 +672,8 @@ export class RealtimeHub {
       if (!zone) return;
       zoneId = zone.id;
       to = others.filter((o) => privateZoneAt(room.map, o.x, o.y)?.id === zone.id).map((o) => o.id);
-      if (!to.length) {
-        // Kosong: langsung boleh masuk.
+      if (!to.length || !(await this.lockOf(room, zone.id))) {
+        // Tidak dikunci (atau kosong): langsung boleh masuk.
         conn.presence.allowedZone = zone.id;
         await this.broadcastUpdate(conn);
         return send(conn.ws, { t: "knockResult", knockId: "", accept: true, byName: "", zoneId });
@@ -688,9 +744,24 @@ export class RealtimeHub {
 
   private async onControl(room: Room, ctl: NonNullable<Envelope["control"]>) {
     if (ctl.kind === "map") {
+      const templateChanged = room.map.template !== ctl.map.template;
       room.map = ctl.map;
       room.walkable = buildWalkable(ctl.map);
       for (const c of room.conns.values()) send(c.ws, { t: "map", map: ctl.map });
+      if (!templateChanged) return;
+      // Tata ruang baru: pindahkan semua orang ke titik muncul baru, buka semua kunci.
+      const kv = await this.kv();
+      for (const id of Object.keys(await kv.hgetall(keys.locks(room.groupId))))
+        await kv.hdel(keys.locks(room.groupId), id);
+      const placed: Presence[] = [];
+      for (const c of room.conns.values()) {
+        const spot = this.freeSpawn(room, placed);
+        Object.assign(c.presence, { ...spot, moving: false, sitting: false, allowedZone: null });
+        placed.push(c.presence);
+        send(c.ws, { t: "teleported", x: spot.x, y: spot.y, toName: "" });
+        await this.broadcastUpdate(c);
+      }
+      for (const c of room.conns.values()) send(c.ws, { t: "locks", locks: {} });
       return;
     }
     if (ctl.kind === "groupDeleted") {

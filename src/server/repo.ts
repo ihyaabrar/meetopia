@@ -1,7 +1,14 @@
 /** Kueri database untuk grup, kanal, keanggotaan, peta, undangan, pesan, dan catatan. */
 import { one, sql } from "./db";
 import { newId, newToken, hashToken } from "./ids";
-import { OFFICE_TEMPLATE, TEMPLATE_REV, type MapData } from "@/shared/map";
+import type { MapData } from "@/shared/map";
+import {
+  OFFICE_TEMPLATE,
+  TEMPLATE_REVS,
+  buildTemplate,
+  templateOf,
+  type TemplateId,
+} from "@/shared/templates";
 import { sanitizeAvatar, type AvatarConfig } from "@/shared/avatar";
 import type { Role } from "@/shared/roles";
 import { defaultGroupColor, type GroupColor, type GroupSymbol } from "@/shared/groupIcon";
@@ -33,6 +40,7 @@ export async function createGroup(
   ownerId: string,
   name: string,
   icon?: { color?: GroupColor; symbol?: GroupSymbol },
+  template: TemplateId = "office",
 ): Promise<string> {
   const groupId = newId();
   await sql("INSERT INTO groups (id, name, owner_id, icon_color, icon_symbol) VALUES ($1, $2, $3, $4, $5)", [
@@ -48,7 +56,7 @@ export async function createGroup(
   await sql("INSERT INTO maps (id, group_id, version, data) VALUES ($1, $2, 1, $3)", [
     newId(),
     groupId,
-    JSON.stringify(OFFICE_TEMPLATE),
+    JSON.stringify(buildTemplate(template)),
   ]);
   return groupId;
 }
@@ -154,9 +162,10 @@ export async function getMap(groupId: string): Promise<MapData> {
   const r = await one<{ data: MapData }>("SELECT data FROM maps WHERE group_id = $1", [groupId]);
   if (!r) return OFFICE_TEMPLATE;
   // Peta dari template lama (belum ada editor peta) ikut diperbarui; pengaturan audio dipertahankan.
-  if ((r.data.templateRev ?? 1) < TEMPLATE_REV) {
+  const template = templateOf(r.data);
+  if ((r.data.templateRev ?? 1) < TEMPLATE_REVS[template]) {
     const upgraded: MapData = {
-      ...OFFICE_TEMPLATE,
+      ...buildTemplate(template),
       audio: r.data.audio ?? OFFICE_TEMPLATE.audio,
       version: r.data.version + 1,
     };
@@ -168,6 +177,18 @@ export async function getMap(groupId: string): Promise<MapData> {
     return upgraded;
   }
   return r.data;
+}
+
+/** Ganti jenis ruangan (tata ruang baru); pengaturan audio dipertahankan. */
+export async function replaceMapTemplate(groupId: string, template: TemplateId): Promise<MapData> {
+  const map = await getMap(groupId);
+  const next: MapData = { ...buildTemplate(template), audio: map.audio, version: map.version + 1 };
+  await sql("UPDATE maps SET data = $2, version = $3, updated_at = now() WHERE group_id = $1", [
+    groupId,
+    JSON.stringify(next),
+    next.version,
+  ]);
+  return next;
 }
 
 export async function updateMapAudio(groupId: string, audio: MapData["audio"]): Promise<MapData> {

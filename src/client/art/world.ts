@@ -91,6 +91,67 @@ function drawFloorTile(ctx: CanvasRenderingContext2D, kind: FloorKind, tx: numbe
     case "lounge":
       drawPlanks(ctx, x, y, [28, 46, 72], "rgba(110,70,40,0.25)", tx, ty);
       break;
+    case "home":
+      drawPlanks(ctx, x, y, [34, 50, 70], "rgba(120,80,45,0.24)", tx, ty);
+      break;
+    case "kitchen": {
+      // ubin catur kecil
+      for (let i = 0; i < 2; i++)
+        for (let j = 0; j < 2; j++) {
+          ctx.fillStyle = (tx * 2 + i + ty * 2 + j) % 2 === 0 ? "#f1ede4" : "#c9d3d6";
+          ctx.fillRect(x + i * 16, y + j * 16, 16, 16);
+        }
+      ctx.fillStyle = "rgba(255,255,255,0.25)";
+      ctx.fillRect(x + 2, y + 2, 5, 1);
+      break;
+    }
+    case "bedroom": {
+      ctx.fillStyle = "#cfd5dc";
+      ctx.fillRect(x, y, T, T);
+      for (let i = 0; i < 12; i++) {
+        ctx.fillStyle = hash(tx, ty, i) > 0.5 ? "rgba(255,255,255,0.16)" : "rgba(60,70,90,0.07)";
+        ctx.fillRect(x + hash(i, tx, ty) * T, y + hash(ty, i, tx) * T, 2, 2);
+      }
+      break;
+    }
+    case "garden": {
+      const v = hash(tx, ty) * 0.06;
+      ctx.fillStyle = `hsl(98 34% ${58 - v * 100}%)`;
+      ctx.fillRect(x, y, T, T);
+      ctx.strokeStyle = "rgba(60,110,50,0.35)";
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 6; i++) {
+        const gx = x + hash(tx, ty, i) * T;
+        const gy = y + hash(i, tx, ty) * T;
+        ctx.beginPath();
+        ctx.moveTo(gx, gy + 3);
+        ctx.lineTo(gx + 1, gy);
+        ctx.stroke();
+      }
+      if (hash(ty, tx, 9) > 0.93) {
+        ctx.fillStyle = hash(tx, 3) > 0.5 ? "#f2c46d" : "#f3f0e6";
+        ctx.beginPath();
+        ctx.arc(x + 16, y + 16, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+    case "gaming": {
+      ctx.fillStyle = "#3a3646";
+      ctx.fillRect(x, y, T, T);
+      ctx.fillStyle = "rgba(255,255,255,0.05)";
+      ctx.fillRect(x, y, T, 1);
+      ctx.fillRect(x, y, 1, T);
+      for (let i = 0; i < 6; i++) {
+        ctx.fillStyle = hash(tx, ty, i) > 0.5 ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)";
+        ctx.fillRect(x + hash(i, tx, ty) * T, y + hash(ty, i, tx) * T, 2, 2);
+      }
+      if (hash(tx, ty, 7) > 0.96) {
+        ctx.fillStyle = hash(ty, tx) > 0.5 ? "rgba(124,196,138,0.5)" : "rgba(169,139,224,0.5)";
+        ctx.fillRect(x + 8, y + 8, 3, 3);
+      }
+      break;
+    }
     case "meeting": {
       ctx.fillStyle = "#d9d6d0";
       ctx.fillRect(x, y, T, T);
@@ -246,11 +307,12 @@ function drawZoneDecor(ctx: CanvasRenderingContext2D, map: MapData, zoneLabel: (
     const tw = ctx.measureText(label).width;
     const px = z.x * T + 12;
     const py = (z.y + z.h) * T - 18;
-    ctx.fillStyle = "rgba(42,38,34,0.08)";
+    const dark = floorKindAt(map, z.x, z.y + z.h - 1) === "gaming";
+    ctx.fillStyle = dark ? "rgba(255,255,255,0.08)" : "rgba(42,38,34,0.08)";
     ctx.beginPath();
     ctx.roundRect(px - 6, py - 10, tw + 16, 20, 10);
     ctx.fill();
-    ctx.fillStyle = "rgba(42,38,34,0.6)";
+    ctx.fillStyle = dark ? "rgba(237,232,225,0.7)" : "rgba(42,38,34,0.6)";
     ctx.fillText(label, px + 2, py + 1);
     ctx.restore();
   }
@@ -302,6 +364,10 @@ export function renderWorld(map: MapData, zoneLabel: (key: string) => string): W
     else drawObject(ctx, o);
     if (o.kind === "lamp") lights.push({ x: (o.x + 0.5) * T, y: o.y * T - 6, r: 110, color: "255,214,140" });
     if (o.kind === "tv") lights.push({ x: (o.x + o.w / 2) * T, y: o.y * T + 4, r: 70, color: "150,210,255" });
+    if (o.kind === "arcade")
+      lights.push({ x: (o.x + 0.5) * T, y: o.y * T - 12, r: 55, color: "150,140,255" });
+    if (o.kind === "gamingDesk")
+      lights.push({ x: (o.x + o.w / 2) * T, y: o.y * T, r: 60, color: "140,170,255" });
     if (o.kind === "vending")
       lights.push({ x: (o.x + o.w / 2) * T, y: o.y * T, r: 60, color: "255,170,150" });
   }

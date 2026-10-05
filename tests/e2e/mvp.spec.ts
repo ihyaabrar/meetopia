@@ -181,7 +181,7 @@ test("MVP: grup, undangan, sinkron posisi, chat, catatan, mic, sambung ulang", a
   expect(Math.hypot(restored.x - pos.x, restored.y - pos.y)).toBeLessThan(0.01);
 });
 
-test("Ruang privat: masuk perlu ketuk bila sedang dipakai (FR-23, FR-31)", async ({ browser }) => {
+test("Ruang privat: dikunci dari dalam, orang luar harus ketuk (FR-23, FR-31)", async ({ browser }) => {
   const a = await (await browser.newContext()).newPage();
   const b = await pageB(browser);
   const stamp = Date.now();
@@ -200,6 +200,9 @@ test("Ruang privat: masuk perlu ketuk bila sedang dipakai (FR-23, FR-31)", async
   // A masuk ruang rapat lewat menu "Pergi ke…" (navigasi keyboard)
   await a.getByLabel("Pergi ke…").selectOption("meeting");
   await expect(a.getByText(/audio terisolasi/)).toBeVisible({ timeout: 20_000 });
+  // A mengunci ruang rapat dari dalam
+  await a.locator(".hud-tl").getByRole("button", { name: "Kunci" }).click();
+  await expect(a.getByText("dikunci oleh Ayu")).toBeVisible();
 
   await register(b, `b${stamp}@contoh.id`, "Bima");
   await b.waitForURL(/\/app/);
@@ -216,7 +219,7 @@ test("Ruang privat: masuk perlu ketuk bila sedang dipakai (FR-23, FR-31)", async
   ).toBeGreaterThan(11);
 
   await a.getByRole("button", { name: "Terima" }).click();
-  await expect(b.getByText(/audio terisolasi/)).toBeVisible({ timeout: 20_000 });
+  await expect(b.locator(".hud-tl")).toContainText("dikunci oleh Ayu", { timeout: 20_000 });
   await a.waitForFunction(() => {
     const d = (window as unknown as { __meetopia: Debug }).__meetopia;
     return [...d.room.snapshot.peers.values()].filter((p) => p.y < 11).length === 2;
@@ -279,7 +282,11 @@ test("Speaker: musik makin pelan saat menjauh, hilang di luar jangkauan", async 
 
   // A mendekati speaker di lounge dan memutar stasiun bawaan
   await walk(a, 38.5, 23.5);
+  // Popup aksi tidak muncul sendiri: objek harus diketuk (atau tekan E di peta).
+  await expect(a.locator(".hint-pop")).toHaveCount(0);
+  await a.keyboard.press("e");
   await a.locator(".hint-pop").getByRole("button", { name: "Atur musik" }).click();
+  await expect(a.locator(".hint-pop")).toHaveCount(0);
   await a.getByRole("button", { name: /Lo-fi santai/ }).click();
   await expect(a.getByText("Diputar oleh Ayu")).toBeVisible();
   await a.keyboard.press("Escape");
@@ -307,6 +314,7 @@ test("Speaker: musik makin pelan saat menjauh, hilang di luar jangkauan", async 
   expect(far).toBeLessThan(0.5);
 
   // A menghentikan musik: hilang untuk semua orang
+  await a.keyboard.press("e");
   await a.locator(".hint-pop").getByRole("button", { name: "Atur musik" }).click();
   await a.getByRole("button", { name: "Hentikan" }).click();
   await b.waitForFunction(
@@ -315,4 +323,51 @@ test("Speaker: musik makin pelan saat menjauh, hilang di luar jangkauan", async 
       0,
   );
   await expect(b.locator(".hud-chip.music")).toHaveCount(0);
+});
+
+test("Jenis ruangan: buat Rumah, lalu ganti ke Gaming house", async ({ browser }) => {
+  const a = await (await browser.newContext()).newPage();
+  a.on("dialog", (d) => void d.accept());
+  const stamp = Date.now();
+  await register(a, `r${stamp}@contoh.id`, "Rani");
+  await a.waitForURL(/\/app/);
+  await a.getByRole("button", { name: "Mengerti!" }).click();
+  await a.getByRole("button", { name: "Buat grup" }).first().click();
+  await a.getByLabel("Nama grup").fill("Rumah Rani");
+  await a.getByRole("radio", { name: /Rumah/ }).click();
+  await a.getByRole("button", { name: "Buat", exact: true }).click();
+  await enterRoom(a);
+  const template = () =>
+    a.evaluate(
+      () =>
+        (window as unknown as { __meetopia: { room: { snapshot: { map: { template?: string } } } } })
+          .__meetopia.room.snapshot.map.template,
+    );
+  expect(await template()).toBe("home");
+
+  // Bergerak dengan WASD
+  const selfX = () =>
+    a.evaluate(() => (window as unknown as { __meetopia: Debug }).__meetopia.room.self!.x);
+  const x0 = await selfX();
+  await a.keyboard.down("d");
+  await a.waitForTimeout(500);
+  await a.keyboard.up("d");
+  expect(await selfX()).toBeGreaterThan(x0 + 1);
+  await expect(a.locator(".hud-tl")).toContainText("Ruang keluarga");
+
+  // Kamar bisa dikunci dari dalam
+  await a.getByLabel("Pergi ke…").selectOption("bedroom1");
+  await expect(a.locator(".hud-tl")).toContainText("Kamar 1", { timeout: 20_000 });
+  await a.locator(".hud-tl").getByRole("button", { name: "Kunci" }).click();
+  await expect(a.getByText("dikunci oleh Rani")).toBeVisible();
+
+  // Ganti jenis ruangan: semua orang dipindah ke titik muncul baru, kunci dibuka
+  await a.getByRole("button", { name: "Pengaturan grup" }).first().click();
+  await a.locator(".settings-nav").getByRole("button", { name: "Ruangan" }).click();
+  await a.getByRole("radio", { name: /Gaming house/ }).click();
+  await a.getByRole("button", { name: "Ganti jenis ruangan" }).click();
+  await a.keyboard.press("Escape");
+  await expect.poll(template, { timeout: 15_000 }).toBe("gaming");
+  await expect(a.locator(".hud-tl")).toContainText("Lobi");
+  await expect(a.getByText("dikunci oleh Rani")).toHaveCount(0);
 });

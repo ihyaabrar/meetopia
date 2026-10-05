@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ok, parseBody, rateLimit, requireUser, route } from "@/server/api";
 import { createGroup, listGroups } from "@/server/repo";
 import { GROUP_COLOR_KEYS, GROUP_SYMBOLS } from "@/shared/groupIcon";
+import { TEMPLATE_IDS } from "@/shared/templates";
 
 export const GET = route(async () => {
   const user = await requireUser();
@@ -17,8 +18,14 @@ export const POST = route(async (req) => {
       name: z.string().trim().min(1).max(60),
       iconColor: z.enum(GROUP_COLOR_KEYS).optional(),
       iconSymbol: z.enum(GROUP_SYMBOLS).optional(),
+      template: z.enum(TEMPLATE_IDS).optional(),
     }),
   );
-  const id = await createGroup(user.id, body.name, { color: body.iconColor, symbol: body.iconSymbol });
+  const id = await createGroup(
+    user.id,
+    body.name,
+    { color: body.iconColor, symbol: body.iconSymbol },
+    body.template,
+  );
   return ok({ id });
 });

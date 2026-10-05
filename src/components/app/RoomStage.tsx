@@ -14,6 +14,7 @@ import {
   buildWalkable,
   distanceToObject,
   privateZoneAt,
+  isLockable,
   zoneAt,
   type MapObject,
   type ObjectAction,
@@ -113,6 +114,10 @@ export function RoomStage({
     pointer: null as null | { x: number; y: number; id: number },
     hover: null as null | Point,
     camera: { x: 0, y: 0, zoom: 1 },
+    /** Tombol arah yang sedang ditekan (WASD / panah). */
+    keys: new Set<string>(),
+    keyMoving: false,
+    lastLockedHint: 0,
   });
   const [hint, setHint] = useState<{ obj: MapObject; pinned: boolean } | null>(null);
   const hintObjRef = useRef<MapObject | null>(null);
@@ -126,15 +131,7 @@ export function RoomStage({
   const remote = useSyncExternalStore(media.subscribe, media.getSnapshot, () => [] as RemoteMedia[]);
 
   // ------------------------------------------------------------ gerak
-  const zoneOccupied = useCallback(
-    (zone: Zone) => {
-      const s = snapRef.current;
-      for (const p of s.peers.values())
-        if (p.id !== s.selfId && privateZoneAt(map, p.x, p.y)?.id === zone.id) return true;
-      return false;
-    },
-    [map],
-  );
+  const zoneLocked = useCallback((zone: Zone) => !!snapRef.current.locks[zone.id], []);
 
   const walkTo = useCallback(
     (target: Point, onArrive?: () => void) => {
@@ -144,10 +141,10 @@ export function RoomStage({
       if (!goal) return;
       let path = findPath(grid, { x: me.x, y: me.y }, goal) ?? [];
       state.current.pendingZone = null;
-      // Ruang privat yang terisi: berhenti di depan pintu lalu tawarkan "ketuk" (FR-31).
+      // Ruangan yang dikunci: berhenti di depan pintu lalu tawarkan "ketuk" (FR-31).
       for (let i = 0; i < path.length; i++) {
         const z = privateZoneAt(map, path[i].x + 0.5, path[i].y + 0.5);
-        if (z && room.self?.allowedZone !== z.id && zoneOccupied(z)) {
+        if (z && room.self?.allowedZone !== z.id && zoneLocked(z)) {
           path = path.slice(0, i);
           state.current.pendingZone = { zone: z, target: goal };
           onArrive = undefined;
@@ -160,7 +157,7 @@ export function RoomStage({
       if (me.sitting) room.send({ t: "sit", sitting: false });
       if (!path.length) arriveRef.current();
     },
-    [grid, map, room, zoneOccupied],
+    [grid, map, room, zoneLocked],
   );
 
   const arrive = useCallback(() => {
@@ -173,7 +170,7 @@ export function RoomStage({
       const { zone, target } = st.pendingZone;
       st.pendingZone = null;
       toast({
-        text: t("knock.zoneBusy", { zone: t(zone.label) }),
+        text: t("knock.zoneLocked", { zone: t(zone.label) }),
         action: {
           label: t("knock.knock"),
           run: () => {
@@ -237,6 +234,58 @@ export function RoomStage({
       const st = state.current;
       const s = snapRef.current;
       const me = s.selfId ? s.peers.get(s.selfId) : undefined;
+
+      // Gerak dengan keyboard (WASD / panah): langsung, meluncur di sepanjang dinding.
+      if (me && st.keys.size) {
+        let vx = 0;
+        let vy = 0;
+        if (st.keys.has("left")) vx -= 1;
+        if (st.keys.has("right")) vx += 1;
+        if (st.keys.has("up")) vy -= 1;
+        if (st.keys.has("down")) vy += 1;
+        if (vx || vy) {
+          st.path = [];
+          st.target = null;
+          st.onArrive = null;
+          const len = Math.hypot(vx, vy);
+          const step = SPEED * dt;
+          const free = (x: number, y: number) => {
+            for (const [ox, oy] of [
+              [-0.25, -0.15],
+              [0.25, -0.15],
+              [-0.25, 0.3],
+              [0.25, 0.3],
+            ])
+              if (!grid[Math.floor(y + oy)]?.[Math.floor(x + ox)]) return false;
+            // Ruangan terkunci: berhenti di pintu dan tawarkan ketuk.
+            const z = privateZoneAt(map, x, y);
+            if (z && s.locks[z.id] && room.self?.allowedZone !== z.id) {
+              if (nowMs - st.lastLockedHint > 4000) {
+                st.lastLockedHint = nowMs;
+                st.pendingZone = { zone: z, target: { x: Math.floor(x), y: Math.floor(y) } };
+                arriveRef.current();
+              }
+              return false;
+            }
+            return true;
+          };
+          let nx = me.x;
+          let ny = me.y;
+          if (free(nx + (vx / len) * step, ny)) nx += (vx / len) * step;
+          if (free(nx, ny + (vy / len) * step)) ny += (vy / len) * step;
+          const dir = dirFrom(vx, vy, me.dir);
+          room.updateSelf({ x: nx, y: ny, dir, moving: true, sitting: false });
+          st.keyMoving = true;
+          if (nowMs - st.lastSend > SEND_INTERVAL) {
+            st.lastSend = nowMs;
+            room.send({ t: "move", x: nx, y: ny, dir, moving: true });
+          }
+        }
+      } else if (me && st.keyMoving) {
+        st.keyMoving = false;
+        room.updateSelf({ moving: false });
+        room.send({ t: "move", x: me.x, y: me.y, dir: me.dir, moving: false });
+      }
 
       // Gerak diri sendiri menyusuri jalur
       if (me && st.path.length) {
@@ -369,6 +418,7 @@ export function RoomStage({
           return [{ obj, level: me ? speakerVolume(map, obj, me.x, me.y).volume : 0 }];
         }),
         reducedMotion: reducedMotion(),
+        lockedZones: s.locks,
       });
 
       // Posisi popup petunjuk objek
@@ -379,28 +429,14 @@ export function RoomStage({
         hel.style.top = `${(ho.y * TILE - 18 - st.camera.y) * z}px`;
       }
 
-      // Tiap 200 ms: petunjuk otomatis (FR-74) dan jumlah orang di dekat
+      // Tiap 200 ms: jumlah orang di dekat, dan tutup popup objek bila sudah ditinggal jauh.
+      // Popup objek hanya muncul setelah objeknya diketuk (tidak otomatis saat lewat).
       if (me && nowMs - slowTick > 200) {
         slowTick = nowMs;
         setNearby((n) => (n === near ? n : near));
-        let best: MapObject | null = null;
-        let bestD = INTERACT_RANGE;
-        for (const o of map.objects) {
-          if (!o.label) continue;
-          const dd = distanceToObject(o, me.x, me.y);
-          if (dd < bestD) {
-            bestD = dd;
-            best = o;
-          }
-        }
         setHint((cur) => {
-          if (cur?.pinned) {
-            if (me.moving || st.path.length) return cur;
-            const stillNear = distanceToObject(cur.obj, me.x, me.y) < INTERACT_RANGE * 2.5;
-            return stillNear ? cur : best ? { obj: best, pinned: false } : null;
-          }
-          if (best?.id === cur?.obj.id) return cur;
-          return best ? { obj: best, pinned: false } : null;
+          if (!cur || me.moving || st.path.length) return cur;
+          return distanceToObject(cur.obj, me.x, me.y) < INTERACT_RANGE * 2.5 ? cur : null;
         });
       }
 
@@ -408,7 +444,7 @@ export function RoomStage({
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [scene, map, room, media]);
+  }, [scene, map, room, media, grid]);
 
   // ------------------------------------------------------------ input
   const toWorld = (clientX: number, clientY: number) => {
@@ -474,11 +510,85 @@ export function RoomStage({
     state.current.hover = !interactive && grid[ty]?.[tx] ? { x: tx, y: ty } : null;
     canvasRef.current!.style.cursor = interactive ? "pointer" : grid[ty]?.[tx] ? "pointer" : "default";
   };
+  /** Objek interaktif terdekat dalam jangkauan (untuk tombol E / Enter). */
+  const nearestObject = () => {
+    const me = room.self;
+    if (!me) return null;
+    let best: MapObject | null = null;
+    let bestD = INTERACT_RANGE;
+    for (const o of map.objects) {
+      if (!o.label) continue;
+      const d = distanceToObject(o, me.x, me.y);
+      if (d < bestD) {
+        bestD = d;
+        best = o;
+      }
+    }
+    return best;
+  };
+  const nearestObjectRef = useRef(nearestObject);
+  useEffect(() => {
+    nearestObjectRef.current = nearestObject;
+  });
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== "Enter") return;
+    const obj = nearestObject();
+    if (obj) {
+      e.preventDefault();
+      setHint({ obj, pinned: true });
+    }
+  };
+
+  // Keyboard: WASD/panah untuk berjalan, E untuk membuka aksi objek terdekat (sama dengan mengetuknya).
+  useEffect(() => {
+    const KEYS: Record<string, string> = {
+      w: "up",
+      arrowup: "up",
+      s: "down",
+      arrowdown: "down",
+      a: "left",
+      arrowleft: "left",
+      d: "right",
+      arrowright: "right",
+    };
+    const typing = (el: EventTarget | null) =>
+      el instanceof HTMLElement &&
+      (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
+    const blocked = () => !!document.querySelector(".modal-backdrop, .settings, [role='menu']");
+    const down = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || typing(e.target) || blocked()) return;
+      const k = e.key.toLowerCase();
+      if (KEYS[k]) {
+        e.preventDefault();
+        state.current.keys.add(KEYS[k]);
+        setHint(null);
+      } else if (k === "e" && !e.repeat) {
+        const obj = nearestObjectRef.current();
+        if (obj) setHint({ obj, pinned: true });
+      }
+    };
+    const up = (e: KeyboardEvent) => {
+      const k = KEYS[e.key.toLowerCase()];
+      if (k) state.current.keys.delete(k);
+    };
+    const clear = () => state.current.keys.clear();
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", clear);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", clear);
+    };
+  }, []);
+
   const zoomBy = (f: number) => {
     state.current.zoom = Math.max(0.5, Math.min(2.6, (state.current.zoom || 1) * f));
   };
 
   const runAction = (action: ObjectAction, obj: MapObject) => {
+    // Setelah memilih aksi, popup ditutup; ketuk objeknya lagi untuk aksi lain.
+    setHint(null);
     if (action === "sit") {
       walkTo({ x: obj.x + Math.floor(obj.w / 2), y: obj.y }, () => {
         room.send({ t: "sit", sitting: true });
@@ -545,15 +655,33 @@ export function RoomStage({
         onPointerUp={onPointerUp}
         onPointerMove={onPointerMove}
         onPointerLeave={() => (state.current.hover = null)}
+        onKeyDown={onKeyDown}
         onWheel={(e) => zoomBy(e.deltaY < 0 ? 1.1 : 0.9)}
       />
 
       <div className="hud-tl">
         {zoneHere && (
           <span className={`hud-chip ${zoneHere.private ? "private" : ""}`}>
-            <Icon name={zoneHere.private ? "lock" : "pin"} size={14} />
+            <Icon name={snap.locks[zoneHere.id] ? "lock" : "pin"} size={14} />
             <b>{t(zoneHere.label)}</b>
-            {zoneHere.private && <span className="sub">{t("room.isolated")}</span>}
+            {zoneHere.private && (
+              <span className="sub">
+                {snap.locks[zoneHere.id]
+                  ? t("room.lockedBy", { name: snap.locks[zoneHere.id].byName })
+                  : t("room.isolated")}
+              </span>
+            )}
+            {isLockable(zoneHere) && (
+              <button
+                className="btn small secondary"
+                aria-pressed={!!snap.locks[zoneHere.id]}
+                onClick={() =>
+                  room.send({ t: "lockZone", zoneId: zoneHere.id, locked: !snap.locks[zoneHere.id] })
+                }
+              >
+                {snap.locks[zoneHere.id] ? t("room.unlock") : t("room.lock")}
+              </button>
+            )}
           </span>
         )}
         <span className="hud-chip subtle" title={t("room.nearbyHint")}>

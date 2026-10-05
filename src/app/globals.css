@@ -2206,6 +2206,71 @@ input.switch:checked::before {
   background: var(--surface-hover);
 }
 
+/* ---------- Pilihan jenis ruangan ---------- */
+.tpl-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.tpl {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.tpl:hover {
+  border-color: var(--text-muted);
+}
+.tpl[aria-checked="true"] {
+  border: 2px solid var(--accent-fg);
+}
+.tpl-thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  background: var(--surface-hover);
+}
+.tpl-body {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px 12px;
+}
+.tpl-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tpl-body .hint {
+  margin: 0;
+}
+.tpl ul {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.tpl li {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+.tpl li svg {
+  flex: 0 0 auto;
+  margin-top: 3px;
+  color: var(--accent-fg);
+}
+
 /* ---------- Layar sentuh: target minimal 44px (R-03) ---------- */
 @media (pointer: coarse) {
   .icon-btn,

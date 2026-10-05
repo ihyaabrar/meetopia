@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { OFFICE_TEMPLATE, buildWalkable } from "@/shared/map";
+import { buildWalkable } from "@/shared/map";
+import { OFFICE_TEMPLATE } from "@/shared/templates";
 import { findPath } from "@/shared/pathfinding";
 import { clientMessageSchema } from "@/shared/protocol";
 import { SPEAKER_AUDIO, WALL_DAMPING, isValidAudioUrl, speakerCenter, speakerVolume } from "@/shared/music";

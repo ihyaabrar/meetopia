@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { OFFICE_TEMPLATE, buildWalkable, privateZoneAt, tileAt } from "@/shared/map";
+import { buildWalkable, privateZoneAt, tileAt } from "@/shared/map";
+import { OFFICE_TEMPLATE } from "@/shared/templates";
 import { findPath, nearestFree } from "@/shared/pathfinding";
 
 const map = OFFICE_TEMPLATE;

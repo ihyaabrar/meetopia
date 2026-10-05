@@ -123,4 +123,5 @@ export const keys = {
   roomChannel: (groupId: string) => `room:${groupId}`,
   knock: (knockId: string) => `knock:${knockId}`,
   music: (groupId: string) => `music:${groupId}`,
+  locks: (groupId: string) => `locks:${groupId}`,
 };

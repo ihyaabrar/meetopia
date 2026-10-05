@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { clientMessageSchema } from "@/shared/protocol";
-import { OFFICE_TEMPLATE, TEMPLATE_REV } from "@/shared/map";
+import { OFFICE_TEMPLATE, TEMPLATE_REVS } from "@/shared/templates";
 
 describe("protokol emote", () => {
   it("menerima emote yang tersedia dan menolak yang lain", () => {
@@ -11,7 +11,7 @@ describe("protokol emote", () => {
 
 describe("template peta", () => {
   it("menandai revisi template agar grup lama ikut diperbarui", () => {
-    expect(OFFICE_TEMPLATE.templateRev).toBe(TEMPLATE_REV);
+    expect(OFFICE_TEMPLATE.templateRev).toBe(TEMPLATE_REVS.office);
   });
   it("id objek unik", () => {
     const ids = OFFICE_TEMPLATE.objects.map((o) => o.id);

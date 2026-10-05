@@ -2,7 +2,14 @@
  * Koneksi WebSocket ke ruangan grup, dengan sambung ulang otomatis (aturan 2 PRD).
  * Menyimpan status ruangan (peserta, peta, catatan bersama) dan memancarkan event ke UI.
  */
-import type { ChatMessage, ClientMessage, Presence, ServerMessage, SharedNote } from "@/shared/protocol";
+import type {
+  ChatMessage,
+  ClientMessage,
+  Presence,
+  ServerMessage,
+  SharedNote,
+  ZoneLock,
+} from "@/shared/protocol";
 import type { MapData } from "@/shared/map";
 import type { MusicState } from "@/shared/music";
 
@@ -16,6 +23,8 @@ export interface RoomSnapshot {
   sharedNote: SharedNote | null;
   /** Musik yang sedang diputar per speaker (id objek). */
   music: Record<string, MusicState>;
+  /** Ruangan yang sedang dikunci (id zona). */
+  locks: Record<string, ZoneLock>;
   /** Selisih jam server dan jam lokal (ms), untuk menyinkronkan posisi lagu. */
   clockOffset: number;
   /** Kode galat konfigurasi server (mis. env Vercel belum diisi); bila ada, tidak dicoba ulang. */
@@ -71,6 +80,7 @@ export class RoomClient {
     map: null,
     sharedNote: null,
     music: {},
+    locks: {},
     clockOffset: 0,
     version: 0,
   };
@@ -228,6 +238,9 @@ export class RoomClient {
           peers,
           map: m.map,
           sharedNote: m.sharedNote,
+          music: Object.fromEntries(m.music.map((x) => [x.objectId, x])),
+          locks: m.locks,
+          clockOffset: m.serverNow - Date.now(),
           configError: undefined,
         });
         if (this.disconnectedAt) {
@@ -299,6 +312,8 @@ export class RoomClient {
       case "teleported":
         this.updateSelf({ x: m.x, y: m.y, moving: false, sitting: false });
         return this.emit("teleported", m);
+      case "locks":
+        return this.commit({ locks: m.locks });
       case "teleportRejected":
         return this.emit("teleportRejected", m);
       case "music": {
