@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/server/db";
-import { onVercel, redisUrl } from "@/server/env";
+import { onVercel, redisEnvNames, redisUrl } from "@/server/env";
 
 /**
  * Cek konfigurasi server tanpa membuka rahasia apa pun. Buka /api/health setelah deploy
@@ -30,6 +30,7 @@ export async function GET() {
     envNames: Object.keys(process.env)
       .filter((k) => /(DATABASE|POSTGRES|NEON|PGHOST|REDIS|KV_|UPSTASH|AUTH_SECRET|APP_URL)/.test(k))
       .sort(),
+    redisEnvNames: redisEnvNames(),
   };
   const ok =
     database === "ok" &&

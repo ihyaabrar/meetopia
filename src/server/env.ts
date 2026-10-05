@@ -35,4 +35,16 @@ export const isDev = process.env.NODE_ENV !== "production";
  */
 export const databaseUrl = () => process.env.DATABASE_URL || process.env.POSTGRES_URL || "";
 export const redisUrl = () =>
-  process.env.REDIS_URL || process.env.KV_URL || process.env.UPSTASH_REDIS_URL || "";
+  process.env.REDIS_URL || process.env.KV_URL || process.env.UPSTASH_REDIS_URL || anyRedisUrl() || "";
+
+/** Integrasi Vercel bisa memberi awalan nama sendiri (mis. STORAGE_URL): cari nilai berformat redis:// apa pun. */
+function anyRedisUrl(): string {
+  for (const v of Object.values(process.env)) if (v && /^rediss?:\/\//.test(v)) return v;
+  return "";
+}
+
+/** Nama env yang nilainya URL Redis (nama saja, untuk diagnostik). */
+export const redisEnvNames = () =>
+  Object.entries(process.env)
+    .filter(([, v]) => v && /^rediss?:\/\//.test(v))
+    .map(([k]) => k);
