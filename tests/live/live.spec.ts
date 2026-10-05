@@ -54,8 +54,8 @@ test("live: daftar, grup, undangan, saling melihat, chat, catatan, lalu bersih-b
     log(`A buat grup & masuk ruangan (${groupId})`);
 
     await a.getByRole("button", { name: "Undang anggota" }).first().click();
-    await a.getByRole("button", { name: "Buat tautan undangan" }).click();
-    const link = (await a.getByTestId("invite-link").textContent())!.trim();
+    await expect(a.getByTestId("invite-link")).toHaveValue(/\/invite\/[A-Z0-9]{6}$/);
+    const link = await a.getByTestId("invite-link").inputValue();
     await a.keyboard.press("Escape");
     expect(link).toContain("meetopia");
     log(`tautan undangan: ${link.replace(/invite\/.*/, "invite/…")}`);
@@ -68,8 +68,8 @@ test("live: daftar, grup, undangan, saling melihat, chat, catatan, lalu bersih-b
     log("B daftar, gabung lewat undangan, masuk ruangan");
 
     const t0 = Date.now();
-    await expect(a.getByText("Di ruangan: 2")).toBeVisible({ timeout: 30_000 });
-    await expect(b.getByText("Di ruangan: 2")).toBeVisible({ timeout: 30_000 });
+    await expect(a.getByText("Di ruangan (2)")).toBeVisible({ timeout: 30_000 });
+    await expect(b.getByText("Di ruangan (2)")).toBeVisible({ timeout: 30_000 });
     log(`A & B saling melihat di ruangan (${Date.now() - t0} ms)`);
 
     // Gerak: B pindah area, A melihat lokasi B berubah (WebSocket + Redis)

@@ -1,6 +1,8 @@
 "use client";
 
-import { useT } from "@/i18n/client";
+import { useState } from "react";
+import { useI18n } from "@/i18n/client";
+import { timeAgo } from "@/i18n/relative";
 import { AvatarCanvas } from "@/components/AvatarCanvas";
 import { Icon } from "@/components/Icon";
 import type { Presence } from "@/shared/protocol";
@@ -18,9 +20,14 @@ interface Props {
 
 /** Panel anggota di kanan: siapa yang ada di ruangan beserta statusnya (FR-30). */
 export function MembersPanel({ members, presence, selfId, onSelect, onClose, locate }: Props) {
-  const t = useT();
-  const online = members.filter((m) => presence.has(m.id));
-  const offline = members.filter((m) => !presence.has(m.id));
+  const { t, locale } = useI18n();
+  const [q, setQ] = useState("");
+  const match = (m: MemberInfo) =>
+    (presence.get(m.id)?.name ?? m.name).toLowerCase().includes(q.trim().toLowerCase());
+  const online = members.filter((m) => presence.has(m.id) && match(m));
+  const offline = members
+    .filter((m) => !presence.has(m.id) && match(m))
+    .sort((a, b) => Date.parse(b.lastSeenAt ?? "0") - Date.parse(a.lastSeenAt ?? "0"));
   const row = (m: MemberInfo) => {
     const p = presence.get(m.id);
     const status = p?.status ?? "offline";
@@ -41,8 +48,12 @@ export function MembersPanel({ members, presence, selfId, onSelect, onClose, loc
             )}
           </b>
           <span>
-            {p?.statusText ??
-              (p && locate?.(p) ? `${t(`status.${status}`)} · ${locate(p)}` : t(`status.${status}`))}
+            {p
+              ? (p.statusText ??
+                (locate?.(p) ? `${t(`status.${status}`)} · ${locate(p)}` : t(`status.${status}`)))
+              : m.lastSeenAt
+                ? t("members.lastSeen", { time: timeAgo(m.lastSeenAt, locale) })
+                : t("members.neverSeen")}
           </span>
         </span>
         {/* Seperti Discord: ikon hanya saat mic mati; mic menyala tidak perlu penanda tambahan. */}
@@ -64,6 +75,17 @@ export function MembersPanel({ members, presence, selfId, onSelect, onClose, loc
           </button>
         )}
       </div>
+      <label className="members-search">
+        <Icon name="search" size={15} />
+        <input
+          className="input"
+          type="search"
+          placeholder={t("members.search")}
+          aria-label={t("members.search")}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+      </label>
       <div className="section-title">{t("members.online", { n: online.length })}</div>
       {online.map(row)}
       <div className="section-title">{t("members.offline", { n: offline.length })}</div>

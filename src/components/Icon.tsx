@@ -60,6 +60,10 @@ const PATHS: Record<string, string> = {
   flag: "M4 22V4M4 4h13l-2 4 2 4H4",
   bolt: "M13 2 3 14h9l-1 8 10-12h-9z",
   more: "M5 12h.01M12 12h.01M19 12h.01",
+  search: "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3",
+  home: "M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z",
+  copy: "M9 9h11v11H9zM5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1",
+  refresh: "M21 12a9 9 0 1 1-2.6-6.4M21 4v5h-5",
   teleport: "M12 2v6M12 22v-6M2 12h6M22 12h-6M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
 };
 

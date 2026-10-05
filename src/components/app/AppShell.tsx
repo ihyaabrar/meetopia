@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { RoomClient, type RoomSnapshot } from "@/client/roomClient";
 import { MediaManager } from "@/client/media";
@@ -28,6 +29,16 @@ import { GroupSettings, type GroupSection } from "./GroupSettings";
 import { SpeakerPanel } from "./SpeakerPanel";
 import { ProfileCard } from "./ProfileCard";
 import { StatusEditor } from "./StatusEditor";
+import { InviteModal } from "./InviteModal";
+import { Popover } from "@/components/Popover";
+import { timeAgo } from "@/i18n/relative";
+import {
+  clearNotifications,
+  initNotifications,
+  markAllRead,
+  pushNotification,
+  useNotifications,
+} from "@/client/notifications";
 import { setPrefs, usePrefs } from "@/client/prefs";
 import { GroupIcon } from "@/components/GroupIcon";
 import type { ChatTarget, GroupDetail, GroupSummary, Me, MemberInfo } from "./types";
@@ -54,7 +65,8 @@ export function AppShell(props: { initialUser: Me; initialGroups: GroupSummary[]
 }
 
 function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups: GroupSummary[] }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const router = useRouter();
   const toast = useToast();
   const [me, setMe] = useState(initialUser);
   const [groups, setGroups] = useState(initialGroups);
@@ -71,6 +83,13 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
     null | "create" | "profile" | "settings" | "invites" | "devices" | "tips" | "status"
   >(null);
   const prefs = usePrefs();
+  const [headMenu, setHeadMenu] = useState<null | "notifs" | "profile">(null);
+  const notifs = useNotifications();
+  const unreadNotifs = notifs.filter((n) => !n.read).length;
+  const groupsRef = useRef(groups);
+  useEffect(() => {
+    groupsRef.current = groups;
+  }, [groups]);
   const [userSection, setUserSection] = useState<UserSection>("account");
   const [groupSection, setGroupSection] = useState<GroupSection | undefined>(undefined);
   const [railMenu, setRailMenu] = useState<{ group: GroupSummary; x: number; y: number } | null>(null);
@@ -99,6 +118,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
     setActiveId(g && initialGroups.some((x) => x.id === g) ? g : (initialGroups[0]?.id ?? null));
     setDevLink(sessionStorage.getItem("mt_dev_verify"));
     applyPrefsToDocument();
+    initNotifications(initialUser.id);
     setBannerHidden(!!sessionStorage.getItem("mt_banner_hidden"));
     try {
       if (!localStorage.getItem("mt_tips_seen")) {
@@ -106,7 +126,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
         setModal("tips");
       }
     } catch {}
-  }, [initialGroups]);
+  }, [initialGroups, initialUser.id]);
 
   const refreshGroups = useCallback(async () => {
     const r = await api<{ groups: GroupSummary[] }>("/api/groups");
@@ -181,9 +201,26 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
   // Event ruangan: ketuk, layar, dikeluarkan, galat media.
   useEffect(() => {
     if (!room || !media) return;
+    const gname = () => groupsRef.current.find((g) => g.id === room.groupId)?.name ?? "";
     media.setErrorHandler((e) => toast({ text: t(`media.err.${e}`), kind: "error" }));
     const offs = [
+      room.on("peerJoined", (p) =>
+        pushNotification({
+          kind: "join",
+          name: p.name,
+          userId: p.id,
+          groupId: room.groupId,
+          groupName: gname(),
+        }),
+      ),
       room.on("knock", (k) => {
+        pushNotification({
+          kind: "knock",
+          name: k.fromName,
+          userId: k.from,
+          groupId: room.groupId,
+          groupName: gname(),
+        });
         if (getPrefs().soundKnock) playSound("knock");
         if (getPrefs().desktopNotify) desktopNotify("Meetopia", t("knock.incoming", { name: k.fromName }));
         const zone = k.zoneId ? room.snapshot.map?.zones.find((z) => z.id === k.zoneId) : null;
@@ -219,10 +256,18 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
         void refreshGroups();
       }),
       room.on("chat", (m) => {
-        if (m.kind !== "dm" || m.senderId === me.id) return;
+        if (m.senderId === me.id) return;
         const prefs = getPrefs();
-        if (prefs.soundDm) playSound("dm");
-        if (prefs.desktopNotify) desktopNotify(m.senderName, m.body.slice(0, 140));
+        const base = { name: m.senderName, userId: m.senderId, groupId: room.groupId, groupName: gname() };
+        if (m.kind === "dm") {
+          pushNotification({ ...base, kind: "dm", extra: m.body.slice(0, 80) });
+          if (prefs.soundDm) playSound("dm");
+          if (prefs.desktopNotify) desktopNotify(m.senderName, m.body.slice(0, 140));
+        } else if (m.kind === "channel" && m.body.toLowerCase().includes(`@${me.name.toLowerCase()}`)) {
+          pushNotification({ ...base, kind: "mention", extra: m.body.slice(0, 80) });
+          if (prefs.soundMention) playSound("mention");
+          if (prefs.desktopNotify) desktopNotify(m.senderName, m.body.slice(0, 140));
+        }
       }),
       room.on("error", (code) => {
         if (code === "rateLimited" || code === "tooFar") toast({ text: t(`error.${code}`), kind: "error" });
@@ -241,7 +286,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
       }),
     ];
     return () => offs.forEach((o) => o());
-  }, [room, media, t, toast, refreshGroups, loadDetail, me.id]);
+  }, [room, media, t, toast, refreshGroups, loadDetail, me.id, me.name]);
 
   // Aktivitas dalam aplikasi (bukan pelacakan layar/keystroke): cukup tanda "masih di sini" tiap 30 detik.
   useEffect(() => {
@@ -333,6 +378,13 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
   const zoneName = (p?: Presence) => {
     const z = p && snap.map ? zoneAt(snap.map, p.x, p.y) : null;
     return z ? t(z.label) : null;
+  };
+
+  const closeHeadMenu = useCallback(() => setHeadMenu(null), []);
+  const logout = async () => {
+    await api("/api/auth/logout", { method: "POST" });
+    router.replace("/");
+    router.refresh();
   };
 
   const switchGroup = (id: string) => {
@@ -497,15 +549,6 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
               </span>
             )}
           </div>
-          {onlineCount > 0 && (
-            <div className="avatar-stack head-stack" aria-hidden>
-              {[...snap.peers.values()].slice(0, 4).map((p) => (
-                <span key={p.id} className="stack-item" title={p.name}>
-                  <AvatarCanvas avatar={p.avatar} size={26} face />
-                </span>
-              ))}
-            </div>
-          )}
           {detail && (
             <button
               className="icon-btn"
@@ -516,6 +559,121 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
               <Icon name="users" />
             </button>
           )}
+          <div className="head-menu">
+            <button
+              className="icon-btn"
+              onClick={() => setHeadMenu((m) => (m === "notifs" ? null : "notifs"))}
+              aria-label={unreadNotifs ? t("notif.titleUnread", { n: unreadNotifs }) : t("notif.title")}
+              aria-expanded={headMenu === "notifs"}
+            >
+              <Icon name="bell" />
+              {unreadNotifs > 0 && <span className="count-badge">{Math.min(unreadNotifs, 9)}</span>}
+            </button>
+            {headMenu === "notifs" && (
+              <Popover label={t("notif.title")} onClose={closeHeadMenu} className="notif-pop">
+                <div className="pop-head">
+                  <b>{t("notif.title")}</b>
+                  <span className="spacer" />
+                  {notifs.length > 0 && (
+                    <button
+                      className="btn ghost small"
+                      onClick={unreadNotifs ? markAllRead : clearNotifications}
+                    >
+                      {unreadNotifs ? t("notif.markRead") : t("notif.clear")}
+                    </button>
+                  )}
+                </div>
+                {notifs.length === 0 ? (
+                  <p className="hint pop-empty">{t("notif.empty")}</p>
+                ) : (
+                  <ul className="notif-list">
+                    {notifs.map((n) => {
+                      const m = detail?.members.find((x) => x.id === n.userId);
+                      return (
+                        <li key={n.id} data-unread={!n.read}>
+                          {m ? (
+                            <AvatarCanvas avatar={m.avatar} size={34} face />
+                          ) : (
+                            <span className="notif-icon" aria-hidden>
+                              <Icon name="bell" size={16} />
+                            </span>
+                          )}
+                          <span className="grow">
+                            <span>
+                              {t(`notif.${n.kind}`, { name: n.name, group: n.groupName })}
+                              {n.extra && <span className="notif-extra">{n.extra}</span>}
+                            </span>
+                            <span className="hint">{timeAgo(n.at, locale)}</span>
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </Popover>
+            )}
+          </div>
+          <div className="head-menu">
+            <button
+              className="head-avatar"
+              onClick={() => setHeadMenu((m) => (m === "profile" ? null : "profile"))}
+              aria-label={t("pc.myProfile")}
+              aria-expanded={headMenu === "profile"}
+            >
+              <span className="avatar-wrap">
+                <AvatarCanvas avatar={me.avatar} size={32} face />
+                <span className={`status-dot s-${self?.status ?? "offline"}`} />
+              </span>
+            </button>
+            {headMenu === "profile" && (
+              <Popover label={t("pc.myProfile")} onClose={closeHeadMenu} className="profile-pop">
+                <div className="pp-head">
+                  <AvatarCanvas avatar={me.avatar} size={44} face />
+                  <span className="grow">
+                    <b>{me.name}</b>
+                    <span className="hint">
+                      <span className={`status-dot inline s-${self?.status ?? "offline"}`} />{" "}
+                      {me.statusText ?? t(`status.${self?.status ?? "offline"}`)}
+                    </span>
+                  </span>
+                </div>
+                {activeGroup && (
+                  <div className="pp-role">
+                    <span className="hint">{t("pc.role")}</span>
+                    <span>
+                      {t(`role.${role}`)} · {activeGroup.name}
+                    </span>
+                  </div>
+                )}
+                <div className="pp-items">
+                  {(
+                    [
+                      ["smile", me.statusText ? "cs.edit" : "cs.set", () => setModal("status")],
+                      ["edit", "pp.editProfile", () => openUserSettings("account")],
+                      ["user", "pp.changeAvatar", () => openUserSettings("avatar")],
+                      ["settings", "pp.settings", () => openUserSettings("appearance")],
+                    ] as const
+                  ).map(([icon, label, run]) => (
+                    <button
+                      key={label}
+                      onClick={() => {
+                        closeHeadMenu();
+                        run();
+                      }}
+                    >
+                      <Icon name={icon} size={16} />
+                      <span className="grow">{t(label)}</span>
+                      <Icon name="chevron" size={14} />
+                    </button>
+                  ))}
+                  <button className="danger" onClick={() => void logout()}>
+                    <Icon name="logout" size={16} />
+                    <span className="grow">{t("auth.logout")}</span>
+                  </button>
+                </div>
+              </Popover>
+            )}
+          </div>
         </header>
         {me.emailVerification && !me.emailVerified && !bannerHidden && (
           <div className="banner" role="status">
@@ -699,11 +857,19 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
           onSaved={setMe}
         />
       )}
-      {(modal === "settings" || modal === "invites") && detail && (
+      {modal === "invites" && detail && (
+        <InviteModal
+          groupId={detail.group.id}
+          groupName={detail.group.name}
+          onClose={() => setModal(null)}
+          onAdvanced={() => openGroupSettings("invites")}
+        />
+      )}
+      {modal === "settings" && detail && (
         <GroupSettings
           detail={detail}
           selfId={me.id}
-          initialTab={modal === "invites" ? "invites" : groupSection}
+          initialTab={groupSection}
           onClose={() => setModal(null)}
           onChanged={() => {
             if (activeId) void loadDetail(activeId);

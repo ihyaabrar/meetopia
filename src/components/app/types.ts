@@ -16,6 +16,7 @@ export interface MemberInfo {
   avatar: AvatarConfig;
   role: Role;
   joinedAt?: string;
+  lastSeenAt?: string | null;
 }
 
 export interface GroupDetail {

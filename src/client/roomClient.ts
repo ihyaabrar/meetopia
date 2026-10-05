@@ -44,6 +44,8 @@ type EventMap = {
   error: string;
   welcome: void;
   groupChanged: void;
+  /** Seseorang baru masuk ruangan (bukan sambung ulang singkat). */
+  peerJoined: Presence;
   teleported: Extract<ServerMessage, { t: "teleported" }>;
   teleportRejected: Extract<ServerMessage, { t: "teleportRejected" }>;
 };
@@ -70,6 +72,8 @@ export class RoomClient {
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private listeners = new Map<keyof EventMap, Set<Listener<never>>>();
   private storeListeners = new Set<() => void>();
+  /** Kapan terakhir orang terlihat masuk, agar sambung ulang tidak memicu notifikasi baru. */
+  private seenAt = new Map<string, number>();
   /** Waktu terakhir terputus, untuk mengukur durasi putus (catatan spike M2). */
   disconnectedAt: number | null = null;
 
@@ -232,6 +236,7 @@ export class RoomClient {
     switch (m.t) {
       case "welcome": {
         const peers = new Map(m.peers.map((p) => [p.id, p]));
+        for (const p of m.peers) this.seenAt.set(p.id, Date.now());
         this.commit({
           conn: "open",
           selfId: m.selfId,
@@ -253,6 +258,11 @@ export class RoomClient {
       case "join":
       case "update": {
         const current = this.snapshot.peers.get(m.peer.id);
+        if (m.t === "join" && !current && m.peer.id !== this.snapshot.selfId) {
+          const last = this.seenAt.get(m.peer.id) ?? 0;
+          if (Date.now() - last > 10 * 60_000) this.emit("peerJoined", m.peer);
+        }
+        if (m.t === "join") this.seenAt.set(m.peer.id, Date.now());
         if (
           m.t === "update" &&
           current &&

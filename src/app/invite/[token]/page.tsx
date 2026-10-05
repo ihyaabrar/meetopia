@@ -1,10 +1,13 @@
 import { getSessionUser } from "@/server/auth";
-import { checkInvite } from "@/server/repo";
+import { checkInvite, checkInviteCode } from "@/server/repo";
 import { InviteView } from "./InviteView";
 
 export default async function InvitePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const [user, check] = await Promise.all([getSessionUser(), checkInvite(token)]);
+  const [user, check] = await Promise.all([
+    getSessionUser(),
+    token.length <= 12 ? checkInviteCode(token) : checkInvite(token),
+  ]);
   return (
     <InviteView
       token={token}

@@ -74,8 +74,8 @@ test("MVP: grup, undangan, sinkron posisi, chat, catatan, mic, sambung ulang", a
 
   // --- Undangan
   await a.getByRole("button", { name: "Undang anggota" }).first().click();
-  await a.getByRole("button", { name: "Buat tautan undangan" }).click();
-  const link = (await a.getByTestId("invite-link").textContent())!.trim();
+  await expect(a.getByTestId("invite-link")).toHaveValue(/\/invite\/[A-Z0-9]{6}$/);
+  const link = await a.getByTestId("invite-link").inputValue();
   expect(link).toContain("/invite/");
   await a.keyboard.press("Escape");
 
@@ -90,7 +90,11 @@ test("MVP: grup, undangan, sinkron posisi, chat, catatan, mic, sambung ulang", a
   await b.getByRole("button", { name: "Gabung grup" }).click();
   await b.waitForURL(/\/app\?g=/);
   await enterRoom(b);
-  await expect(a.getByText("Di ruangan: 2")).toBeVisible({ timeout: 10_000 });
+  await expect(a.getByText("Di ruangan (2)")).toBeVisible({ timeout: 10_000 });
+  // A mendapat notifikasi di lonceng
+  await a.getByRole("button", { name: /Notifikasi, 1 belum dibaca/ }).click();
+  await expect(a.locator(".notif-list")).toContainText("Dito masuk ke ruangan Tim Desain");
+  await a.keyboard.press("Escape");
   expect(Date.now() - joinStart).toBeLessThan(120_000);
 
   // --- Sinkron posisi (M2): B mengetuk peta, A melihat posisi B berubah
@@ -201,8 +205,8 @@ test("Ruang privat: dikunci dari dalam, orang luar harus ketuk (FR-23, FR-31)", 
   await a.getByRole("button", { name: "Buat", exact: true }).click();
   await enterRoom(a);
   await a.getByRole("button", { name: "Undang anggota" }).first().click();
-  await a.getByRole("button", { name: "Buat tautan undangan" }).click();
-  const link = (await a.getByTestId("invite-link").textContent())!.trim();
+  await expect(a.getByTestId("invite-link")).toHaveValue(/\/invite\/[A-Z0-9]{6}$/);
+  const link = await a.getByTestId("invite-link").inputValue();
   await a.keyboard.press("Escape");
 
   // A masuk ruang rapat lewat menu "Pergi ke…" (navigasi keyboard)
@@ -277,8 +281,8 @@ test("Speaker: musik makin pelan saat menjauh, hilang di luar jangkauan", async 
   await a.getByRole("button", { name: "Buat", exact: true }).click();
   await enterRoom(a);
   await a.getByRole("button", { name: "Undang anggota" }).first().click();
-  await a.getByRole("button", { name: "Buat tautan undangan" }).click();
-  const link = (await a.getByTestId("invite-link").textContent())!.trim();
+  await expect(a.getByTestId("invite-link")).toHaveValue(/\/invite\/[A-Z0-9]{6}$/);
+  const link = await a.getByTestId("invite-link").inputValue();
   await a.keyboard.press("Escape");
 
   await register(b, `b${stamp}@contoh.id`, "Bima");
