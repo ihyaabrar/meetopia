@@ -3,9 +3,12 @@
 import { useEffect, useState } from "react";
 import { api, errorKey } from "@/client/api";
 import { useI18n } from "@/i18n/client";
-import { Modal } from "@/components/Modal";
 import { AvatarCanvas } from "@/components/AvatarCanvas";
+import { GroupIconPicker } from "@/components/GroupIconPicker";
+import { Icon } from "@/components/Icon";
+import { SettingsShell, type SettingsSection } from "@/components/SettingsShell";
 import { can, canChangeRole, type Role } from "@/shared/roles";
+import { isGroupColor, isGroupSymbol, type GroupColor, type GroupSymbol } from "@/shared/groupIcon";
 import type { GroupDetail } from "./types";
 
 interface Invite {
@@ -17,9 +20,12 @@ interface Invite {
   revoked: boolean;
 }
 
-type Tab = "general" | "invites" | "members";
+export type GroupSection = "overview" | "room" | "channels" | "members" | "invites" | "danger";
 
-/** Pengaturan organisasi: nama, audio jarak, undangan (FR-02), anggota & peran (FR-03). */
+/**
+ * Pengaturan grup dengan menu: ringkasan (ikon, nama, deskripsi), ruangan (audio jarak), kanal,
+ * anggota & peran (FR-03), undangan (FR-02), dan zona bahaya (serahkan, hapus, keluar).
+ */
 export function GroupSettings({
   detail,
   selfId,
@@ -30,34 +36,38 @@ export function GroupSettings({
 }: {
   detail: GroupDetail;
   selfId: string;
-  initialTab?: Tab;
+  initialTab?: GroupSection;
   onClose: () => void;
   onChanged: () => void;
   onLeft: () => void;
 }) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const role = detail.role;
   const isAdmin = can(role, "manageGroup");
-  const [tab, setTab] = useState<Tab>(initialTab ?? (isAdmin ? "general" : "members"));
-  const [name, setName] = useState(detail.group.name);
-  const [audio, setAudio] = useState(detail.audio);
-  const [invites, setInvites] = useState<Invite[]>([]);
-  const [newLink, setNewLink] = useState<string | null>(null);
-  const [expires, setExpires] = useState(72);
-  const [maxUses, setMaxUses] = useState<string>("");
-  const [inviteRole, setInviteRole] = useState<"member" | "guest">("member");
+  const sections: SettingsSection<GroupSection>[] = isAdmin
+    ? [
+        { id: "overview", label: t("gs.overview"), icon: "edit", group: detail.group.name },
+        { id: "room", label: t("gs.room"), icon: "door" },
+        { id: "channels", label: t("gs.channels"), icon: "hash" },
+        { id: "members", label: t("gs.members"), icon: "users", group: t("gs.people") },
+        { id: "invites", label: t("gs.invites"), icon: "link" },
+        { id: "danger", label: t("us.dangerZone"), icon: "alert", danger: true, sep: true },
+      ]
+    : [
+        { id: "members", label: t("gs.members"), icon: "users", group: detail.group.name },
+        { id: "danger", label: t("settings.leave"), icon: "logout", danger: true, sep: true },
+      ];
+  const [section, setSection] = useState<GroupSection>(
+    initialTab && sections.some((s) => s.id === initialTab) ? initialTab : sections[0].id,
+  );
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [now] = useState(() => Date.now());
 
-  const loadInvites = () =>
-    api<{ invites: Invite[] }>(`/api/groups/${detail.group.id}/invites`)
-      .then((r) => setInvites(r.invites))
-      .catch(() => {});
-  useEffect(() => {
-    if (tab === "invites" && can(role, "createInvite")) void loadInvites();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab]);
+  const select = (s: GroupSection) => {
+    setError(null);
+    setNotice(null);
+    setSection(s);
+  };
 
   const run = async (fn: () => Promise<unknown>, ok?: string) => {
     setError(null);
@@ -66,43 +76,23 @@ export function GroupSettings({
       await fn();
       if (ok) setNotice(ok);
       onChanged();
+      return true;
     } catch (e) {
       setError(t(errorKey(e)));
+      return false;
     }
   };
 
-  const saveGeneral = () =>
-    run(
-      () => api(`/api/groups/${detail.group.id}`, { method: "PATCH", body: { name, audio } }),
-      t("common.saved"),
-    );
-
-  const createInvite = () =>
-    run(async () => {
-      const r = await api<{ url: string }>(`/api/groups/${detail.group.id}/invites`, {
-        body: { expiresInHours: expires, maxUses: maxUses ? Number(maxUses) : null, role: inviteRole },
-      });
-      setNewLink(r.url);
-      await navigator.clipboard?.writeText(r.url).catch(() => {});
-      await loadInvites();
-    });
-
-  const fmt = (iso: string) =>
-    new Date(iso).toLocaleString(locale === "id" ? "id-ID" : "en-US", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
-  const tabs: Tab[] = isAdmin ? ["general", "invites", "members"] : ["members"];
+  const ctx = { detail, selfId, role, run };
 
   return (
-    <Modal title={t("settings.title", { name: detail.group.name })} onClose={onClose} wide>
-      <div className="chat-tabs" role="tablist" style={{ padding: 0, border: "none", marginBottom: 14 }}>
-        {tabs.map((k) => (
-          <button key={k} role="tab" className="tab" aria-selected={tab === k} onClick={() => setTab(k)}>
-            {t(`settings.tab.${k}`)}
-          </button>
-        ))}
-      </div>
+    <SettingsShell
+      title={t("settings.title", { name: detail.group.name })}
+      sections={sections}
+      active={section}
+      onSelect={select}
+      onClose={onClose}
+    >
       {error && (
         <p className="error-text" role="alert">
           {error}
@@ -113,235 +103,588 @@ export function GroupSettings({
           {notice}
         </p>
       )}
+      {section === "overview" && <Overview {...ctx} />}
+      {section === "room" && <RoomSection {...ctx} />}
+      {section === "channels" && <Channels {...ctx} />}
+      {section === "members" && <Members {...ctx} />}
+      {section === "invites" && <Invites {...ctx} />}
+      {section === "danger" && <Danger {...ctx} onLeft={onLeft} />}
+    </SettingsShell>
+  );
+}
 
-      {tab === "general" && (
-        <>
-          <div className="field">
-            <label htmlFor="gs-name">{t("group.name")}</label>
+interface Ctx {
+  detail: GroupDetail;
+  selfId: string;
+  role: Role;
+  run: (fn: () => Promise<unknown>, ok?: string) => Promise<boolean>;
+}
+
+function Overview({ detail, run }: Ctx) {
+  const { t } = useI18n();
+  const g = detail.group;
+  const initial = {
+    name: g.name,
+    description: g.description,
+    color: (isGroupColor(g.iconColor) ? g.iconColor : "green") as GroupColor,
+    symbol: (isGroupSymbol(g.iconSymbol) ? g.iconSymbol : "initials") as GroupSymbol,
+  };
+  const [v, setV] = useState(initial);
+  const changed = JSON.stringify(v) !== JSON.stringify(initial);
+  const save = () =>
+    run(
+      () =>
+        api(`/api/groups/${g.id}`, {
+          method: "PATCH",
+          body: { name: v.name, description: v.description, iconColor: v.color, iconSymbol: v.symbol },
+        }),
+      t("common.saved"),
+    );
+  return (
+    <>
+      <section className="setting-card" style={{ padding: 16 }}>
+        <GroupIconPicker
+          name={v.name}
+          color={v.color}
+          symbol={v.symbol}
+          onChange={(i) => setV({ ...v, ...i })}
+        />
+      </section>
+      <section className="setting-card" style={{ marginTop: 12 }}>
+        <div className="field">
+          <label htmlFor="gs-name">{t("group.name")}</label>
+          <input
+            id="gs-name"
+            className="input"
+            value={v.name}
+            maxLength={60}
+            onChange={(e) => setV({ ...v, name: e.target.value })}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="gs-desc">{t("gs.description")}</label>
+          <textarea
+            id="gs-desc"
+            className="input"
+            rows={3}
+            maxLength={200}
+            placeholder={t("gs.descriptionPlaceholder")}
+            value={v.description}
+            onChange={(e) => setV({ ...v, description: e.target.value })}
+          />
+          <span className="hint">{t("gs.descriptionHint")}</span>
+        </div>
+      </section>
+      <div className="save-bar" data-visible={changed}>
+        <span className="grow">{t("us.unsaved")}</span>
+        <button className="btn ghost small" onClick={() => setV(initial)}>
+          {t("us.reset")}
+        </button>
+        <button className="btn small" disabled={!v.name.trim()} onClick={save}>
+          {t("common.save")}
+        </button>
+      </div>
+    </>
+  );
+}
+
+function RoomSection({ detail, run }: Ctx) {
+  const { t } = useI18n();
+  const [audio, setAudio] = useState(detail.audio);
+  const changed = JSON.stringify(audio) !== JSON.stringify(detail.audio);
+  return (
+    <>
+      <h3 className="settings-h3" style={{ marginTop: 0 }}>
+        {t("settings.audio")}
+      </h3>
+      <p className="hint">{t("settings.audioHint")}</p>
+      <section className="setting-card">
+        {(
+          [
+            ["radius", 2, 20, 0.5],
+            ["fullVolumeRadius", 0, 8, 0.5],
+            ["curve", 0.5, 3, 0.1],
+          ] as const
+        ).map(([k, min, max, step]) => (
+          <div className="field" key={k}>
+            <label htmlFor={`gs-${k}`}>
+              {t(`settings.${k}`)}: <b>{audio[k]}</b>
+            </label>
             <input
-              id="gs-name"
-              className="input"
-              value={name}
-              maxLength={60}
-              onChange={(e) => setName(e.target.value)}
+              id={`gs-${k}`}
+              type="range"
+              min={min}
+              max={max}
+              step={step}
+              value={audio[k]}
+              onChange={(e) => setAudio({ ...audio, [k]: Number(e.target.value) })}
             />
           </div>
-          <div className="section-title" style={{ paddingLeft: 0 }}>
-            {t("settings.audio")}
-          </div>
-          <p className="hint">{t("settings.audioHint")}</p>
-          {(
-            [
-              ["radius", 2, 20, 0.5],
-              ["fullVolumeRadius", 0, 8, 0.5],
-              ["curve", 0.5, 3, 0.1],
-            ] as const
-          ).map(([k, min, max, step]) => (
-            <div className="field" key={k}>
-              <label htmlFor={`gs-${k}`}>
-                {t(`settings.${k}`)}: <b>{audio[k]}</b>
-              </label>
-              <input
-                id={`gs-${k}`}
-                type="range"
-                min={min}
-                max={max}
-                step={step}
-                value={audio[k]}
-                onChange={(e) => setAudio({ ...audio, [k]: Number(e.target.value) })}
-              />
-            </div>
-          ))}
-          <div className="modal-actions">
-            {role === "owner" && (
-              <button
-                className="btn danger-outline"
-                onClick={() => {
-                  if (confirm(t("settings.deleteConfirm", { name: detail.group.name })))
-                    void run(async () => {
-                      await api(`/api/groups/${detail.group.id}`, { method: "DELETE" });
-                      onLeft();
-                    });
+        ))}
+      </section>
+      {audio.fullVolumeRadius >= audio.radius && <p className="error-text">{t("gs.audioInvalid")}</p>}
+      <div className="save-bar" data-visible={changed}>
+        <span className="grow">{t("us.unsaved")}</span>
+        <button className="btn ghost small" onClick={() => setAudio(detail.audio)}>
+          {t("us.reset")}
+        </button>
+        <button
+          className="btn small"
+          disabled={audio.fullVolumeRadius >= audio.radius}
+          onClick={() =>
+            run(
+              () => api(`/api/groups/${detail.group.id}`, { method: "PATCH", body: { audio } }),
+              t("common.saved"),
+            )
+          }
+        >
+          {t("common.save")}
+        </button>
+      </div>
+    </>
+  );
+}
+
+function Channels({ detail, run }: Ctx) {
+  const { t } = useI18n();
+  const [name, setName] = useState("");
+  const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
+  const base = `/api/groups/${detail.group.id}/channels`;
+  return (
+    <>
+      <p className="hint">{t("gs.channelsHint")}</p>
+      <form
+        className="row"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (await run(() => api(base, { body: { name } }))) setName("");
+        }}
+      >
+        <span className="input-prefix">
+          <span aria-hidden>#</span>
+          <input
+            className="input"
+            aria-label={t("gs.channelName")}
+            placeholder={t("gs.channelPlaceholder")}
+            maxLength={32}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </span>
+        <button className="btn" disabled={!name.trim()}>
+          <Icon name="plus" size={16} /> {t("gs.createChannel")}
+        </button>
+      </form>
+      <section className="setting-card" style={{ marginTop: 14 }}>
+        {detail.channels.map((c) => (
+          <div className="setting-row" key={c.id}>
+            {editing?.id === c.id ? (
+              <form
+                className="row grow"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (
+                    await run(() => api(`${base}/${c.id}`, { method: "PATCH", body: { name: editing.name } }))
+                  )
+                    setEditing(null);
                 }}
               >
-                {t("settings.deleteGroup")}
-              </button>
+                <span className="input-prefix grow">
+                  <span aria-hidden>#</span>
+                  <input
+                    className="input"
+                    autoFocus
+                    aria-label={t("gs.channelName")}
+                    maxLength={32}
+                    value={editing.name}
+                    onChange={(e) => setEditing({ id: c.id, name: e.target.value })}
+                  />
+                </span>
+                <button type="button" className="btn secondary small" onClick={() => setEditing(null)}>
+                  {t("common.cancel")}
+                </button>
+                <button className="btn small">{t("common.save")}</button>
+              </form>
+            ) : (
+              <>
+                <span className="hash-lg" aria-hidden>
+                  #
+                </span>
+                <b className="grow">{c.name}</b>
+                <button
+                  className="icon-btn"
+                  aria-label={t("gs.renameChannel", { name: c.name })}
+                  title={t("gs.renameChannel", { name: c.name })}
+                  onClick={() => setEditing({ id: c.id, name: c.name })}
+                >
+                  <Icon name="edit" size={16} />
+                </button>
+                <button
+                  className="icon-btn danger"
+                  disabled={detail.channels.length <= 1}
+                  aria-label={t("gs.deleteChannel", { name: c.name })}
+                  title={
+                    detail.channels.length <= 1
+                      ? t("error.lastChannel")
+                      : t("gs.deleteChannel", { name: c.name })
+                  }
+                  onClick={() =>
+                    confirm(t("gs.deleteChannelConfirm", { name: c.name })) &&
+                    run(() => api(`${base}/${c.id}`, { method: "DELETE" }))
+                  }
+                >
+                  <Icon name="trash" size={16} />
+                </button>
+              </>
             )}
-            <span className="spacer" />
-            <button className="btn" onClick={saveGeneral} disabled={audio.fullVolumeRadius >= audio.radius}>
-              {t("common.save")}
+          </div>
+        ))}
+      </section>
+    </>
+  );
+}
+
+function Members({ detail, selfId, role, run }: Ctx) {
+  const { t } = useI18n();
+  const [q, setQ] = useState("");
+  const list = detail.members.filter((m) => m.name.toLowerCase().includes(q.trim().toLowerCase()));
+  return (
+    <>
+      {detail.members.length > 6 && (
+        <input
+          className="input"
+          style={{ marginBottom: 12 }}
+          placeholder={t("gs.searchMembers")}
+          aria-label={t("gs.searchMembers")}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+      )}
+      <p className="hint">{t("gs.membersCount", { n: detail.members.length })}</p>
+      <section className="setting-card">
+        {list.map((m) => (
+          <div key={m.id} className="setting-row">
+            <AvatarCanvas avatar={m.avatar} size={36} face />
+            <div className="grow" style={{ minWidth: 0 }}>
+              <b>
+                {m.name} {m.id === selfId && <span className="hint">({t("members.you")})</span>}
+              </b>
+            </div>
+            {can(role, "manageMembers") &&
+            m.id !== selfId &&
+            m.role !== "owner" &&
+            canChangeRole(role, m.role, m.role) ? (
+              <>
+                <select
+                  className="input"
+                  style={{ width: "auto", minHeight: 36 }}
+                  value={m.role}
+                  aria-label={t("gs.roleOf", { name: m.name })}
+                  onChange={(e) =>
+                    run(
+                      () =>
+                        api(`/api/groups/${detail.group.id}/members/${m.id}`, {
+                          method: "PATCH",
+                          body: { role: e.target.value },
+                        }),
+                      t("common.saved"),
+                    )
+                  }
+                >
+                  {(["admin", "member", "guest"] as const)
+                    .filter((r) => canChangeRole(role, m.role, r))
+                    .map((r) => (
+                      <option key={r} value={r}>
+                        {t(`role.${r}`)}
+                      </option>
+                    ))}
+                </select>
+                <button
+                  className="btn ghost small"
+                  onClick={() =>
+                    confirm(t("settings.removeConfirm", { name: m.name })) &&
+                    run(() => api(`/api/groups/${detail.group.id}/members/${m.id}`, { method: "DELETE" }))
+                  }
+                >
+                  {t("settings.remove")}
+                </button>
+              </>
+            ) : (
+              <span className="badge">
+                {m.role === "owner" && <Icon name="crown" size={12} />} {t(`role.${m.role}`)}
+              </span>
+            )}
+          </div>
+        ))}
+      </section>
+    </>
+  );
+}
+
+function Invites({ detail, role, run }: Ctx) {
+  const { t, locale } = useI18n();
+  const [invites, setInvites] = useState<Invite[]>([]);
+  const [newLink, setNewLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [expires, setExpires] = useState(72);
+  const [maxUses, setMaxUses] = useState<string>("");
+  const [inviteRole, setInviteRole] = useState<"member" | "guest">("member");
+  const [now] = useState(() => Date.now());
+  const base = `/api/groups/${detail.group.id}/invites`;
+
+  const load = () =>
+    api<{ invites: Invite[] }>(base)
+      .then((r) => setInvites(r.invites))
+      .catch(() => {});
+  useEffect(() => {
+    if (can(role, "createInvite")) void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const copy = async (link: string) => {
+    await navigator.clipboard?.writeText(link).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  };
+
+  const create = () =>
+    run(async () => {
+      const r = await api<{ url: string }>(base, {
+        body: { expiresInHours: expires, maxUses: maxUses ? Number(maxUses) : null, role: inviteRole },
+      });
+      setNewLink(r.url);
+      await copy(r.url);
+      await load();
+    });
+
+  const fmt = (iso: string) =>
+    new Date(iso).toLocaleString(locale === "id" ? "id-ID" : "en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+
+  return (
+    <>
+      <section className="setting-card" style={{ paddingBottom: 14 }}>
+        <div
+          style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}
+        >
+          <div className="field">
+            <label htmlFor="inv-exp">{t("invite.expires")}</label>
+            <select
+              id="inv-exp"
+              className="input"
+              value={expires}
+              onChange={(e) => setExpires(Number(e.target.value))}
+            >
+              {[1, 24, 72, 168, 720].map((h) => (
+                <option key={h} value={h}>
+                  {t(`invite.exp.${h}`)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="inv-max">{t("invite.maxUses")}</label>
+            <input
+              id="inv-max"
+              className="input"
+              type="number"
+              min={1}
+              max={500}
+              placeholder={t("invite.unlimited")}
+              value={maxUses}
+              onChange={(e) => setMaxUses(e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="inv-role">{t("invite.role")}</label>
+            <select
+              id="inv-role"
+              className="input"
+              value={inviteRole}
+              onChange={(e) => setInviteRole(e.target.value as "member" | "guest")}
+            >
+              <option value="member">{t("role.member")}</option>
+              <option value="guest">{t("role.guest")}</option>
+            </select>
+          </div>
+        </div>
+        <button className="btn" onClick={create}>
+          {t("invite.create")}
+        </button>
+        {newLink && (
+          <div className="list-row highlight" style={{ marginTop: 12 }}>
+            <code className="grow" style={{ wordBreak: "break-all" }} data-testid="invite-link">
+              {newLink}
+            </code>
+            <button className="btn small" onClick={() => void copy(newLink)}>
+              {copied ? t("gs.copied") : t("invite.copy")}
             </button>
           </div>
-        </>
-      )}
-
-      {tab === "invites" && (
-        <>
-          <div
-            style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}
-          >
-            <div className="field">
-              <label htmlFor="inv-exp">{t("invite.expires")}</label>
-              <select
-                id="inv-exp"
-                className="input"
-                value={expires}
-                onChange={(e) => setExpires(Number(e.target.value))}
-              >
-                {[1, 24, 72, 168, 720].map((h) => (
-                  <option key={h} value={h}>
-                    {t(`invite.exp.${h}`)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="inv-max">{t("invite.maxUses")}</label>
-              <input
-                id="inv-max"
-                className="input"
-                type="number"
-                min={1}
-                max={500}
-                placeholder={t("invite.unlimited")}
-                value={maxUses}
-                onChange={(e) => setMaxUses(e.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="inv-role">{t("invite.role")}</label>
-              <select
-                id="inv-role"
-                className="input"
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value as "member" | "guest")}
-              >
-                <option value="member">{t("role.member")}</option>
-                <option value="guest">{t("role.guest")}</option>
-              </select>
-            </div>
-          </div>
-          <button className="btn" onClick={createInvite}>
-            {t("invite.create")}
-          </button>
-          {newLink && (
-            <div className="list-row highlight" style={{ marginTop: 12 }}>
-              <code className="grow" style={{ wordBreak: "break-all" }} data-testid="invite-link">
-                {newLink}
-              </code>
-              <button className="btn small" onClick={() => navigator.clipboard?.writeText(newLink)}>
-                {t("invite.copy")}
-              </button>
-            </div>
-          )}
-          <div className="section-title" style={{ paddingLeft: 0, marginTop: 16 }}>
-            {t("invite.active")}
-          </div>
-          <div className="list">
-            {invites.length === 0 && <p className="hint">{t("invite.none")}</p>}
-            {invites.map((i) => {
-              const expired = Date.parse(i.expiresAt) < now;
-              const state = i.revoked
-                ? t("invite.revoked")
-                : expired
-                  ? t("invite.expired")
-                  : t("invite.validUntil", { time: fmt(i.expiresAt) });
-              return (
-                <div key={i.id} className="list-row">
-                  <div className="grow">
-                    <b>{t(`role.${i.role}`)}</b> · {t("invite.used", { n: i.uses, max: i.maxUses ?? "∞" })}
-                    <div className="hint">{state}</div>
-                  </div>
-                  {!i.revoked && !expired && (
-                    <button
-                      className="btn secondary small"
-                      onClick={() =>
-                        run(async () => {
-                          await api(`/api/groups/${detail.group.id}/invites/${i.id}`, { method: "DELETE" });
-                          await loadInvites();
-                        })
-                      }
-                    >
-                      {t("invite.revoke")}
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      {tab === "members" && (
-        <div className="list">
-          {detail.members.map((m) => (
-            <div key={m.id} className="list-row">
-              <AvatarCanvas avatar={m.avatar} size={32} face />
+        )}
+      </section>
+      <h3 className="settings-h3">{t("invite.active")}</h3>
+      <section className="setting-card">
+        {invites.length === 0 && <p className="hint">{t("invite.none")}</p>}
+        {invites.map((i) => {
+          const expired = Date.parse(i.expiresAt) < now;
+          const state = i.revoked
+            ? t("invite.revoked")
+            : expired
+              ? t("invite.expired")
+              : t("invite.validUntil", { time: fmt(i.expiresAt) });
+          return (
+            <div key={i.id} className="setting-row">
               <div className="grow">
-                <b>{m.name}</b> {m.id === selfId && <span className="hint">({t("members.you")})</span>}
+                <b>
+                  {t(`role.${i.role}`)} · {t("invite.used", { n: i.uses, max: i.maxUses ?? "∞" })}
+                </b>
+                <span className="hint">{state}</span>
               </div>
-              {can(role, "manageMembers") &&
-              m.id !== selfId &&
-              m.role !== "owner" &&
-              canChangeRole(role, m.role, m.role) ? (
-                <>
-                  <select
-                    className="input"
-                    style={{ width: "auto", minHeight: 34 }}
-                    value={m.role}
-                    aria-label={t("invite.role")}
-                    onChange={(e) =>
-                      run(
-                        () =>
-                          api(`/api/groups/${detail.group.id}/members/${m.id}`, {
-                            method: "PATCH",
-                            body: { role: e.target.value },
-                          }),
-                        t("common.saved"),
-                      )
-                    }
-                  >
-                    {(["admin", "member", "guest"] as const)
-                      .filter((r) => canChangeRole(role, m.role, r))
-                      .map((r) => (
-                        <option key={r} value={r}>
-                          {t(`role.${r}`)}
-                        </option>
-                      ))}
-                  </select>
-                  <button
-                    className="btn ghost small"
-                    onClick={() =>
-                      confirm(t("settings.removeConfirm", { name: m.name })) &&
-                      run(() => api(`/api/groups/${detail.group.id}/members/${m.id}`, { method: "DELETE" }))
-                    }
-                  >
-                    {t("settings.remove")}
-                  </button>
-                </>
-              ) : (
-                <span className="badge">{t(`role.${m.role}`)}</span>
+              {!i.revoked && !expired && (
+                <button
+                  className="btn secondary small"
+                  onClick={() =>
+                    run(async () => {
+                      await api(`${base}/${i.id}`, { method: "DELETE" });
+                      await load();
+                    })
+                  }
+                >
+                  {t("invite.revoke")}
+                </button>
               )}
             </div>
-          ))}
-          {role !== "owner" && (
-            <div className="modal-actions">
-              <button
-                className="btn danger-outline"
-                onClick={() =>
-                  confirm(t("settings.leaveConfirm")) &&
-                  run(async () => {
-                    await api(`/api/groups/${detail.group.id}/members/${selfId}`, { method: "DELETE" });
-                    onLeft();
-                  })
-                }
-              >
-                {t("settings.leave")}
-              </button>
-            </div>
-          )}
+          );
+        })}
+      </section>
+    </>
+  );
+}
+
+function Danger({ detail, selfId, role, run, onLeft }: Ctx & { onLeft: () => void }) {
+  const { t } = useI18n();
+  const [to, setTo] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmName, setConfirmName] = useState("");
+  const candidates = detail.members.filter((m) => m.id !== selfId && m.role !== "guest");
+  const g = detail.group;
+
+  if (role !== "owner")
+    return (
+      <section className="setting-card danger">
+        <div className="setting-row">
+          <div className="grow">
+            <b>{t("settings.leave")}</b>
+            <span className="hint">{t("gs.leaveHint")}</span>
+          </div>
+          <button
+            className="btn danger-outline small"
+            onClick={() =>
+              confirm(t("settings.leaveConfirm")) &&
+              run(async () => {
+                await api(`/api/groups/${g.id}/members/${selfId}`, { method: "DELETE" });
+                onLeft();
+              })
+            }
+          >
+            {t("settings.leave")}
+          </button>
         </div>
-      )}
-    </Modal>
+      </section>
+    );
+
+  return (
+    <>
+      <h3 className="settings-h3" style={{ marginTop: 0 }}>
+        {t("gs.transfer")}
+      </h3>
+      <section className="setting-card">
+        <p className="hint" style={{ margin: "12px 0" }}>
+          {t("gs.transferHint")}
+        </p>
+        {candidates.length === 0 ? (
+          <p className="hint" style={{ marginBottom: 12 }}>
+            {t("gs.transferNone")}
+          </p>
+        ) : (
+          <form
+            className="transfer-form"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const name = candidates.find((m) => m.id === to)?.name ?? "";
+              if (!confirm(t("gs.transferConfirm", { name, group: g.name }))) return;
+              if (
+                await run(
+                  () => api(`/api/groups/${g.id}/transfer`, { body: { userId: to, password } }),
+                  t("gs.transferred"),
+                )
+              )
+                setPassword("");
+            }}
+          >
+            <select
+              className="input"
+              aria-label={t("gs.transferTo")}
+              value={to}
+              required
+              onChange={(e) => setTo(e.target.value)}
+            >
+              <option value="">{t("gs.transferTo")}</option>
+              {candidates.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} ({t(`role.${m.role}`)})
+                </option>
+              ))}
+            </select>
+            <input
+              type="password"
+              className="input"
+              autoComplete="current-password"
+              placeholder={t("us.currentPassword")}
+              aria-label={t("us.currentPassword")}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <button className="btn secondary" disabled={!to || !password}>
+              <Icon name="crown" size={16} /> {t("gs.transferButton")}
+            </button>
+          </form>
+        )}
+      </section>
+
+      <h3 className="settings-h3 danger">{t("settings.deleteGroup")}</h3>
+      <section className="setting-card danger">
+        <p className="hint" style={{ margin: "12px 0" }}>
+          {t("gs.deleteHint")}
+        </p>
+        <div className="field">
+          <label htmlFor="gs-del-name">{t("gs.typeName", { name: g.name })}</label>
+          <input
+            id="gs-del-name"
+            className="input"
+            autoComplete="off"
+            value={confirmName}
+            onChange={(e) => setConfirmName(e.target.value)}
+          />
+        </div>
+        <div className="row" style={{ paddingBottom: 14 }}>
+          <span className="spacer" />
+          <button
+            className="btn danger"
+            disabled={confirmName.trim() !== g.name}
+            onClick={() =>
+              run(async () => {
+                await api(`/api/groups/${g.id}`, { method: "DELETE" });
+                onLeft();
+              })
+            }
+          >
+            {t("settings.deleteGroup")}
+          </button>
+        </div>
+      </section>
+    </>
   );
 }

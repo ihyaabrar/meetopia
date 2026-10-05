@@ -29,6 +29,7 @@ type EventMap = {
   kicked: string;
   error: string;
   welcome: void;
+  groupChanged: void;
 };
 
 type Listener<K extends keyof EventMap> = (e: EventMap[K]) => void;
@@ -212,7 +213,14 @@ export class RoomClient {
     switch (m.t) {
       case "welcome": {
         const peers = new Map(m.peers.map((p) => [p.id, p]));
-        this.commit({ conn: "open", selfId: m.selfId, peers, map: m.map, sharedNote: m.sharedNote, configError: undefined });
+        this.commit({
+          conn: "open",
+          selfId: m.selfId,
+          peers,
+          map: m.map,
+          sharedNote: m.sharedNote,
+          configError: undefined,
+        });
         if (this.disconnectedAt) {
           console.info(`[meetopia] tersambung lagi setelah ${Date.now() - this.disconnectedAt} ms`);
           this.disconnectedAt = null;
@@ -277,6 +285,8 @@ export class RoomClient {
         return this.commit({ sharedNote: m.note });
       case "map":
         return this.commit({ map: m.map });
+      case "groupChanged":
+        return this.emit("groupChanged", undefined);
       case "kicked":
         this.closedByUser = true;
         this.commit({ conn: "closed" });

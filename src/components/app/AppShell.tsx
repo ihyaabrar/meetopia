@@ -4,10 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { RoomClient, type RoomSnapshot } from "@/client/roomClient";
 import { MediaManager } from "@/client/media";
 import { api } from "@/client/api";
+import { applyPrefsToDocument, getPrefs } from "@/client/prefs";
+import { desktopNotify, playSound } from "@/client/sounds";
 import { useI18n } from "@/i18n/client";
 import { ToastProvider, useToast } from "@/components/Toasts";
 import { Logo, LogoMark } from "@/components/Logo";
-import { Icon } from "@/components/Icon";
+import { Icon, type IconName } from "@/components/Icon";
 import { AvatarCanvas } from "@/components/AvatarCanvas";
 import { Modal } from "@/components/Modal";
 import { zoneAt, type ObjectAction } from "@/shared/map";
@@ -21,8 +23,9 @@ import { NotesPanel } from "./NotesPanel";
 import { DeviceCheck } from "./DeviceCheck";
 import { Tips } from "./Tips";
 import { CreateGroup } from "./CreateGroup";
-import { ProfileModal } from "./ProfileModal";
-import { GroupSettings } from "./GroupSettings";
+import { UserSettings, type UserSection } from "./UserSettings";
+import { GroupSettings, type GroupSection } from "./GroupSettings";
+import { GroupIcon } from "@/components/GroupIcon";
 import type { ChatTarget, GroupDetail, GroupSummary, Me, MemberInfo } from "./types";
 
 const EMPTY_SNAP: RoomSnapshot = {
@@ -43,15 +46,6 @@ export function AppShell(props: { initialUser: Me; initialGroups: GroupSummary[]
   );
 }
 
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
-
 function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups: GroupSummary[] }) {
   const { t } = useI18n();
   const toast = useToast();
@@ -67,6 +61,17 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
   const [modal, setModal] = useState<
     null | "create" | "profile" | "settings" | "invites" | "devices" | "tips"
   >(null);
+  const [userSection, setUserSection] = useState<UserSection>("account");
+  const [groupSection, setGroupSection] = useState<GroupSection | undefined>(undefined);
+  const [railMenu, setRailMenu] = useState<{ group: GroupSummary; x: number; y: number } | null>(null);
+  const openGroupSettings = (s?: GroupSection) => {
+    setGroupSection(s);
+    setModal("settings");
+  };
+  const openUserSettings = (s: UserSection = "account") => {
+    setUserSection(s);
+    setModal("profile");
+  };
   const [joining, setJoining] = useState(false);
   const [peerCard, setPeerCard] = useState<{ member: MemberInfo; presence?: Presence } | null>(null);
   const [showNav, setShowNav] = useState(false);
@@ -83,6 +88,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
     const g = new URLSearchParams(location.search).get("g");
     setActiveId(g && initialGroups.some((x) => x.id === g) ? g : (initialGroups[0]?.id ?? null));
     setDevLink(sessionStorage.getItem("mt_dev_verify"));
+    applyPrefsToDocument();
     setBannerHidden(!!sessionStorage.getItem("mt_banner_hidden"));
     try {
       if (!localStorage.getItem("mt_tips_seen")) {
@@ -134,6 +140,12 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
     if (!sessionStorage.getItem("mt_device_checked")) {
       setJoining(true);
       setModal("devices");
+    } else if (getPrefs().micOnJoin) {
+      // Pilihan pengguna di pengaturan: mikrofon langsung menyala setelah tersambung.
+      const off = r.on("welcome", () => {
+        off();
+        void m.setMic(true);
+      });
     }
     return () => {
       m.destroy();
@@ -153,6 +165,8 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
     media.setErrorHandler((e) => toast({ text: t(`media.err.${e}`), kind: "error" }));
     const offs = [
       room.on("knock", (k) => {
+        if (getPrefs().soundKnock) playSound("knock");
+        if (getPrefs().desktopNotify) desktopNotify("Meetopia", t("knock.incoming", { name: k.fromName }));
         const zone = k.zoneId ? room.snapshot.map?.zones.find((z) => z.id === k.zoneId) : null;
         toast({
           text: zone
@@ -177,6 +191,16 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
         });
       }),
       room.on("screenRejected", () => media.screenRejected()),
+      room.on("groupChanged", () => {
+        void loadDetail(room.groupId);
+        void refreshGroups();
+      }),
+      room.on("chat", (m) => {
+        if (m.kind !== "dm" || m.senderId === me.id) return;
+        const prefs = getPrefs();
+        if (prefs.soundDm) playSound("dm");
+        if (prefs.desktopNotify) desktopNotify(m.senderName, m.body.slice(0, 140));
+      }),
       room.on(
         "error",
         (code) => code === "rateLimited" && toast({ text: t("error.rateLimited"), kind: "error" }),
@@ -195,7 +219,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
       }),
     ];
     return () => offs.forEach((o) => o());
-  }, [room, media, t, toast, refreshGroups]);
+  }, [room, media, t, toast, refreshGroups, loadDetail, me.id]);
 
   // Aktivitas dalam aplikasi (bukan pelacakan layar/keystroke): cukup tanda "masih di sini" tiap 30 detik.
   useEffect(() => {
@@ -254,7 +278,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
   };
 
   const selectPeer = (member: MemberInfo, presence?: Presence) => {
-    if (member.id === me.id) return setModal("profile");
+    if (member.id === me.id) return openUserSettings("avatar");
     setPeerCard({ member, presence });
   };
 
@@ -281,10 +305,15 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
             className="rail-item"
             aria-current={g.id === activeId}
             onClick={() => switchGroup(g.id)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setRailMenu({ group: g, x: e.clientX, y: e.clientY });
+            }}
             title={g.name}
             aria-label={g.name}
+            aria-haspopup="menu"
           >
-            {initials(g.name)}
+            <GroupIcon name={g.name} color={g.iconColor} symbol={g.iconSymbol} size={48} />
           </button>
         ))}
         <button
@@ -303,7 +332,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
           {detail && (
             <button
               className="icon-btn"
-              onClick={() => setModal("settings")}
+              onClick={() => openGroupSettings()}
               aria-label={t("settings.open")}
               title={t("settings.open")}
             >
@@ -382,9 +411,9 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
           </span>
           <button
             className="icon-btn"
-            onClick={() => setModal("profile")}
-            aria-label={t("profile.title")}
-            title={t("profile.title")}
+            onClick={() => openUserSettings()}
+            aria-label={t("us.open")}
+            title={t("us.open")}
           >
             <Icon name="settings" size={18} />
           </button>
@@ -541,6 +570,51 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
       )}
       <div className="drawer-backdrop" onClick={() => (setShowNav(false), setShowMembers(false))} />
 
+      {railMenu && (
+        <ContextMenu
+          x={railMenu.x}
+          y={railMenu.y}
+          label={railMenu.group.name}
+          onClose={() => setRailMenu(null)}
+          items={[
+            {
+              label: t("settings.open"),
+              icon: "settings",
+              run: () => {
+                switchGroup(railMenu.group.id);
+                openGroupSettings();
+              },
+            },
+            ...(can(railMenu.group.role, "createInvite")
+              ? [
+                  {
+                    label: t("invite.inviteMembers"),
+                    icon: "link" as const,
+                    run: () => {
+                      switchGroup(railMenu.group.id);
+                      setModal("invites");
+                    },
+                  },
+                ]
+              : []),
+            ...(railMenu.group.role !== "owner"
+              ? [
+                  {
+                    label: t("settings.leave"),
+                    icon: "logout" as const,
+                    danger: true,
+                    run: async () => {
+                      if (!confirm(t("settings.leaveConfirm"))) return;
+                      await api(`/api/groups/${railMenu.group.id}/members/${me.id}`, { method: "DELETE" });
+                      const gs = await refreshGroups();
+                      if (railMenu.group.id === activeId) setActiveId(gs[0]?.id ?? null);
+                    },
+                  },
+                ]
+              : []),
+          ]}
+        />
+      )}
       {modal === "create" && (
         <CreateGroup
           onClose={() => setModal(null)}
@@ -551,12 +625,20 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
           }}
         />
       )}
-      {modal === "profile" && <ProfileModal me={me} onClose={() => setModal(null)} onSaved={setMe} />}
+      {modal === "profile" && (
+        <UserSettings
+          me={me}
+          media={media}
+          initial={userSection}
+          onClose={() => setModal(null)}
+          onSaved={setMe}
+        />
+      )}
       {(modal === "settings" || modal === "invites") && detail && (
         <GroupSettings
           detail={detail}
           selfId={me.id}
-          initialTab={modal === "invites" ? "invites" : undefined}
+          initialTab={modal === "invites" ? "invites" : groupSection}
           onClose={() => setModal(null)}
           onChanged={() => {
             if (activeId) void loadDetail(activeId);
@@ -633,6 +715,79 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
           )}
         </Modal>
       )}
+    </div>
+  );
+}
+
+interface MenuItem {
+  label: string;
+  icon: IconName;
+  danger?: boolean;
+  run: () => void | Promise<void>;
+}
+
+/** Menu klik kanan sederhana (rail grup). Escape, klik di luar, atau gulir menutupnya. */
+function ContextMenu({
+  x,
+  y,
+  label,
+  items,
+  onClose,
+}: {
+  x: number;
+  y: number;
+  label: string;
+  items: MenuItem[];
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ left: x, top: y });
+  useEffect(() => {
+    const el = ref.current;
+    if (el) {
+      const r = el.getBoundingClientRect();
+      setPos({
+        left: Math.max(8, Math.min(x, window.innerWidth - r.width - 8)),
+        top: Math.max(8, Math.min(y, window.innerHeight - r.height - 8)),
+      });
+      el.querySelector<HTMLElement>("button")?.focus();
+    }
+    const onDown = (e: PointerEvent) => !el?.contains(e.target as Node) && onClose();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const btns = [...(el?.querySelectorAll<HTMLElement>("button") ?? [])];
+        const i = btns.indexOf(document.activeElement as HTMLElement);
+        btns[(i + (e.key === "ArrowDown" ? 1 : -1) + btns.length) % btns.length]?.focus();
+      }
+    };
+    window.addEventListener("pointerdown", onDown);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onClose);
+    return () => {
+      window.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onClose);
+    };
+  }, [x, y, onClose]);
+  return (
+    <div ref={ref} className="context-menu" role="menu" aria-label={label} style={pos}>
+      <div className="context-title">{label}</div>
+      {items.map((it) => (
+        <button
+          key={it.label}
+          role="menuitem"
+          className={it.danger ? "danger" : ""}
+          onClick={() => {
+            onClose();
+            void it.run();
+          }}
+        >
+          <Icon name={it.icon} size={16} />
+          {it.label}
+        </button>
+      ))}
     </div>
   );
 }

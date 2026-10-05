@@ -6,6 +6,8 @@ export interface GroupSummary {
   id: string;
   name: string;
   role: Role;
+  iconColor: string;
+  iconSymbol: string;
 }
 
 export interface MemberInfo {
@@ -16,7 +18,15 @@ export interface MemberInfo {
 }
 
 export interface GroupDetail {
-  group: { id: string; name: string; ownerId: string; recordingPolicy: string };
+  group: {
+    id: string;
+    name: string;
+    ownerId: string;
+    recordingPolicy: string;
+    description: string;
+    iconColor: string;
+    iconSymbol: string;
+  };
   role: Role;
   channels: Array<{ id: string; name: string; kind: string }>;
   members: MemberInfo[];

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { sql } from "@/server/db";
 import { ApiError, ok, parseBody, requirePermission, requireUser, route } from "@/server/api";
 import { getRole } from "@/server/repo";
-import { publishToRoom } from "@/realtime/bus";
+import { notifyGroupChanged, publishToRoom } from "@/realtime/bus";
 import { canChangeRole, roleRank } from "@/shared/roles";
 
 type Ctx = { params: Promise<{ groupId: string; userId: string }> };
@@ -16,6 +16,7 @@ export const PATCH = route<Ctx>(async (req, { params }) => {
   if (!canChangeRole(actorRole, target, role)) throw new ApiError(403, "forbidden");
   await sql("UPDATE memberships SET role = $3 WHERE user_id = $1 AND group_id = $2", [userId, groupId, role]);
   await publishToRoom(groupId, { control: { kind: "membership", userId, role } });
+  await notifyGroupChanged(groupId);
   return ok({ ok: true });
 });
 
@@ -32,5 +33,6 @@ export const DELETE = route<Ctx>(async (_req, { params }) => {
   }
   await sql("DELETE FROM memberships WHERE user_id = $1 AND group_id = $2", [userId, groupId]);
   await publishToRoom(groupId, { control: { kind: "membership", userId, role: null } });
+  await notifyGroupChanged(groupId);
   return ok({ ok: true });
 });

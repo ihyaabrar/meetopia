@@ -28,3 +28,8 @@ export async function publishToRoom(groupId: string, env: Envelope): Promise<voi
   const kv = await getKv();
   await kv.publish(keys.roomChannel(groupId), JSON.stringify(env));
 }
+
+/** Memberi tahu semua anggota di ruangan bahwa info grup (nama, ikon, kanal, peran) berubah. */
+export async function notifyGroupChanged(groupId: string): Promise<void> {
+  await publishToRoom(groupId, { msg: { t: "groupChanged" } });
+}

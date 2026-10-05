@@ -4,12 +4,15 @@ import { newId, newToken, hashToken } from "./ids";
 import { OFFICE_TEMPLATE, TEMPLATE_REV, type MapData } from "@/shared/map";
 import { sanitizeAvatar, type AvatarConfig } from "@/shared/avatar";
 import type { Role } from "@/shared/roles";
+import { defaultGroupColor, type GroupColor, type GroupSymbol } from "@/shared/groupIcon";
 import type { ChatMessage, SharedNote } from "@/shared/protocol";
 
 export interface GroupSummary {
   id: string;
   name: string;
   role: Role;
+  iconColor: string;
+  iconSymbol: string;
 }
 
 export interface Member {
@@ -25,9 +28,19 @@ export interface Channel {
   kind: string;
 }
 
-export async function createGroup(ownerId: string, name: string): Promise<string> {
+export async function createGroup(
+  ownerId: string,
+  name: string,
+  icon?: { color?: GroupColor; symbol?: GroupSymbol },
+): Promise<string> {
   const groupId = newId();
-  await sql("INSERT INTO groups (id, name, owner_id) VALUES ($1, $2, $3)", [groupId, name, ownerId]);
+  await sql("INSERT INTO groups (id, name, owner_id, icon_color, icon_symbol) VALUES ($1, $2, $3, $4, $5)", [
+    groupId,
+    name,
+    ownerId,
+    icon?.color ?? defaultGroupColor(groupId),
+    icon?.symbol ?? "initials",
+  ]);
   await sql("INSERT INTO memberships (user_id, group_id, role) VALUES ($1, $2, 'owner')", [ownerId, groupId]);
   // FR-72 & FR-73: ruangan 2D dan kanal "umum" dibuat otomatis.
   await sql("INSERT INTO channels (id, group_id, name) VALUES ($1, $2, 'umum')", [newId(), groupId]);
@@ -40,11 +53,24 @@ export async function createGroup(ownerId: string, name: string): Promise<string
 }
 
 export async function listGroups(userId: string): Promise<GroupSummary[]> {
-  return sql<GroupSummary>(
-    `SELECT g.id, g.name, m.role FROM memberships m JOIN groups g ON g.id = m.group_id
+  const rows = await sql<{
+    id: string;
+    name: string;
+    role: Role;
+    icon_color: string | null;
+    icon_symbol: string;
+  }>(
+    `SELECT g.id, g.name, m.role, g.icon_color, g.icon_symbol FROM memberships m JOIN groups g ON g.id = m.group_id
      WHERE m.user_id = $1 ORDER BY m.created_at`,
     [userId],
   );
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    role: r.role,
+    iconColor: r.icon_color ?? defaultGroupColor(r.id),
+    iconSymbol: r.icon_symbol,
+  }));
 }
 
 export async function getRole(userId: string, groupId: string): Promise<Role | null> {
@@ -55,11 +81,41 @@ export async function getRole(userId: string, groupId: string): Promise<Role | n
   return r?.role ?? null;
 }
 
+export interface GroupRow {
+  id: string;
+  name: string;
+  owner_id: string;
+  recording_policy: string;
+  description: string;
+  icon_color: string | null;
+  icon_symbol: string;
+}
+
 export async function getGroup(groupId: string) {
-  return one<{ id: string; name: string; owner_id: string; recording_policy: string }>(
-    "SELECT id, name, owner_id, recording_policy FROM groups WHERE id = $1",
+  return one<GroupRow>(
+    "SELECT id, name, owner_id, recording_policy, description, icon_color, icon_symbol FROM groups WHERE id = $1",
     [groupId],
   );
+}
+
+export const MAX_CHANNELS = 20;
+
+/** Nama kanal gaya Discord: huruf kecil, spasi jadi tanda hubung. */
+export function normalizeChannelName(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^\p{L}\p{N}_-]/gu, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 32);
+}
+
+export async function createChannel(groupId: string, name: string): Promise<Channel> {
+  const id = newId();
+  await sql("INSERT INTO channels (id, group_id, name) VALUES ($1, $2, $3)", [id, groupId, name]);
+  return { id, name, kind: "text" };
 }
 
 export async function listChannels(groupId: string): Promise<Channel[]> {

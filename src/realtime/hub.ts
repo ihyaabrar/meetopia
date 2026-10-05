@@ -617,8 +617,14 @@ export class RealtimeHub {
     try {
       await repo.insertMessages(batch);
     } catch (e) {
-      console.error("[realtime] gagal menyimpan pesan, dicoba lagi", e);
-      this.pendingMessages.unshift(...batch);
+      // Satu pesan yang kanalnya/pengirimnya sudah dihapus (pelanggaran foreign key) jangan
+      // sampai menahan pesan lain: simpan satu per satu, buang yang memang tidak bisa disimpan.
+      if ((e as { code?: string }).code !== "23503") {
+        console.error("[realtime] gagal menyimpan pesan, dicoba lagi", e);
+        this.pendingMessages.unshift(...batch);
+        return;
+      }
+      for (const m of batch) await repo.insertMessages([m]).catch(() => {});
     }
   }
 

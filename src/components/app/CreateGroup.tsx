@@ -4,6 +4,8 @@ import { useState } from "react";
 import { api, errorKey } from "@/client/api";
 import { useT } from "@/i18n/client";
 import { Modal } from "@/components/Modal";
+import { GroupIconPicker } from "@/components/GroupIconPicker";
+import { GROUP_COLOR_KEYS, type GroupColor, type GroupSymbol } from "@/shared/groupIcon";
 
 export function CreateGroup({
   onClose,
@@ -14,13 +16,19 @@ export function CreateGroup({
 }) {
   const t = useT();
   const [name, setName] = useState("");
+  const [icon, setIcon] = useState<{ color: GroupColor; symbol: GroupSymbol }>(() => ({
+    color: GROUP_COLOR_KEYS[Math.floor(Math.random() * GROUP_COLOR_KEYS.length)],
+    symbol: "initials",
+  }));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     try {
-      const r = await api<{ id: string }>("/api/groups", { body: { name } });
+      const r = await api<{ id: string }>("/api/groups", {
+        body: { name, iconColor: icon.color, iconSymbol: icon.symbol },
+      });
       onCreated(r.id);
     } catch (err) {
       setError(t(errorKey(err)));
@@ -43,6 +51,7 @@ export function CreateGroup({
             placeholder={t("group.namePlaceholder")}
           />
         </div>
+        <GroupIconPicker name={name} color={icon.color} symbol={icon.symbol} onChange={setIcon} />
         <p className="hint">{t("group.createIncludes")}</p>
         <div className="modal-actions">
           <button type="button" className="btn secondary" onClick={onClose}>

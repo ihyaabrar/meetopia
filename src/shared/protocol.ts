@@ -105,6 +105,7 @@ export type ServerMessage =
   | { t: "screenRejected"; presenterId: string }
   | { t: "sharedNote"; note: SharedNote }
   | { t: "map"; map: MapData }
+  | { t: "groupChanged" }
   | { t: "kicked"; reason: string }
   | { t: "error"; code: string }
   | { t: "pong" };

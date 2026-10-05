@@ -11,6 +11,7 @@
 import type { RoomClient } from "./roomClient";
 import type { Presence } from "@/shared/protocol";
 import { MAX_VIDEO_PEERS, audiblePeers } from "@/shared/proximity";
+import { getPrefs, setPrefs } from "./prefs";
 
 export interface RemoteMedia {
   peerId: string;
@@ -61,11 +62,13 @@ export class MediaManager {
   micTrack: MediaStreamTrack | null = null;
   camTrack: MediaStreamTrack | null = null;
   screenTrack: MediaStreamTrack | null = null;
-  micDeviceId: string | undefined;
-  camDeviceId: string | undefined;
-  speakerDeviceId: string | undefined;
-  /** Volume suara orang lain dikalikan nilai ini (untuk efek kebutuhan karakter di fase 2). */
-  masterVolume = 1;
+  micDeviceId: string | undefined = getPrefs().micDeviceId || undefined;
+  camDeviceId: string | undefined = getPrefs().camDeviceId || undefined;
+  speakerDeviceId: string | undefined = getPrefs().speakerDeviceId || undefined;
+  /** Volume suara orang lain dikalikan nilai ini (pengaturan "Volume orang lain"). */
+  get masterVolume() {
+    return getPrefs().othersVolume;
+  }
 
   private links = new Map<string, Link>();
   private audioCtx: AudioContext | null = null;
@@ -165,7 +168,8 @@ export class MediaManager {
             audio: {
               deviceId: this.micDeviceId ? { exact: this.micDeviceId } : undefined,
               echoCancellation: true,
-              noiseSuppression: true,
+              noiseSuppression: getPrefs().noiseSuppression,
+              autoGainControl: getPrefs().noiseSuppression,
             },
           });
           this.micTrack = s.getAudioTracks()[0];
@@ -240,8 +244,17 @@ export class MediaManager {
     this.room.updateSelf({ media: { mic: !!this.micTrack?.enabled, cam: !!this.camTrack, screen: false } });
   }
 
+  /** Ambil ulang mikrofon (mis. setelah pengaturan peredam bising diubah), bila sedang menyala. */
+  async restartMic() {
+    if (!this.micTrack) return;
+    this.micTrack.stop();
+    this.micTrack = null;
+    await this.setMic(true);
+  }
+
   async switchMic(deviceId: string) {
     this.micDeviceId = deviceId || undefined;
+    setPrefs({ micDeviceId: deviceId });
     if (this.micTrack) {
       this.micTrack.stop();
       this.micTrack = null;
@@ -251,11 +264,13 @@ export class MediaManager {
 
   async switchCam(deviceId: string) {
     this.camDeviceId = deviceId || undefined;
+    setPrefs({ camDeviceId: deviceId });
     if (this.camTrack) await this.setCam(true);
   }
 
   switchSpeaker(deviceId: string) {
     this.speakerDeviceId = deviceId || undefined;
+    setPrefs({ speakerDeviceId: deviceId });
     for (const l of this.links.values()) void this.applySink(l.audioEl);
   }
 

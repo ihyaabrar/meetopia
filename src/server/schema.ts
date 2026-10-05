@@ -34,6 +34,10 @@ CREATE TABLE IF NOT EXISTS groups (
   recording_policy TEXT NOT NULL DEFAULT 'disabled',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Ikon & deskripsi grup (ditambahkan setelah rilis awal; aman dijalankan berulang).
+ALTER TABLE groups ADD COLUMN IF NOT EXISTS icon_color TEXT;
+ALTER TABLE groups ADD COLUMN IF NOT EXISTS icon_symbol TEXT NOT NULL DEFAULT 'initials';
+ALTER TABLE groups ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS channels (
   id TEXT PRIMARY KEY,
