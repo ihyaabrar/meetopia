@@ -16,12 +16,31 @@ export async function GET() {
     database = (e as Error).message === "dbNotConfigured" ? "notConfigured" : "error";
     if (database === "error") databaseError = code ?? (e as Error).name;
   }
+  // Uji koneksi Redis sungguhan (PING) bila URL tersedia.
+  let redisPing: "ok" | "error" | "notConfigured" = "notConfigured";
+  let redisError: string | undefined;
+  const rurl = redisUrl();
+  if (rurl) {
+    const { Redis } = await import("ioredis");
+    const r = new Redis(rurl, { lazyConnect: true, maxRetriesPerRequest: 1, connectTimeout: 5000 });
+    try {
+      await r.connect();
+      redisPing = (await r.ping()) === "PONG" ? "ok" : "error";
+    } catch (e) {
+      redisPing = "error";
+      redisError = (e as { code?: string }).code ?? (e as Error).name;
+    } finally {
+      r.disconnect();
+    }
+  }
   const checks = {
     vercel: onVercel,
     database,
     databaseError,
     authSecret: !!process.env.AUTH_SECRET,
-    redis: !!redisUrl(),
+    redis: !!rurl,
+    redisPing,
+    redisError,
     appUrl: !!process.env.APP_URL,
     realtime: process.env.NEXT_PUBLIC_REALTIME_URL ? "external" : "builtin",
     // Commit yang sedang aktif (disediakan Vercel), untuk memastikan redeploy sudah terjadi.
@@ -35,6 +54,6 @@ export async function GET() {
   const ok =
     database === "ok" &&
     (checks.authSecret || process.env.NODE_ENV !== "production") &&
-    (!onVercel || checks.redis);
+    (!onVercel || redisPing === "ok");
   return NextResponse.json({ ok, ...checks }, { status: ok ? 200 : 503 });
 }
