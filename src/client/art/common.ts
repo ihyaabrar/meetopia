@@ -1,5 +1,5 @@
 /** Palet dan utilitas gambar bersama untuk semua aset in-game (dibuat sendiri, prosedural). */
-export const INK = "#1b3a2a";
+export const INK = "#2b2623";
 export const C = {
   ink: INK,
   green: "#3f9a55",
@@ -9,12 +9,12 @@ export const C = {
   wood: "#c99a66",
   woodLight: "#ddb684",
   woodDark: "#9a6d43",
-  shadow: "rgba(16,38,25,0.20)",
-  wallCap: "#22402e",
-  wallCapLight: "#2f5a41",
-  wallFace: "#e6ede0",
-  wallFaceDark: "#d5e0cf",
-  baseboard: "#a98a63",
+  shadow: "rgba(30,24,20,0.20)",
+  wallCap: "#3a3632",
+  wallCapLight: "#4d4842",
+  wallFace: "#ece7df",
+  wallFaceDark: "#e2dcd2",
+  baseboard: "#a89478",
   glass: "#bfe0ea",
   terracotta: "#c97a52",
 };
@@ -69,7 +69,7 @@ export function groundShadow(
   alpha = 0.2,
 ) {
   // Dua elips bertumpuk: tepi lembut tanpa gradien (murah untuk digambar tiap frame).
-  ctx.fillStyle = `rgba(16,38,25,${alpha * 0.5})`;
+  ctx.fillStyle = `rgba(30,24,20,${alpha * 0.5})`;
   ctx.beginPath();
   ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
   ctx.fill();
@@ -81,7 +81,7 @@ export function groundShadow(
 /** Bayangan kotak lembut di bawah perabot (offset ke kanan bawah). */
 export function boxShadow(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r = 6) {
   ctx.save();
-  ctx.fillStyle = "rgba(16,38,25,0.16)";
+  ctx.fillStyle = "rgba(30,24,20,0.16)";
   rr(ctx, x + 3, y + 5, w, h, r);
   ctx.fill();
   ctx.restore();

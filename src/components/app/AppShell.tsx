@@ -43,13 +43,6 @@ export function AppShell(props: { initialUser: Me; initialGroups: GroupSummary[]
   );
 }
 
-const GROUP_COLORS = ["#3f9a55", "#3a8fb7", "#c9784a", "#8a63c9", "#d2554a", "#2f8f87", "#b58a2a"];
-function groupColor(id: string) {
-  let h = 0;
-  for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) | 0;
-  return GROUP_COLORS[Math.abs(h) % GROUP_COLORS.length];
-}
-
 function initials(name: string) {
   return name
     .split(/\s+/)
@@ -286,7 +279,6 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
           <button
             key={g.id}
             className="rail-item"
-            style={{ ["--g" as string]: groupColor(g.id) }}
             aria-current={g.id === activeId}
             onClick={() => switchGroup(g.id)}
             title={g.name}
@@ -425,11 +417,6 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
               ))}
             </div>
           )}
-          {detail && can(role, "createInvite") && (
-            <button className="btn small hide-sm" onClick={() => setModal("invites")}>
-              <Icon name="link" size={15} /> {t("invite.inviteMembers")}
-            </button>
-          )}
           {detail && (
             <button
               className="icon-btn"
@@ -443,7 +430,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
         </header>
         {!me.emailVerified && !bannerHidden && (
           <div className="banner" role="status">
-            <span aria-hidden>✉️</span>
+            <Icon name="mail" size={16} />
             <span className="grow">{t("profile.verifyBanner", { email: me.email })}</span>
             {devLink && <a href={devLink}>{t("profile.devVerify")}</a>}
             <button
@@ -494,9 +481,16 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
               />
             ) : (
               <div className="stage loading-stage">
-                <div className="loading-mark">
-                  <LogoMark size={56} />
-                  <span>{t(snap.conn === "closed" ? "conn.closed" : "conn.connecting")}</span>
+                <div className="loading-mark" role="status">
+                  <LogoMark size={48} />
+                  {snap.configError ? (
+                    <>
+                      <b>{t("config.title")}</b>
+                      <span>{t(`error.${snap.configError}`)}</span>
+                    </>
+                  ) : (
+                    <span>{t(snap.conn === "closed" ? "conn.closed" : "conn.connecting")}</span>
+                  )}
                 </div>
               </div>
             )}

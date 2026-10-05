@@ -20,7 +20,7 @@ const nextUpgrade = app.getUpgradeHandler();
 
 const server = createServer((req, res) => void handle(req, res));
 server.on("upgrade", (req, socket, head) => {
-  if (req.url?.startsWith("/ws")) hub.handleUpgrade(req, socket, head);
+  if (req.url?.startsWith("/ws") || req.url?.startsWith("/api/ws")) hub.handleUpgrade(req, socket, head);
   else void nextUpgrade(req, socket, head);
 });
 

@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import "./globals.css";
 import { I18nProvider } from "@/i18n/client";
-import { DEFAULT_LOCALE, LOCALE_COOKIE, isLocale, translate } from "@/i18n";
+import { DEFAULT_LOCALE, LOCALE_COOKIE, THEME_COOKIE, isLocale, isTheme, translate } from "@/i18n";
 import { getSessionUser } from "@/server/auth";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -11,10 +11,13 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: "Meetopia", description: translate(locale, "meta.description") };
 }
 
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#1b3a2a" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#141312" };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const cookieLocale = (await cookies()).get(LOCALE_COOKIE)?.value;
+  const jar = await cookies();
+  const cookieLocale = jar.get(LOCALE_COOKIE)?.value;
+  const cookieTheme = jar.get(THEME_COOKIE)?.value;
+  const theme = isTheme(cookieTheme) ? cookieTheme : "dark";
   const user = await getSessionUser().catch(() => null);
   const locale = isLocale(user?.locale)
     ? user.locale
@@ -22,7 +25,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       ? cookieLocale
       : DEFAULT_LOCALE;
   return (
-    <html lang={locale} data-contrast={user?.highContrast ? "high" : undefined}>
+    <html lang={locale} data-theme={theme} data-contrast={user?.highContrast ? "high" : undefined}>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />

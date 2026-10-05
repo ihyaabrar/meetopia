@@ -13,6 +13,8 @@ export interface RoomSnapshot {
   peers: Map<string, Presence>;
   map: MapData | null;
   sharedNote: SharedNote | null;
+  /** Kode galat konfigurasi server (mis. env Vercel belum diisi); bila ada, tidak dicoba ulang. */
+  configError?: string;
   version: number;
 }
 
@@ -31,7 +33,7 @@ type EventMap = {
 
 type Listener<K extends keyof EventMap> = (e: EventMap[K]) => void;
 
-function realtimeUrl(token: string): string {
+function realtimeUrl(token: string, wsPath = "/ws"): string {
   // Khusus pengembangan/tes: paksa instance real-time tertentu (uji multi-instance lewat Redis).
   const devOverride =
     process.env.NODE_ENV !== "production"
@@ -40,7 +42,7 @@ function realtimeUrl(token: string): string {
   const base = devOverride || process.env.NEXT_PUBLIC_REALTIME_URL;
   if (base) return `${base.replace(/\/$/, "")}/ws?token=${encodeURIComponent(token)}`;
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  return `${proto}//${location.host}/ws?token=${encodeURIComponent(token)}`;
+  return `${proto}//${location.host}${wsPath}?token=${encodeURIComponent(token)}`;
 }
 
 export class RoomClient {
@@ -92,6 +94,7 @@ export class RoomClient {
   async connect() {
     this.closedByUser = false;
     let token: string;
+    let wsPath: string | undefined;
     try {
       const res = await fetch(`/api/groups/${this.groupId}/realtime-token`, { method: "POST" });
       if (res.status === 401 || res.status === 403 || res.status === 404) {
@@ -99,12 +102,23 @@ export class RoomClient {
         this.emit("kicked", "forbidden");
         return;
       }
-      token = (await res.json()).token;
+      const body = (await res.json().catch(() => ({}))) as {
+        token?: string;
+        wsPath?: string;
+        error?: string;
+      };
+      if (res.status === 503 && body.error) {
+        this.commit({ conn: "closed", configError: body.error });
+        return;
+      }
+      if (!res.ok || !body.token) return this.scheduleReconnect();
+      token = body.token;
+      wsPath = body.wsPath;
     } catch {
       return this.scheduleReconnect();
     }
     if (this.closedByUser) return;
-    const ws = new WebSocket(realtimeUrl(token));
+    const ws = new WebSocket(realtimeUrl(token, wsPath));
     this.ws = ws;
     ws.onmessage = (ev) => this.onMessage(JSON.parse(String(ev.data)) as ServerMessage);
     ws.onopen = () => {

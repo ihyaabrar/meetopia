@@ -20,3 +20,10 @@ export function translate(locale: Locale, key: string, vars?: Vars): string {
   if (!vars) return raw;
   return raw.replace(/\{(\w+)\}/g, (_, k: string) => (k in vars ? String(vars[k]) : `{${k}}`));
 }
+
+/** Tema tampilan; gelap adalah bawaan sesuai DESIGN.md. Disimpan per perangkat di cookie. */
+export const THEMES = ["dark", "light", "system"] as const;
+export type Theme = (typeof THEMES)[number];
+export const THEME_COOKIE = "mt_theme";
+export const isTheme = (v: unknown): v is Theme =>
+  typeof v === "string" && (THEMES as readonly string[]).includes(v);

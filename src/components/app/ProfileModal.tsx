@@ -6,7 +6,7 @@ import { api, errorKey } from "@/client/api";
 import { useI18n } from "@/i18n/client";
 import { Modal } from "@/components/Modal";
 import { AvatarBuilder } from "@/components/AvatarBuilder";
-import { LOCALES, type Locale } from "@/i18n";
+import { LOCALES, THEMES, THEME_COOKIE, isTheme, type Locale, type Theme } from "@/i18n";
 import type { Me } from "./types";
 
 /** Pengaturan profil & avatar, bahasa, kontras tinggi, data pribadi, keluar. */
@@ -25,6 +25,10 @@ export function ProfileModal({
   const [avatar, setAvatar] = useState(me.avatar);
   const [locale, setLoc] = useState<Locale>((me.locale as Locale) ?? "id");
   const [contrast, setContrast] = useState(me.highContrast);
+  const [theme, setTheme] = useState<Theme>(() => {
+    const v = typeof document === "undefined" ? null : document.documentElement.dataset.theme;
+    return isTheme(v) ? v : "dark";
+  });
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -38,6 +42,8 @@ export function ProfileModal({
       });
       setLocale(locale);
       document.documentElement.dataset.contrast = contrast ? "high" : "";
+      document.documentElement.dataset.theme = theme;
+      document.cookie = `${THEME_COOKIE}=${theme}; path=/; max-age=31536000; samesite=lax`;
       onSaved(r.user);
       onClose();
     } catch (e) {
@@ -112,6 +118,21 @@ export function ProfileModal({
             {LOCALES.map((l) => (
               <option key={l} value={l}>
                 {l === "id" ? "Bahasa Indonesia" : "English"}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="pf-theme">{t("profile.theme")}</label>
+          <select
+            id="pf-theme"
+            className="input"
+            value={theme}
+            onChange={(e) => setTheme(e.target.value as Theme)}
+          >
+            {THEMES.map((th) => (
+              <option key={th} value={th}>
+                {t(`profile.theme.${th}`)}
               </option>
             ))}
           </select>

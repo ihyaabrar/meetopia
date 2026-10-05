@@ -49,7 +49,7 @@ function RegisterForm() {
   return (
     <div className="auth-wrap">
       <form className={`card auth-card ${step === 2 ? "wide" : ""}`} onSubmit={submit}>
-        <span className="badge">{t("auth.step", { n: step, total: 2 })}</span>
+        <span className="step">{t("auth.step", { n: step, total: 2 })}</span>
         <h1 style={{ marginTop: 10 }}>{step === 1 ? t("auth.registerTitle") : t("auth.avatarTitle")}</h1>
         <p className="sub">{step === 1 ? t("auth.registerSub") : t("auth.avatarSub")}</p>
         {error && (

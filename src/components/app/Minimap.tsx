@@ -74,7 +74,7 @@ export function Minimap({ scene, getPeople, getView, onPick, label }: Props) {
         ctx.fillStyle = p.self ? "#ffffff" : COLORS[p.status];
         ctx.fill();
         ctx.lineWidth = p.self ? 2 : 1;
-        ctx.strokeStyle = p.self ? "#3f9a55" : "#1b3a2a";
+        ctx.strokeStyle = p.self ? "#1a1917" : "#2b2623";
         ctx.stroke();
       }
     };

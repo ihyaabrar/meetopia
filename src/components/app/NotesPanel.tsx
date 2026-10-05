@@ -32,11 +32,14 @@ export function NotesPanel({ groupId, role, shared, selfId, tab, setTab, onClose
   const [draftBase, setDraftBase] = useState<string | null>(null);
   const [savingShared, setSavingShared] = useState(false);
 
-  useEffect(() => {
+  const [privError, setPrivError] = useState(false);
+  const loadPriv = () => {
+    setPrivError(false);
     api<{ note: { content: string } }>("/api/notes/me")
       .then((r) => setPriv(r.note.content))
-      .catch(() => setPriv(""));
-  }, []);
+      .catch(() => setPrivError(true));
+  };
+  useEffect(loadPriv, []);
 
   const changePriv = (v: string) => {
     setPriv(v);
@@ -86,10 +89,10 @@ export function NotesPanel({ groupId, role, shared, selfId, tab, setTab, onClose
           aria-selected={tab === "private"}
           onClick={() => setTab("private")}
         >
-          🔒 {t("notes.private")}
+          {t("notes.private")}
         </button>
         <button role="tab" className="tab" aria-selected={tab === "shared"} onClick={() => setTab("shared")}>
-          👥 {t("notes.shared")}
+          {t("notes.shared")}
         </button>
       </div>
       <div className="content">
@@ -98,6 +101,14 @@ export function NotesPanel({ groupId, role, shared, selfId, tab, setTab, onClose
             <p className="hint" style={{ margin: 0 }}>
               {t("notes.privateHint")}
             </p>
+            {privError && (
+              <p className="error-text" role="alert">
+                {t("notes.loadError")}{" "}
+                <button className="btn small secondary" onClick={loadPriv}>
+                  {t("common.retry")}
+                </button>
+              </p>
+            )}
             <textarea
               className="input"
               aria-label={t("notes.private")}

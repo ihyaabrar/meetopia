@@ -40,6 +40,8 @@ export function ChatPanel({
   const [unread, setUnread] = useState<Record<string, boolean>>({});
   const [text, setText] = useState("");
   const [collapsed, setCollapsed] = useState(false);
+  const [failed, setFailed] = useState<Record<string, boolean>>({});
+  const [retry, setRetry] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
   const key = chatKey(target);
   const keyRef = useRef(key);
@@ -52,6 +54,7 @@ export function ChatPanel({
   useEffect(() => {
     if (loaded.current.has(key) || target.kind === "nearby") return;
     loaded.current.add(key);
+    setFailed((f) => ({ ...f, [key]: false }));
     const url =
       target.kind === "channel"
         ? `/api/groups/${detail.group.id}/channels/${target.id}/messages`
@@ -64,8 +67,11 @@ export function ChatPanel({
           return { ...s, [key]: [...r.messages, ...live.filter((m) => !ids.has(m.id))] };
         }),
       )
-      .catch(() => loaded.current.delete(key));
-  }, [key, target, detail.group.id]);
+      .catch(() => {
+        loaded.current.delete(key);
+        setFailed((f) => ({ ...f, [key]: true }));
+      });
+  }, [key, target, detail.group.id, retry]);
 
   useEffect(() => {
     if (!room) return;
@@ -126,7 +132,7 @@ export function ChatPanel({
               aria-selected={key === k}
               onClick={() => setTarget({ kind: "channel", id: c.id })}
             >
-              # {c.name} {unread[k] && "•"}
+              # {c.name} {unread[k] && <span className="unread" aria-label={t("chat.unread")} />}
             </button>
           );
         })}
@@ -136,7 +142,7 @@ export function ChatPanel({
           aria-selected={key === "nearby"}
           onClick={() => setTarget({ kind: "nearby" })}
         >
-          📍 {t("chat.nearby")} {unread.nearby && "•"}
+          {t("chat.nearby")} {unread.nearby && <span className="unread" aria-label={t("chat.unread")} />}
         </button>
         {dmTabs.map((id) => {
           const k = `dm:${id}`;
@@ -148,7 +154,8 @@ export function ChatPanel({
                 aria-selected={key === k}
                 onClick={() => setTarget({ kind: "dm", userId: id })}
               >
-                @ {memberById.get(id)?.name ?? "?"} {unread[k] && "•"}
+                @ {memberById.get(id)?.name ?? "?"}{" "}
+                {unread[k] && <span className="unread" aria-label={t("chat.unread")} />}
               </button>
               <button
                 className="icon-btn"
@@ -176,7 +183,15 @@ export function ChatPanel({
       {!collapsed && (
         <>
           <div className="messages" ref={listRef} aria-live="polite">
-            {messages.length === 0 && (
+            {failed[key] && (
+              <div className="empty" role="alert">
+                {t("chat.loadError")}{" "}
+                <button className="btn small secondary" onClick={() => setRetry((r) => r + 1)}>
+                  {t("common.retry")}
+                </button>
+              </div>
+            )}
+            {!failed[key] && messages.length === 0 && (
               <div className="empty">
                 {target.kind === "nearby" ? t("chat.emptyNearby") : t("chat.empty")}
               </div>

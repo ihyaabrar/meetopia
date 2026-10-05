@@ -155,7 +155,7 @@ export function GroupSettings({
           <div className="modal-actions">
             {role === "owner" && (
               <button
-                className="btn danger"
+                className="btn danger-outline"
                 onClick={() => {
                   if (confirm(t("settings.deleteConfirm", { name: detail.group.name })))
                     void run(async () => {
@@ -225,7 +225,7 @@ export function GroupSettings({
             {t("invite.create")}
           </button>
           {newLink && (
-            <div className="list-row" style={{ marginTop: 12, background: "var(--green-100)" }}>
+            <div className="list-row highlight" style={{ marginTop: 12 }}>
               <code className="grow" style={{ wordBreak: "break-all" }} data-testid="invite-link">
                 {newLink}
               </code>
@@ -327,7 +327,7 @@ export function GroupSettings({
           {role !== "owner" && (
             <div className="modal-actions">
               <button
-                className="btn danger"
+                className="btn danger-outline"
                 onClick={() =>
                   confirm(t("settings.leaveConfirm")) &&
                   run(async () => {

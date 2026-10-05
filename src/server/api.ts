@@ -4,6 +4,7 @@ import type { z } from "zod";
 import { getSessionUser, type SessionUser } from "./auth";
 import { getRole } from "./repo";
 import { can, type Permission, type Role } from "@/shared/roles";
+import { ConfigError } from "./env";
 
 export class ApiError extends Error {
   constructor(
@@ -64,6 +65,10 @@ export function route<C>(fn: Handler<C>): Handler<C> {
       return await fn(req, ctx);
     } catch (e) {
       if (e instanceof ApiError) return NextResponse.json({ error: e.code }, { status: e.status });
+      if (e instanceof ConfigError) {
+        console.error(`[config] ${e.code}: lihat README bagian Deploy ke Vercel`);
+        return NextResponse.json({ error: e.code }, { status: 503 });
+      }
       console.error(e);
       return NextResponse.json({ error: "server" }, { status: 500 });
     }

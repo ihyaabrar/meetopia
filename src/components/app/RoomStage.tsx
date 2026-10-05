@@ -514,7 +514,7 @@ export function RoomStage({
       <div className="hud-tl">
         {zoneHere && (
           <span className={`hud-chip ${zoneHere.private ? "private" : ""}`}>
-            <span aria-hidden>{zoneHere.private ? "🔒" : "📍"}</span>
+            <Icon name={zoneHere.private ? "lock" : "pin"} size={14} />
             <b>{t(zoneHere.label)}</b>
             {zoneHere.private && <span className="sub">{t("room.isolated")}</span>}
           </span>
@@ -525,7 +525,7 @@ export function RoomStage({
         {snap.conn !== "open" && <span className="hud-chip warn">⟳ {t(`conn.${snap.conn}`)}</span>}
         {self?.media.screen && (
           <span className="hud-chip danger">
-            🖥️ {t("media.youPresent")}
+            <Icon name="screen" size={14} /> {t("media.youPresent")}
             <button className="btn small danger" onClick={() => void media.setScreen(false)}>
               {t("media.stop")}
             </button>
@@ -591,9 +591,6 @@ export function RoomStage({
       {hint && (
         <div ref={hintRef} className="hint-pop" role="dialog" aria-label={t(hint.obj.label!)}>
           <div className="title">
-            <span className="hint-icon" aria-hidden>
-              ✨
-            </span>
             {t(hint.obj.label!)}
             <span className="spacer" />
             <button
@@ -664,7 +661,7 @@ export function RoomStage({
             aria-label={t("emote.title")}
             title={t("emote.title")}
           >
-            <span style={{ fontSize: 18 }}>😊</span>
+            <Icon name="smile" />
           </button>
           <label className="dock-select" title={t("status.label")}>
             <span className={`status-dot s-${self?.status ?? "active"}`} />

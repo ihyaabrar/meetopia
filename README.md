@@ -1,6 +1,6 @@
 # Meetopia
 
-**Work • Talk • Together** — kantor virtual 2D berbasis browser. Tampilannya seperti Discord (daftar grup di kiri, kanal, panel anggota), tetapi setiap grup punya ruangan 2D sendiri tempat anggotanya hadir sebagai avatar kartun. Suara mengikuti jarak, bisa berbagi layar, dan ada catatan pribadi maupun bersama.
+**Work • Talk • Together**: kantor virtual 2D berbasis browser. Tampilannya seperti Discord (daftar grup di kiri, kanal, panel anggota), tetapi setiap grup punya ruangan 2D sendiri tempat anggotanya hadir sebagai avatar kartun. Suara mengikuti jarak, bisa berbagi layar, dan ada catatan pribadi maupun bersama.
 
 Spesifikasi lengkap: [`docs/PRD.md`](docs/PRD.md) (dengan status centang per milestone).
 
@@ -62,34 +62,48 @@ PRD meminta solusi paling sederhana untuk pengembang tunggal yang baru mengenal 
 
 ### Aturan PRD yang ditegakkan di kode
 
-1. **Posisi & kehadiran tidak ditulis ke Neon** — hanya Redis/memori (`src/realtime/hub.ts`). Pesan chat ditulis per batch setiap 1 detik; riwayat dipangkas setelah 30 hari.
+1. **Posisi & kehadiran tidak ditulis ke Neon**: hanya Redis/memori (`src/realtime/hub.ts`). Pesan chat ditulis per batch setiap 1 detik; riwayat dipangkas setelah 30 hari.
 2. **Sambung ulang otomatis** dengan backoff; posisi terakhir disimpan di Redis dan dipulihkan.
 3. **Status ruang lewat pub/sub** (`room:<groupId>`); tiap instance hanya menulis kehadiran pengguna yang soketnya ia pegang.
 4. **Hak akses di server** untuk setiap API dan pesan WebSocket (`src/shared/roles.ts`, `src/server/api.ts`). Masuk ruang privat yang sedang dipakai ditolak di server sampai ketukan diterima.
-5. **Tidak ada pelacakan layar/keystroke** — "jauh dari layar" hanya dari aktivitas di dalam aplikasi (sinyal "masih di sini" paling sering tiap 30 detik, tanpa isi).
+5. **Tidak ada pelacakan layar/keystroke**: "jauh dari layar" hanya dari aktivitas di dalam aplikasi (sinyal "masih di sini" paling sering tiap 30 detik, tanpa isi).
 6. **Mikrofon dan kamera mati saat masuk.**
 
 ## Deploy
 
-### Opsi A — satu server Node (paling mudah)
+### Vercel (disarankan)
 
-Railway, Render, Fly.io, atau VPS: `npm run build && npm start` dengan `DATABASE_URL` (Neon, pakai connection string _pooled_), `AUTH_SECRET`, `APP_URL`, dan opsional `REDIS_URL`/`SMTP_URL`. Next.js dan WebSocket jalan di port yang sama.
+Vercel tidak menyimpan file dan tiap koneksi bisa jatuh ke instance berbeda, jadi tiga layanan gratis ini **wajib** diisi. Tanpa itu, daftar akun gagal dengan pesan "Database belum diatur" atau "AUTH_SECRET belum diisi".
 
-### Opsi B — Vercel + server real-time terpisah
+1. **Neon** (database): buat proyek di neon.tech, salin _connection string_ (pilih yang _pooled_, berakhiran `?sslmode=require`).
+2. **Upstash** (Redis): buat database Redis di upstash.com, salin URL yang diawali `rediss://`.
+3. **AUTH_SECRET**: teks acak minimal 32 karakter, misalnya hasil `openssl rand -base64 32`.
+4. Di Vercel: **Project → Settings → Environment Variables**, isi:
 
-Sesuai cadangan di bagian 7 PRD:
+   | Nama                  | Isi                                                                     |
+   | --------------------- | ----------------------------------------------------------------------- |
+   | `DATABASE_URL`        | connection string Neon                                                  |
+   | `REDIS_URL`           | URL Upstash (`rediss://...`)                                            |
+   | `AUTH_SECRET`         | teks acak tadi                                                          |
+   | `APP_URL`             | alamat situsmu, mis. `https://meetopia.vercel.app`                      |
+   | `SMTP_URL` (opsional) | untuk email verifikasi/reset; tanpa ini link hanya muncul di log Vercel |
 
-1. Deploy repo ini ke Vercel (framework Next.js terdeteksi otomatis). Isi `DATABASE_URL`, `REDIS_URL`, `AUTH_SECRET`, `APP_URL`, `NEXT_PUBLIC_REALTIME_URL`.
-2. Jalankan `npm run start:realtime` di host Node (Railway/Fly/Render) dengan `DATABASE_URL`, `REDIS_URL`, `AUTH_SECRET` **yang sama**. Isi `NEXT_PUBLIC_REALTIME_URL` dengan alamatnya, mis. `wss://meetopia-rt.fly.dev`.
-3. `REDIS_URL` **wajib** di opsi ini: route API di Vercel memakai Redis pub/sub untuk memberi tahu server real-time (catatan bersama disimpan, peran berubah, profil berubah).
+5. **Deployments → Redeploy** (env baru hanya terbaca setelah deploy ulang).
+6. Buka `https://alamatmu/api/health`. Semua harus `true`/`"ok"`; kalau ada yang `false`, itulah env yang belum benar.
 
-**Spike WebSocket di Vercel Functions (M2):** belum dicoba karena butuh deploy sungguhan. Hub real-time ditulis tidak bergantung pada framework (`handleUpgrade(req, socket, head)`), jadi bisa dipasang di endpoint WebSocket Vercel bila spike berhasil. Untuk mencatat hasil spike: buka konsol browser, `__meetopia.room.disconnectedAt` dan log `tersambung lagi setelah … ms` mengukur durasi putus.
+Tabel database dibuat otomatis saat permintaan pertama. Server real-time berjalan di endpoint `/api/ws` memakai `experimental_upgradeWebSocket()` dari `@vercel/functions` (fitur beta Vercel). Koneksi ditutup Vercel setiap 300 detik (batas paket Hobby); klien menyambung ulang otomatis dan posisi dipulihkan dari Redis. Endpoint ini belum bisa diuji di luar Vercel; kalau ternyata bermasalah, pakai cadangan di bawah.
+
+**Cadangan: server real-time terpisah.** Jalankan `npm run start:realtime` di host Node (Railway, Fly.io, Render) dengan `DATABASE_URL`, `REDIS_URL`, `AUTH_SECRET` yang sama, lalu isi `NEXT_PUBLIC_REALTIME_URL` di Vercel dengan alamatnya (mis. `wss://meetopia-rt.fly.dev`).
+
+### Satu server Node
+
+Railway, Render, Fly.io, atau VPS: `npm run build && npm start` dengan `DATABASE_URL`, `AUTH_SECRET`, `APP_URL`, dan opsional `REDIS_URL`/`SMTP_URL`. Next.js dan WebSocket (`/ws`) jalan di port yang sama.
 
 ## Identitas visual
 
-Logo memakai **konsep 7 (Minimalist)**: dua daun pintu — satu hijau terbuka, satu hijau tua tertutup dengan gagang — sebagai "pintu" ke ruang kerja virtual, dengan tagline _Work • Talk • Together_. Komponennya di `src/components/Logo.tsx`, favicon di `src/app/icon.svg`.
+Logo memakai **konsep 7 (Minimalist)**: dua daun pintu (satu hijau terbuka, satu gelap tertutup dengan gagang) sebagai "pintu" ke ruang kerja virtual, dengan tagline _Work • Talk • Together_. Komponennya di `src/components/Logo.tsx`, favicon di `src/app/icon.svg`.
 
-Palet UI diambil dari logo: hijau daun `#3f9a55`, hijau tua `#1b3a2a`, krem `#f7f5ec`, mint `#eef5ea`; huruf Outfit. Mendukung mode gelap (mengikuti sistem) dan pilihan kontras tinggi di pengaturan profil.
+Arah tampilan ada di [`DESIGN.md`](DESIGN.md) (diisi dari jawaban pemilik proyek): gelap-hangat ala Discord sebagai bawaan, hijau logo hanya sebagai aksen (tombol utama, status aktif, mic menyala, item terpilih), tema terang dan "ikuti sistem" bisa dipilih di Profil, plus pilihan kontras tinggi. UI diperiksa dengan aturan [antislop](https://github.com/miqdadbadjuber/anti-slop): tanpa gradien/glow/blur dekoratif, tanpa emoji sebagai ikon, tanpa em dash, kontras teks lolos WCAG AA, target sentuh 44px.
 
 ### Grafis in-game
 

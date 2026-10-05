@@ -7,7 +7,7 @@ import { TILE, type MapData, type MapObject, type Zone } from "@/shared/map";
 import type { Presence } from "@/shared/protocol";
 import { drawAvatar } from "./art/avatar";
 import { renderWorld, type WorldLayers } from "./art/world";
-import { C, INK } from "./art/common";
+import { INK } from "./art/common";
 
 export interface PersonView {
   p: Presence;
@@ -37,7 +37,7 @@ export interface SceneFrame {
 }
 
 const T = TILE;
-const STATUS_COLOR = { active: "#4fae63", busy: "#d2554a", meeting: "#8a63c9", away: "#e0a33a" } as const;
+const STATUS_COLOR = { active: "#4fae63", busy: "#d9584c", meeting: "#8f6fd1", away: "#d99a2b" } as const;
 const FOOT = 8; // offset kaki avatar dari pusat tile (px)
 
 interface Timed {
@@ -114,7 +114,7 @@ export class Scene {
     const { dpr, cam, time } = f;
     const scale = cam.zoom * dpr;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = "#16301f";
+    ctx.fillStyle = "#191715";
     ctx.fillRect(0, 0, f.w * dpr, f.h * dpr);
     ctx.setTransform(scale, 0, 0, scale, -cam.x * scale, -cam.y * scale);
     ctx.imageSmoothingQuality = "high";
@@ -174,12 +174,12 @@ export class Scene {
       const tx = (f.target.x + 0.5) * T;
       const ty = (f.target.y + 0.5) * T + 6;
       const p = (Math.sin(time * 6) + 1) / 2;
-      ctx.strokeStyle = C.green;
+      ctx.strokeStyle = "rgba(255,255,255,0.95)";
       ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.ellipse(tx, ty, 8 + p * 3, 3.5 + p * 1.2, 0, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.fillStyle = "rgba(63,154,85,0.25)";
+      ctx.fillStyle = "rgba(255,255,255,0.25)";
       ctx.fill();
     }
     this.ripples = this.ripples.filter((r) => time - r.t0 < 0.6);
@@ -241,7 +241,7 @@ export class Scene {
     if (f.privateZone) {
       const z = f.privateZone;
       ctx.save();
-      ctx.fillStyle = "rgba(8,20,12,0.55)";
+      ctx.fillStyle = "rgba(12,10,8,0.55)";
       ctx.beginPath();
       ctx.rect(-T * 4, -T * 4, (this.map.width + 8) * T, (this.map.height + 8) * T);
       ctx.roundRect(z.x * T, z.y * T - 4, z.w * T, z.h * T + 8, 12);
@@ -284,8 +284,8 @@ export class Scene {
         H / 2,
         Math.max(W, H) * 0.75,
       );
-      vg.addColorStop(0, "rgba(10,25,15,0)");
-      vg.addColorStop(1, "rgba(10,25,15,0.28)");
+      vg.addColorStop(0, "rgba(15,12,10,0)");
+      vg.addColorStop(1, "rgba(15,12,10,0.28)");
       x.fillStyle = vg;
       x.fillRect(0, 0, W, H);
       this.vignette = { w: W, h: H, c };
@@ -331,7 +331,7 @@ export class Scene {
     ctx.globalAlpha = 1;
     if (p.status === "away") {
       // "zzz" melayang
-      ctx.fillStyle = "rgba(27,58,42,0.7)";
+      ctx.fillStyle = "rgba(43,38,35,0.7)";
       ctx.font = "700 10px Outfit, system-ui, sans-serif";
       const k = (time * 0.6 + v.seed) % 1;
       ctx.globalAlpha = 1 - k;
@@ -350,11 +350,11 @@ export class Scene {
     const extra = p.media.screen ? 14 : 0;
     const bw = tw + 42 + extra;
     const bx = px - bw / 2;
-    ctx.fillStyle = "rgba(10,25,15,0.18)";
+    ctx.fillStyle = "rgba(15,12,10,0.18)";
     ctx.beginPath();
     ctx.roundRect(bx, ly - 8, bw, 20, 10);
     ctx.fill();
-    ctx.fillStyle = v.isSelf ? "rgba(27,58,42,0.95)" : "rgba(255,255,255,0.97)";
+    ctx.fillStyle = v.isSelf ? "rgba(26,25,23,0.95)" : "rgba(255,255,255,0.97)";
     ctx.beginPath();
     ctx.roundRect(bx, ly - 10, bw, 20, 10);
     ctx.fill();
@@ -409,7 +409,7 @@ export class Scene {
         const alpha = age > 2 ? 1 - (age - 2) / 0.6 : 1;
         const ey = topY - 18 - age * 6;
         ctx.globalAlpha = alpha;
-        ctx.fillStyle = "rgba(10,25,15,0.18)";
+        ctx.fillStyle = "rgba(15,12,10,0.18)";
         ctx.beginPath();
         ctx.arc(px, ey + 2, 16 * pop, 0, Math.PI * 2);
         ctx.fill();
@@ -436,7 +436,7 @@ export class Scene {
         const h = b.lines.length * 15 + 10;
         const by = topY - h - 4;
         ctx.globalAlpha = age > 5.4 ? 1 - (age - 5.4) / 0.6 : Math.min(1, age / 0.15);
-        ctx.fillStyle = "rgba(10,25,15,0.16)";
+        ctx.fillStyle = "rgba(15,12,10,0.16)";
         ctx.beginPath();
         ctx.roundRect(px - w / 2, by + 2, w, h, 10);
         ctx.fill();

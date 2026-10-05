@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
+    "@vercel/functions": "^3.9.11",
     "bcryptjs": "^3.0.3",
     "ioredis": "^6.0.0",
     "jose": "^6.2.12",

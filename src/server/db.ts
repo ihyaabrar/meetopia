@@ -6,6 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { SCHEMA_SQL } from "./schema";
+import { ConfigError, onVercel } from "./env";
 
 export interface Db {
   query<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]>;
@@ -23,6 +24,8 @@ async function create(): Promise<Db> {
     db = { query: async (sql, params) => (await pool.query(sql, params as unknown[])).rows };
     exec = (sql) => pool.query(sql);
   } else {
+    // Sistem berkas Vercel hanya-baca dan tidak permanen: wajib memakai Neon (DATABASE_URL).
+    if (onVercel) throw new ConfigError("dbNotConfigured");
     const { PGlite } = await import("@electric-sql/pglite");
     const dir = process.env.PGLITE_DIR ?? path.join(process.cwd(), ".data/pglite");
     if (dir !== "memory://") fs.mkdirSync(dir, { recursive: true });

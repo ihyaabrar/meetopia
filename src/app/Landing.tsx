@@ -148,11 +148,10 @@ export function Landing() {
     <PublicShell>
       <section className="hero">
         <div>
-          <span className="badge">{t("landing.badge")}</span>
           <h1 dangerouslySetInnerHTML={{ __html: t("landing.title") }} />
           <p className="lead">{t("landing.lead")}</p>
           <div className="row" style={{ flexWrap: "wrap" }}>
-            <Link className="btn" href="/register" style={{ minHeight: 48, padding: "10px 24px" }}>
+            <Link className="btn" href="/register" style={{ minHeight: 48, padding: "10px 22px" }}>
               {t("landing.cta")}
             </Link>
             <Link className="btn secondary" href="/login" style={{ minHeight: 48 }}>
@@ -164,16 +163,20 @@ export function Landing() {
           <HeroMap />
         </div>
       </section>
-      <section className="features">
-        {features.map(([icon, title, body]) => (
-          <div key={title} className="card feature">
-            <div className="feature-icon">
+      {/* Tiga fungsi inti PRD sebagai daftar biasa (bukan kartu seragam), ikon sesuai fungsinya. */}
+      <section className="how" aria-labelledby="how-title">
+        <h2 id="how-title">{t("landing.howTitle")}</h2>
+        <ul className="how-list">
+          {features.map(([icon, title, body]) => (
+            <li key={title}>
               <Icon name={icon} size={22} />
-            </div>
-            <h3>{title}</h3>
-            <p>{body}</p>
-          </div>
-        ))}
+              <div>
+                <b>{title}</b>
+                <span>{body}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
       </section>
     </PublicShell>
   );

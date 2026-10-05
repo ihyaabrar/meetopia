@@ -84,7 +84,7 @@ test("MVP: grup, undangan, sinkron posisi, chat, catatan, mic, sambung ulang", a
   await b.getByRole("button", { name: "Gabung grup" }).click();
   await b.waitForURL(/\/app\?g=/);
   await enterRoom(b);
-  await expect(a.getByText("Di ruangan — 2")).toBeVisible({ timeout: 10_000 });
+  await expect(a.getByText("Di ruangan: 2")).toBeVisible({ timeout: 10_000 });
   expect(Date.now() - joinStart).toBeLessThan(120_000);
 
   // --- Sinkron posisi (M2): B mengetuk peta, A melihat posisi B berubah
@@ -133,7 +133,7 @@ test("MVP: grup, undangan, sinkron posisi, chat, catatan, mic, sambung ulang", a
   // Catatan pribadi tidak terbaca orang lain
   await a.getByRole("tab", { name: /Pribadi/ }).click();
   await a.getByLabel("Pribadi", { exact: true }).fill("rahasia Rani");
-  await expect(a.getByText("Tersimpan ✓")).toBeVisible();
+  await expect(a.getByText("Tersimpan", { exact: true })).toBeVisible();
   const bPrivate = await b.evaluate(() => fetch("/api/notes/me").then((r) => r.json()));
   expect(JSON.stringify(bPrivate)).not.toContain("rahasia Rani");
   await a.getByRole("button", { name: "Tutup" }).first().click();

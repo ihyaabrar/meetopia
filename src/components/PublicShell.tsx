@@ -26,7 +26,7 @@ export function PublicShell({
             <Link className="btn ghost" href="/login">
               {t("auth.login")}
             </Link>
-            <Link className="btn" href="/register">
+            <Link className="btn secondary" href="/register">
               {t("auth.register")}
             </Link>
           </>

@@ -15,7 +15,7 @@ const server = createServer((req, res) => {
   res.end(req.url === "/health" ? "ok" : "not found");
 });
 server.on("upgrade", (req, socket, head) => {
-  if (req.url?.startsWith("/ws")) hub.handleUpgrade(req, socket, head);
+  if (req.url?.startsWith("/ws") || req.url?.startsWith("/api/ws")) hub.handleUpgrade(req, socket, head);
   else socket.destroy();
 });
 server.listen(port, () => console.log(`> Server real-time di ws://localhost:${port}/ws`));

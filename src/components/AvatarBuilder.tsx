@@ -1,6 +1,7 @@
 "use client";
 
 import { AvatarCanvas } from "./AvatarCanvas";
+import { Icon } from "./Icon";
 import { useT } from "@/i18n/client";
 import {
   BODY_COLORS,
@@ -72,7 +73,7 @@ export function AvatarBuilder({
       <div className="builder-preview">
         <AvatarCanvas avatar={value} size={170} animate />
         <button type="button" className="btn ghost small" onClick={() => onChange(randomAvatar())}>
-          🎲 {t("avatar.random")}
+          <Icon name="shuffle" size={15} /> {t("avatar.random")}
         </button>
       </div>
       <div>

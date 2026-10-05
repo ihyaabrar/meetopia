@@ -1,9 +1,18 @@
 const DEV_SECRET = "dev-only-secret-change-me-dev-only-secret-change-me";
 
+/** Galat konfigurasi server (env belum diisi). Ditampilkan ke pengguna dengan pesan yang jelas. */
+export class ConfigError extends Error {
+  constructor(public code: "dbNotConfigured" | "authSecretMissing" | "realtimeNotConfigured") {
+    super(code);
+  }
+}
+
+export const onVercel = !!process.env.VERCEL;
+
 export function authSecret(): Uint8Array {
   const s = process.env.AUTH_SECRET;
   if (!s) {
-    if (process.env.NODE_ENV === "production") throw new Error("AUTH_SECRET wajib diisi di produksi");
+    if (process.env.NODE_ENV === "production") throw new ConfigError("authSecretMissing");
     return new TextEncoder().encode(DEV_SECRET);
   }
   return new TextEncoder().encode(s);

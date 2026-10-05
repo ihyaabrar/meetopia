@@ -99,7 +99,7 @@ export function drawObject(ctx: CanvasRenderingContext2D, o: MapObject) {
   ctx.lineCap = "round";
   switch (o.kind) {
     case "rug": {
-      const colors = ["#9fc7a4", "#e7c39a", "#c9d8e6", "#e8b8a8"];
+      const colors = ["#d6cbb8", "#cbc6bd", "#d9c3ad"];
       const base = colors[Math.floor(v * colors.length)];
       rr(ctx, x + 4, y + 4, w - 8, h - 8, 10);
       ctx.fillStyle = base;
@@ -144,8 +144,8 @@ export function drawObject(ctx: CanvasRenderingContext2D, o: MapObject) {
       rr(ctx, mx - 17, y - 18, 34, 22, 3);
       fillStroke(ctx, "#2b322e", 2);
       const sg = ctx.createLinearGradient(mx - 15, y - 16, mx + 15, y + 2);
-      sg.addColorStop(0, "#1f5a3a");
-      sg.addColorStop(1, "#2e7f8f");
+      sg.addColorStop(0, "#2d3a44");
+      sg.addColorStop(1, "#3c5566");
       ctx.fillStyle = sg;
       ctx.fillRect(mx - 14, y - 15, 28, 16);
       ctx.fillStyle = "rgba(255,255,255,0.75)";
@@ -187,7 +187,7 @@ export function drawObject(ctx: CanvasRenderingContext2D, o: MapObject) {
       ctx.moveTo(cx, y + T - 9);
       ctx.lineTo(cx, y + T - 4);
       ctx.stroke();
-      const seat = "#3f7a59";
+      const seat = "#4f545a";
       const backY = facingUp ? y + 18 : y + 2;
       if (!facingUp) {
         rr(ctx, cx - 10, backY, 20, 9, 4);
@@ -214,7 +214,7 @@ export function drawObject(ctx: CanvasRenderingContext2D, o: MapObject) {
           const lx = x + 30 + i * T;
           rr(ctx, lx, y + 18, 18, 12, 2);
           fillStroke(ctx, "#d7dcd8", 1.3);
-          ctx.fillStyle = "#2e7f8f";
+          ctx.fillStyle = "#3c5566";
           ctx.fillRect(lx + 3, y + 20, 12, 7);
           ctx.fillStyle = "#fff";
           ctx.save();
@@ -224,10 +224,6 @@ export function drawObject(ctx: CanvasRenderingContext2D, o: MapObject) {
           ctx.restore();
           mug(ctx, lx + 34, y + h - 30, i % 4 === 0 ? "#f2c46d" : "#fff");
         }
-        ctx.fillStyle = C.greenLight;
-        ctx.beginPath();
-        ctx.arc(x + w / 2, y + h / 2 - 4, 8, 0, Math.PI * 2);
-        fillStroke(ctx, C.greenLight, 1.4);
       } else {
         // meja kopi: majalah + tanaman kecil
         ctx.fillStyle = "#e9605a";
@@ -248,7 +244,7 @@ export function drawObject(ctx: CanvasRenderingContext2D, o: MapObject) {
     }
 
     case "sofa": {
-      const base = v > 0.5 ? "#4f9a6a" : "#5d8fb5";
+      const base = v > 0.5 ? "#7b8794" : "#a07862";
       boxShadow(ctx, x + 2, y - 6, w - 4, T + 2, 10);
       // sandaran
       rr(ctx, x + 2, y - 8, w - 4, 16, 8);
@@ -272,7 +268,7 @@ export function drawObject(ctx: CanvasRenderingContext2D, o: MapObject) {
     }
 
     case "beanbag": {
-      const colors = ["#e0a33a", "#d9605a", "#3aa6a0", "#8a63c9"];
+      const colors = ["#c9a46a", "#9aa7b0", "#b88a7a"];
       const base = colors[Math.floor(v * colors.length)];
       groundShadow(ctx, x + T / 2, y + T - 4, 15, 5, 0.25);
       ctx.beginPath();
@@ -435,7 +431,7 @@ export function drawObject(ctx: CanvasRenderingContext2D, o: MapObject) {
         ctx.fillStyle = "#fbfdfb";
         ctx.fill();
         ctx.lineWidth = 1.8;
-        ctx.strokeStyle = C.green;
+        ctx.strokeStyle = "#4a7fc1";
         ctx.beginPath();
         ctx.moveTo(x + 12, top + 10);
         ctx.lineTo(x + 40, top + 10);
@@ -567,8 +563,8 @@ export function drawObject(ctx: CanvasRenderingContext2D, o: MapObject) {
       rr(ctx, x + 2, y - 26, w - 4, 30, 4);
       fillStroke(ctx, "#232a26", 2);
       const sg = ctx.createLinearGradient(x, y - 24, x + w, y + 2);
-      sg.addColorStop(0, "#2a6f8a");
-      sg.addColorStop(1, "#1f5a3a");
+      sg.addColorStop(0, "#34404a");
+      sg.addColorStop(1, "#2a3138");
       ctx.fillStyle = sg;
       ctx.fillRect(x + 6, y - 22, w - 12, 22);
       // logo pintu Meetopia di layar
@@ -599,8 +595,8 @@ export function drawObject(ctx: CanvasRenderingContext2D, o: MapObject) {
       fillStroke(ctx, "#f4efe2");
       rr(ctx, x + 2, y + 2, w - 4, T - 6, 6);
       const fg = ctx.createLinearGradient(0, y, 0, y + T);
-      fg.addColorStop(0, C.green);
-      fg.addColorStop(1, C.greenDark);
+      fg.addColorStop(0, "#4a4540");
+      fg.addColorStop(1, "#3a3632");
       fillStroke(ctx, fg);
       // logo pintu
       const lx = x + 18;

@@ -78,14 +78,17 @@ export class RealtimeHub {
     return this.kvPromise;
   }
 
-  /** Dipanggil dari event `upgrade` server HTTP. */
+  /** Dipanggil dari event `upgrade` server HTTP (server lokal / server real-time mandiri). */
   handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer) {
-    this.wss.handleUpgrade(req, socket, head, (ws) => {
-      void this.onConnection(ws, req).catch((e) => {
-        console.error("[realtime] gagal menerima koneksi", e);
-        send(ws, { t: "error", code: "server" });
-        ws.close(1011);
-      });
+    this.wss.handleUpgrade(req, socket, head, (ws) => this.accept(ws, req.url ?? "/"));
+  }
+
+  /** Menerima soket yang sudah di-upgrade, mis. dari `experimental_upgradeWebSocket` di Vercel. */
+  accept(ws: WebSocket, url: string) {
+    void this.onConnection(ws, url).catch((e) => {
+      console.error("[realtime] gagal menerima koneksi", e);
+      send(ws, { t: "error", code: "server" });
+      ws.close(1011);
     });
   }
 
@@ -115,8 +118,8 @@ export class RealtimeHub {
     return this.roomLoading.get(groupId)!;
   }
 
-  private async onConnection(ws: WebSocket, req: IncomingMessage) {
-    const url = new URL(req.url ?? "/", "http://x");
+  private async onConnection(ws: WebSocket, rawUrl: string) {
+    const url = new URL(rawUrl, "http://x");
     const auth = await verifyRealtimeToken(url.searchParams.get("token") ?? "");
     if (!auth) {
       send(ws, { t: "error", code: "unauthorized" });
@@ -291,6 +294,8 @@ export class RealtimeHub {
       await kv.hdel(keys.presence(conn.groupId), conn.userId);
     }
     await publishToRoom(conn.groupId, { msg: { t: "leave", id: conn.userId, conn: conn.presence.conn } });
+    // Di Vercel instance bisa dibekukan setelah koneksi terakhir tutup: simpan pesan sekarang.
+    await this.flushMessages();
     if (room.conns.size === 0 && this.rooms.get(room.groupId) === room) {
       this.rooms.delete(room.groupId);
       await room.unsubscribe();

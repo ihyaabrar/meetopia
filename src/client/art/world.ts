@@ -92,11 +92,11 @@ function drawFloorTile(ctx: CanvasRenderingContext2D, kind: FloorKind, tx: numbe
       drawPlanks(ctx, x, y, [28, 46, 72], "rgba(110,70,40,0.25)", tx, ty);
       break;
     case "meeting": {
-      ctx.fillStyle = "#cddbc9";
+      ctx.fillStyle = "#d9d6d0";
       ctx.fillRect(x, y, T, T);
       // tekstur karpet
       for (let i = 0; i < 10; i++) {
-        ctx.fillStyle = hash(tx, ty, i) > 0.5 ? "rgba(255,255,255,0.10)" : "rgba(40,80,50,0.07)";
+        ctx.fillStyle = hash(tx, ty, i) > 0.5 ? "rgba(255,255,255,0.10)" : "rgba(60,50,40,0.07)";
         ctx.fillRect(x + hash(i, tx, ty) * T, y + hash(ty, i, tx) * T, 2, 2);
       }
       break;
@@ -206,22 +206,22 @@ function drawWallShadows(ctx: CanvasRenderingContext2D, map: MapData) {
       const y = ty * T;
       if (tileAt(map, tx, ty - 1) === "wall") {
         const g = ctx.createLinearGradient(0, y, 0, y + 12);
-        g.addColorStop(0, "rgba(16,38,25,0.22)");
-        g.addColorStop(1, "rgba(16,38,25,0)");
+        g.addColorStop(0, "rgba(30,24,20,0.22)");
+        g.addColorStop(1, "rgba(30,24,20,0)");
         ctx.fillStyle = g;
         ctx.fillRect(x, y, T, 12);
       }
       if (tileAt(map, tx - 1, ty) === "wall") {
         const g = ctx.createLinearGradient(x, 0, x + 8, 0);
-        g.addColorStop(0, "rgba(16,38,25,0.16)");
-        g.addColorStop(1, "rgba(16,38,25,0)");
+        g.addColorStop(0, "rgba(30,24,20,0.16)");
+        g.addColorStop(1, "rgba(30,24,20,0)");
         ctx.fillStyle = g;
         ctx.fillRect(x, y, 8, T);
       }
       if (tileAt(map, tx + 1, ty) === "wall") {
         const g = ctx.createLinearGradient(x + T, 0, x + T - 8, 0);
-        g.addColorStop(0, "rgba(16,38,25,0.16)");
-        g.addColorStop(1, "rgba(16,38,25,0)");
+        g.addColorStop(0, "rgba(30,24,20,0.16)");
+        g.addColorStop(1, "rgba(30,24,20,0)");
         ctx.fillStyle = g;
         ctx.fillRect(x + T - 8, y, 8, T);
       }
@@ -234,7 +234,7 @@ function drawZoneDecor(ctx: CanvasRenderingContext2D, map: MapData, zoneLabel: (
   for (const z of map.zones) {
     if (z.private) {
       ctx.save();
-      ctx.strokeStyle = "rgba(44,116,66,0.35)";
+      ctx.strokeStyle = "rgba(58,54,50,0.25)";
       ctx.lineWidth = 3;
       ctx.strokeRect(z.x * T + 6, z.y * T + 6, z.w * T - 12, z.h * T - 12);
       ctx.restore();
@@ -243,15 +243,15 @@ function drawZoneDecor(ctx: CanvasRenderingContext2D, map: MapData, zoneLabel: (
     ctx.save();
     ctx.font = "700 12px Outfit, system-ui, sans-serif";
     ctx.textBaseline = "middle";
-    const tw = ctx.measureText(label).width + (z.private ? 18 : 0);
+    const tw = ctx.measureText(label).width;
     const px = z.x * T + 12;
     const py = (z.y + z.h) * T - 18;
-    ctx.fillStyle = "rgba(27,58,42,0.10)";
+    ctx.fillStyle = "rgba(42,38,34,0.08)";
     ctx.beginPath();
     ctx.roundRect(px - 6, py - 10, tw + 16, 20, 10);
     ctx.fill();
-    ctx.fillStyle = "rgba(27,58,42,0.55)";
-    ctx.fillText((z.private ? "🔒 " : "") + label, px + 2, py + 1);
+    ctx.fillStyle = "rgba(42,38,34,0.6)";
+    ctx.fillText(label, px + 2, py + 1);
     ctx.restore();
   }
 }

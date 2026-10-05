@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { PublicShell } from "@/components/PublicShell";
+import { Icon } from "@/components/Icon";
 import { useT } from "@/i18n/client";
 
 function Verified() {
@@ -12,7 +13,9 @@ function Verified() {
   return (
     <div className="auth-wrap">
       <div className="card auth-card" style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 48 }}>{ok ? "🌱" : "⚠️"}</div>
+        <div className="state-icon">
+          <Icon name={ok ? "check" : "alert"} size={26} />
+        </div>
         <h1>{ok ? t("verify.ok") : t("verify.fail")}</h1>
         <p className="sub">{ok ? t("verify.okBody") : t("verify.failBody")}</p>
         <Link className="btn" href="/app">

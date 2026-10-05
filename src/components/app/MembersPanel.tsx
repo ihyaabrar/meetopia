@@ -32,7 +32,10 @@ export function MembersPanel({ members, presence, selfId, onSelect, onClose, loc
         </span>
         <span className="info">
           <b>
-            {p?.name ?? m.name} {m.id === selfId && <span className="hint">({t("members.you")})</span>}
+            <span className="nm">
+              {p?.name ?? m.name}
+              {m.id === selfId && <span className="hint"> ({t("members.you")})</span>}
+            </span>
             {(m.role === "owner" || m.role === "admin") && (
               <span className={`role-tag ${m.role}`}>{t(`role.${m.role}`)}</span>
             )}
@@ -42,16 +45,10 @@ export function MembersPanel({ members, presence, selfId, onSelect, onClose, loc
             {p && locate?.(p) && ` · ${locate(p)}`}
           </span>
         </span>
-        {p && (
-          <span
-            title={p.media.mic ? t("media.micOn") : t("media.micOff")}
-            style={{ color: p.media.mic ? "var(--green-600)" : "var(--danger)" }}
-          >
-            <Icon
-              name={p.media.mic ? "mic" : "micOff"}
-              size={16}
-              label={p.media.mic ? t("media.micOn") : t("media.micOff")}
-            />
+        {/* Seperti Discord: ikon hanya saat mic mati; mic menyala tidak perlu penanda tambahan. */}
+        {p && !p.media.mic && (
+          <span className="mic-off" title={t("media.micOff")}>
+            <Icon name="micOff" size={16} label={t("media.micOff")} />
           </span>
         )}
       </button>
