@@ -24,6 +24,12 @@ export async function GET() {
     redis: !!redisUrl(),
     appUrl: !!process.env.APP_URL,
     realtime: process.env.NEXT_PUBLIC_REALTIME_URL ? "external" : "builtin",
+    // Commit yang sedang aktif (disediakan Vercel), untuk memastikan redeploy sudah terjadi.
+    commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
+    // Hanya NAMA variabel yang mirip database/Redis, tanpa nilainya, untuk melacak awalan dari integrasi.
+    envNames: Object.keys(process.env)
+      .filter((k) => /(DATABASE|POSTGRES|NEON|PGHOST|REDIS|KV_|UPSTASH|AUTH_SECRET|APP_URL)/.test(k))
+      .sort(),
   };
   const ok =
     database === "ok" &&
