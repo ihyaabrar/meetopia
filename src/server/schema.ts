@@ -60,6 +60,8 @@ CREATE TABLE IF NOT EXISTS memberships (
   PRIMARY KEY (user_id, group_id)
 );
 CREATE INDEX IF NOT EXISTS memberships_group_idx ON memberships(group_id);
+-- Terakhir terlihat di ruangan grup ini (untuk "Terakhir online ...").
+ALTER TABLE memberships ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS maps (
   id TEXT PRIMARY KEY,
@@ -82,6 +84,9 @@ CREATE TABLE IF NOT EXISTS invites (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS invites_group_idx ON invites(group_id);
+-- Kode undangan pendek (mis. K7Q2MX) untuk bergabung tanpa tautan.
+ALTER TABLE invites ADD COLUMN IF NOT EXISTS code TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS invites_code_idx ON invites(code) WHERE code IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS messages (
   id TEXT PRIMARY KEY,

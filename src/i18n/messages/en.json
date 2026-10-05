@@ -536,5 +536,6 @@
   "tpl.current": "Current",
   "avatar.hairStyle.long": "Long",
   "avatar.hairStyle.curly": "Curly",
-  "chat.emoji": "Insert emoji"
+  "chat.emoji": "Insert emoji",
+  "error.inviteCodeNotFound": "Invite code not found."
 }

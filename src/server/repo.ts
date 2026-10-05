@@ -28,6 +28,7 @@ export interface Member {
   avatar: AvatarConfig;
   role: Role;
   joinedAt: string;
+  lastSeenAt: string | null;
 }
 
 export interface Channel {
@@ -144,9 +145,10 @@ export async function listMembers(groupId: string): Promise<Member[]> {
     avatar: unknown;
     role: Role;
     created_at: string | Date;
+    last_seen_at: string | Date | null;
   }>(
-    `SELECT u.id, u.name, u.avatar, m.role, m.created_at FROM memberships m JOIN users u ON u.id = m.user_id
-     WHERE m.group_id = $1 ORDER BY u.name`,
+    `SELECT u.id, u.name, u.avatar, m.role, m.created_at, m.last_seen_at FROM memberships m
+     JOIN users u ON u.id = m.user_id WHERE m.group_id = $1 ORDER BY u.name`,
     [groupId],
   );
   return rows.map((r) => ({
@@ -155,7 +157,15 @@ export async function listMembers(groupId: string): Promise<Member[]> {
     role: r.role,
     avatar: sanitizeAvatar(r.avatar),
     joinedAt: new Date(r.created_at).toISOString(),
+    lastSeenAt: r.last_seen_at ? new Date(r.last_seen_at).toISOString() : null,
   }));
+}
+
+export async function touchLastSeen(groupId: string, userId: string): Promise<void> {
+  await sql("UPDATE memberships SET last_seen_at = now() WHERE group_id = $1 AND user_id = $2", [
+    groupId,
+    userId,
+  ]);
 }
 
 export async function getMap(groupId: string): Promise<MapData> {
@@ -206,6 +216,7 @@ export async function updateMapAudio(groupId: string, audio: MapData["audio"]): 
 
 export interface Invite {
   id: string;
+  code: string | null;
   role: Role;
   expiresAt: string;
   maxUses: number | null;
@@ -222,15 +233,26 @@ export async function createInvite(
   const token = newToken();
   const id = newId();
   const expires = new Date(Date.now() + opts.expiresInHours * 3600_000).toISOString();
-  await sql(
-    `INSERT INTO invites (id, token_hash, group_id, role, created_by, expires_at, max_uses)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [id, hashToken(token), groupId, opts.role, createdBy, expires, opts.maxUses],
-  );
+  let code = inviteCode();
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await sql(
+        `INSERT INTO invites (id, token_hash, group_id, role, created_by, expires_at, max_uses, code)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [id, hashToken(token), groupId, opts.role, createdBy, expires, opts.maxUses, code],
+      );
+      break;
+    } catch (e) {
+      // Kode bentrok (sangat jarang): coba kode lain.
+      if (attempt >= 4 || (e as { code?: string }).code !== "23505") throw e;
+      code = inviteCode();
+    }
+  }
   return {
     token,
     invite: {
       id,
+      code,
       role: opts.role,
       expiresAt: expires,
       maxUses: opts.maxUses,
@@ -244,6 +266,7 @@ export async function createInvite(
 export async function listInvites(groupId: string): Promise<Invite[]> {
   const rows = await sql<{
     id: string;
+    code: string | null;
     role: Role;
     expires_at: string | Date;
     max_uses: number | null;
@@ -253,6 +276,7 @@ export async function listInvites(groupId: string): Promise<Invite[]> {
   }>("SELECT * FROM invites WHERE group_id = $1 ORDER BY created_at DESC", [groupId]);
   return rows.map((r) => ({
     id: r.id,
+    code: r.code,
     role: r.role,
     expiresAt: new Date(r.expires_at).toISOString(),
     maxUses: r.max_uses,
@@ -274,7 +298,28 @@ export type InviteCheck =
   | { ok: true; inviteId: string; groupId: string; groupName: string; role: Role }
   | { ok: false; reason: "notFound" | "expired" | "revoked" | "used" };
 
+/** Kode 6 karakter tanpa huruf/angka yang mudah tertukar (0/O, 1/I/L). */
+const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+export function inviteCode(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  return Array.from(bytes, (b) => CODE_CHARS[b % CODE_CHARS.length]).join("");
+}
+
+export const normalizeInviteCode = (raw: string) =>
+  raw
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+
 export async function checkInvite(token: string): Promise<InviteCheck> {
+  return checkInviteBy("token_hash = $1", hashToken(token));
+}
+
+export async function checkInviteCode(code: string): Promise<InviteCheck> {
+  return checkInviteBy("code = $1", normalizeInviteCode(code));
+}
+
+async function checkInviteBy(where: string, value: string): Promise<InviteCheck> {
   const r = await one<{
     id: string;
     group_id: string;
@@ -284,9 +329,7 @@ export async function checkInvite(token: string): Promise<InviteCheck> {
     uses: number;
     revoked_at: string | null;
     name: string;
-  }>("SELECT i.*, g.name FROM invites i JOIN groups g ON g.id = i.group_id WHERE token_hash = $1", [
-    hashToken(token),
-  ]);
+  }>(`SELECT i.*, g.name FROM invites i JOIN groups g ON g.id = i.group_id WHERE ${where}`, [value]);
   if (!r) return { ok: false, reason: "notFound" };
   if (r.revoked_at) return { ok: false, reason: "revoked" };
   if (new Date(r.expires_at).getTime() < Date.now()) return { ok: false, reason: "expired" };
@@ -295,7 +338,14 @@ export async function checkInvite(token: string): Promise<InviteCheck> {
 }
 
 export async function acceptInvite(token: string, userId: string): Promise<InviteCheck> {
-  const check = await checkInvite(token);
+  return joinWithInvite(await checkInvite(token), userId);
+}
+
+export async function acceptInviteCode(code: string, userId: string): Promise<InviteCheck> {
+  return joinWithInvite(await checkInviteCode(code), userId);
+}
+
+async function joinWithInvite(check: InviteCheck, userId: string): Promise<InviteCheck> {
   if (!check.ok) return check;
   const existing = await getRole(userId, check.groupId);
   if (!existing) {

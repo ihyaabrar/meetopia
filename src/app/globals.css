@@ -1,19 +1,19 @@
 /*
- * Meetopia: gelap hijau-tua sesuai desain baru, satu aksen hijau (lihat DESIGN.md).
+ * Meetopia: gelap abu-abu hangat, satu aksen hijau (lihat DESIGN.md).
  * Tema gelap bawaan; [data-theme="light"] atau "system" + preferensi terang memakai palet terang.
  */
 :root {
-  /* Netral hijau-tua */
-  --rail: #0a1411;
-  --sidebar: #0e1a16;
-  --bg: #0b1613;
-  --surface: #122520;
-  --surface-hover: #183029;
-  --surface-active: #1d3a31;
-  --border: #1e3630;
-  --userbar: #0a1411;
-  --text: #e6f0ec;
-  --text-muted: #8da69c;
+  /* Netral abu-abu hangat (permintaan pemilik: latar abu-abu, bukan hijau) */
+  --rail: #141312;
+  --sidebar: #1a1917;
+  --bg: #211f1d;
+  --surface: #2a2724;
+  --surface-hover: #35312d;
+  --surface-active: #3d3934;
+  --border: #3a3632;
+  --userbar: #141312;
+  --text: #ede8e1;
+  --text-muted: #a8a097;
 
   /* Aksen tunggal: hijau */
   --accent: #18864a;
@@ -28,18 +28,18 @@
   --s-busy: #f2837a;
   --s-meeting: #a98be0;
   --s-away: #e3b25c;
-  --s-offline: #6b7f77;
+  --s-offline: #7d766e;
   --focus: #6ee7a0;
 
   /* "Chrome": permukaan yang selalu gelap (rail, HUD, dock, menu, toast) di semua tema. */
-  --chrome-deep: #08110e;
-  --chrome: #0e1a16;
-  --chrome-2: #142822;
-  --chrome-hover: #1b342c;
-  --chrome-border: #22403a;
-  --chrome-glass: rgba(10, 20, 17, 0.9);
-  --chrome-text: #e6f0ec;
-  --chrome-muted: #8da69c;
+  --chrome-deep: #141312;
+  --chrome: #1a1917;
+  --chrome-2: #2a2724;
+  --chrome-hover: #35312d;
+  --chrome-border: #3a3632;
+  --chrome-glass: rgba(26, 25, 23, 0.9);
+  --chrome-text: #ede8e1;
+  --chrome-muted: #a8a097;
 
   --radius: 12px;
   --overlay-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
@@ -47,47 +47,47 @@
 
   --logo-green: #3f9a55;
   --logo-ink: #ede8e1;
-  --logo-knob: #0b1613;
+  --logo-knob: #211f1d;
   color-scheme: dark;
 }
 
 :root[data-theme="light"] {
-  --userbar: #e3ebe7;
+  --userbar: #e6e1d8;
   --rail: #0e1a16;
-  --sidebar: #eef3f0;
-  --bg: #f5f8f6;
+  --sidebar: #efebe4;
+  --bg: #f6f3ee;
   --surface: #ffffff;
-  --surface-hover: #e6eeea;
-  --surface-active: #dbe6e0;
-  --border: #d9e3de;
-  --text: #14211c;
-  --text-muted: #56685f;
+  --surface-hover: #ebe6de;
+  --surface-active: #e2dcd2;
+  --border: #e2ddd4;
+  --text: #24211e;
+  --text-muted: #6b645c;
   --accent-fg: #18864a;
   --danger: #b8443a;
   --focus: #18864a;
-  --overlay-shadow: 0 12px 32px rgba(10, 30, 20, 0.16);
-  --logo-ink: #14211c;
-  --logo-knob: #f5f8f6;
+  --overlay-shadow: 0 12px 32px rgba(40, 30, 20, 0.18);
+  --logo-ink: #24211e;
+  --logo-knob: #f6f3ee;
   color-scheme: light;
 }
 @media (prefers-color-scheme: light) {
   :root[data-theme="system"] {
-    --userbar: #e3ebe7;
+    --userbar: #e6e1d8;
     --rail: #0e1a16;
-    --sidebar: #eef3f0;
-    --bg: #f5f8f6;
+    --sidebar: #efebe4;
+    --bg: #f6f3ee;
     --surface: #ffffff;
-    --surface-hover: #e6eeea;
-    --surface-active: #dbe6e0;
-    --border: #d9e3de;
-    --text: #14211c;
-    --text-muted: #56685f;
+    --surface-hover: #ebe6de;
+    --surface-active: #e2dcd2;
+    --border: #e2ddd4;
+    --text: #24211e;
+    --text-muted: #6b645c;
     --accent-fg: #18864a;
     --danger: #b8443a;
     --focus: #18864a;
-    --overlay-shadow: 0 12px 32px rgba(10, 30, 20, 0.16);
-    --logo-ink: #14211c;
-    --logo-knob: #f5f8f6;
+    --overlay-shadow: 0 12px 32px rgba(40, 30, 20, 0.18);
+    --logo-ink: #24211e;
+    --logo-knob: #f6f3ee;
     color-scheme: light;
   }
 }
@@ -1998,19 +1998,19 @@ input.switch:checked::before {
   flex: 0 0 18%;
 }
 .t-dark .theme-swatch i:nth-child(1) {
-  background: #0a1411;
+  background: #141312;
 }
 .t-dark .theme-swatch i:nth-child(2) {
-  background: #122520;
+  background: #2a2724;
 }
 .t-light .theme-swatch i:nth-child(1) {
-  background: #e3ebe7;
+  background: #e6e1d8;
 }
 .t-light .theme-swatch i:nth-child(2) {
   background: #ffffff;
 }
 .t-system .theme-swatch i:nth-child(1) {
-  background: #122520;
+  background: #2a2724;
 }
 .t-system .theme-swatch i:nth-child(2) {
   background: #f6f3ee;
@@ -2245,11 +2245,11 @@ input.switch:checked::before {
   position: absolute;
   top: 8px;
   right: 8px;
-  background: rgba(8, 17, 14, 0.55);
+  background: rgba(20, 19, 18, 0.55);
   color: var(--chrome-text);
 }
 .pc-close:hover {
-  background: rgba(8, 17, 14, 0.85);
+  background: rgba(20, 19, 18, 0.8);
 }
 .pc-avatar {
   margin: -48px 0 0 16px;

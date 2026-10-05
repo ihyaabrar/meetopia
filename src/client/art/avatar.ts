@@ -55,7 +55,7 @@ export function drawAvatar(
   const walking = pose.walk !== 0;
   const breath = walking ? 0 : Math.sin(t * 2.2 + seed * 6) * 0.5 * s;
   const bob = walking ? Math.abs(Math.sin(pose.walk)) * 1.6 * s : 0;
-  const blink = !walking && (t + seed * 7) % 4.2 < 0.13;
+  const blink = !walking && t > 0 && (t + seed * 7) % 4.2 < 0.13;
   const d = dims(a);
   const headR = d.headR * s;
   const torsoW = d.torsoW * s;
@@ -77,57 +77,91 @@ export function drawAvatar(
   // Rambut panjang/bob di belakang badan
   if (!back) drawBackHair(ctx, a, x, hy, headR, s, side);
 
-  // Kaki: celana + sepatu, melangkah bergantian
-  for (const [dx, lift] of [
-    [-3.6, Math.max(0, step)],
-    [3.6, Math.max(0, -step)],
-  ] as const) {
-    const lx = x + dx * s + side * 1.2 * s;
-    ctx.fillStyle = PANTS;
+  // Kaki: celana + sepatu. Tampak depan/belakang: kaki berdampingan; tampak samping: melangkah
+  // maju-mundur searah hadap (kaki belakang digambar lebih dulu dan sedikit lebih gelap).
+  const leg = (lx: number, lift: number, dark: boolean) => {
+    ctx.fillStyle = dark ? shade(PANTS, -0.25) : PANTS;
     rr(ctx, lx - 2.8 * s, hipY, 5.6 * s, legH + 1 * s - lift, 2 * s);
     ctx.fill();
     ctx.lineWidth = LINE * s;
     ctx.stroke();
     ctx.fillStyle = SHOE;
     ctx.beginPath();
-    ctx.ellipse(lx + side * 0.8 * s, y - 2.2 * s - lift, 3.6 * s, 2.4 * s, 0, 0, Math.PI * 2);
+    ctx.ellipse(lx + side * 1.4 * s, y - 2.2 * s - lift, side ? 4 * s : 3.6 * s, 2.4 * s, 0, 0, Math.PI * 2);
     ctx.fill();
+  };
+  if (side === 0) {
+    leg(x - 3.6 * s, Math.max(0, step), false);
+    leg(x + 3.6 * s, Math.max(0, -step), false);
+  } else {
+    const stride = walking ? Math.sin(pose.walk) * 3.2 * s : 0;
+    leg(x - side * stride - side * 0.8 * s, Math.max(0, -step) * 0.6, true);
+    leg(x + side * stride + side * 0.8 * s, Math.max(0, step) * 0.6, false);
   }
 
-  // Badan: kaus berlengan pendek
+  // Badan: kaus berlengan pendek (lebih ramping saat tampak samping)
+  const bodyW = side ? torsoW * 0.72 : torsoW;
   const swing = walking ? Math.sin(pose.walk) * 2 * s : 0;
-  const arm = (sx: number, dy: number) => {
-    const ax = x + sx * (torsoW / 2 + 0.6 * s) + side * 0.8 * s;
+  // Lengan tampak samping: lengan baju memanjang dengan tangan kecil di ujung.
+  const sideArm = (ax: number, dx: number, dark: boolean) => {
+    const top = ty + 1.5 * s;
+    const len = torsoH - 2 * s;
+    ctx.save();
+    ctx.translate(ax, top);
+    ctx.rotate(dx * 0.06);
+    ctx.fillStyle = shade(a.bodyColor, dark ? -0.25 : -0.1);
+    rr(ctx, -2.6 * s, 0, 5.2 * s, len, 2.6 * s);
+    ctx.fill();
+    ctx.lineWidth = LINE * s;
+    ctx.stroke();
+    ctx.fillStyle = dark ? shade(a.skin, -0.12) : a.skin;
+    ctx.beginPath();
+    ctx.arc(0, len + 0.5 * s, 2.3 * s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  };
+  const arm = (ax: number, dy: number, dx = 0, dark = false) => {
     // lengan baju
-    ctx.fillStyle = shade(a.bodyColor, -0.08);
-    rr(ctx, ax - 2.8 * s, ty + 1 * s + dy * 0.4, 5.6 * s, 5.5 * s, 2.4 * s);
+    ctx.fillStyle = shade(a.bodyColor, dark ? -0.22 : -0.08);
+    rr(ctx, ax - 2.8 * s + dx * 0.4, ty + 1 * s + dy * 0.4, 5.6 * s, 5.5 * s, 2.4 * s);
     ctx.fill();
     ctx.lineWidth = LINE * s;
     ctx.stroke();
     // lengan + tangan
-    ctx.fillStyle = a.skin;
-    rr(ctx, ax - 2 * s, ty + 5 * s + dy, 4 * s, torsoH - 3.5 * s, 2 * s);
+    ctx.fillStyle = dark ? shade(a.skin, -0.12) : a.skin;
+    rr(ctx, ax - 2 * s + dx, ty + 5 * s + dy, 4 * s, torsoH - 3.5 * s, 2 * s);
     ctx.fill();
     ctx.stroke();
   };
   const armDy = pose.sitting ? -1 * s : swing;
-  if (side !== 1) arm(-1, armDy);
-  if (side !== -1) arm(1, -armDy);
+  if (side === 0) {
+    arm(x - (bodyW / 2 + 0.6 * s), armDy);
+    arm(x + (bodyW / 2 + 0.6 * s), -armDy);
+  } else {
+    // lengan belakang mengayun berlawanan dengan lengan depan
+    sideArm(x - side * 1.5 * s, -side * swing, true);
+  }
   const g = ctx.createLinearGradient(0, ty, 0, ty + torsoH);
   g.addColorStop(0, shade(a.bodyColor, 0.1));
   g.addColorStop(1, shade(a.bodyColor, -0.12));
-  rr(ctx, x - torsoW / 2, ty, torsoW, torsoH + 1.5 * s, 5 * s);
+  rr(ctx, x - bodyW / 2, ty, bodyW, torsoH + 1.5 * s, 5 * s);
   ctx.fillStyle = g;
   ctx.fill();
   ctx.lineWidth = LINE * 1.1 * s;
   ctx.stroke();
-  if (side !== 0) arm(side, side === 1 ? -armDy : armDy);
+  if (side !== 0) sideArm(x - side * 0.8 * s, side * swing, false);
   if (!back) {
     // kerah
     ctx.fillStyle = "rgba(255,255,255,0.85)";
     ctx.beginPath();
-    ctx.moveTo(x - 3.2 * s + side * 2 * s, ty + 0.6 * s);
-    ctx.quadraticCurveTo(x + side * 2 * s, ty + 4 * s, x + 3.2 * s + side * 2 * s, ty + 0.6 * s);
+    ctx.moveTo(x - 3.2 * s + side * 2.5 * s, ty + 0.6 * s);
+    ctx.quadraticCurveTo(
+      x + side * 2.5 * s,
+      ty + 4 * s,
+      x + (side ? 1.5 : 3.2) * s + side * 2.5 * s,
+      ty + 0.6 * s,
+    );
     ctx.closePath();
     ctx.fill();
     // sablon kecil di dada
@@ -143,11 +177,18 @@ export function drawAvatar(
   // telinga
   ctx.fillStyle = shade(a.skin, -0.04);
   ctx.lineWidth = LINE * s;
-  for (const ex of side === 0 ? [-1, 1] : [-side]) {
+  const ear = (ex: number) => {
+    ctx.fillStyle = shade(a.skin, -0.04);
+    ctx.lineWidth = LINE * s;
+    ctx.strokeStyle = INK;
     ctx.beginPath();
-    ctx.ellipse(x + ex * headR * 0.98, hy + headR * 0.12, 2.6 * s, 3.2 * s, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + ex * headR, hy + headR * 0.12, 2.6 * s, 3.2 * s, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+  };
+  if (side === 0) {
+    ear(-0.98);
+    ear(0.98);
   }
   const hg = ctx.createRadialGradient(x - headR * 0.3, hy - headR * 0.35, headR * 0.2, x, hy, headR * 1.1);
   hg.addColorStop(0, shade(a.skin, 0.2));
@@ -186,10 +227,13 @@ function drawBackHair(
   ctx.fillStyle = hairGradient(ctx, a, hy, r);
   ctx.lineWidth = LINE * s;
   ctx.beginPath();
-  ctx.moveTo(x - r * 1.08 - side * 2 * s, hy - r * 0.2);
-  ctx.lineTo(x - r * 1.05 - side * 2 * s, hy + len);
-  ctx.quadraticCurveTo(x, hy + len + 3 * s, x + r * 1.05 - side * 2 * s, hy + len);
-  ctx.lineTo(x + r * 1.08 - side * 2 * s, hy - r * 0.2);
+  // Tampak samping: hanya di sisi belakang kepala.
+  const left = side === 1 ? x - r * 1.1 : side === -1 ? x - r * 0.2 : x - r * 1.08;
+  const right = side === -1 ? x + r * 1.1 : side === 1 ? x + r * 0.2 : x + r * 1.08;
+  ctx.moveTo(left, hy - r * 0.2);
+  ctx.lineTo(left + (side === 1 ? 0.05 * r : 0), hy + len);
+  ctx.quadraticCurveTo((left + right) / 2, hy + len + 3 * s, right, hy + len);
+  ctx.lineTo(right, hy - r * 0.2);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
@@ -274,6 +318,18 @@ function drawHair(
     ctx.fill();
     ctx.stroke();
   } else {
+    if (side !== 0) {
+      // Tampak samping: rambut menutupi bagian belakang kepala sampai tengkuk
+      const bx = x - side * r;
+      ctx.beginPath();
+      ctx.moveTo(x + side * r * 0.1, hy - r * 0.95);
+      ctx.quadraticCurveTo(bx - side * r * 0.2, hy - r * 0.9, bx - side * r * 0.08, hy + r * 0.1);
+      ctx.quadraticCurveTo(bx + side * r * 0.05, hy + r * 0.55, x - side * r * 0.45, hy + r * 0.5);
+      ctx.lineTo(x - side * r * 0.1, hy - r * 0.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
     capPath(ctx, x, hy, r, s, side, a.hair);
     ctx.fill();
     ctx.stroke();
@@ -325,10 +381,11 @@ function drawFace(
   side: number,
   blink: boolean,
 ) {
-  const shift = side * r * 0.32;
   const ey = hy + r * 0.2;
   const gap = r * 0.4;
-  const eyes: number[] = side === 0 ? [x - gap, x + gap] : [x + shift - gap * 0.55, x + shift + gap * 0.75];
+  // Tampak samping: satu mata di depan, mulut dan pipi mengikuti arah hadap.
+  const eyes: number[] = side === 0 ? [x - gap, x + gap] : [x + side * r * 0.5];
+  const shift = side * r * 0.62;
   ctx.strokeStyle = INK;
   ctx.lineCap = "round";
   ctx.lineWidth = 1.5 * s;
@@ -377,14 +434,14 @@ function drawFace(
 
   // Pipi merona
   ctx.fillStyle = "rgba(236,120,110,0.35)";
-  for (const cx of side === 0 ? [x - r * 0.62, x + r * 0.62] : [x + shift + side * r * 0.5]) {
+  for (const cx of side === 0 ? [x - r * 0.62, x + r * 0.62] : [x + side * r * 0.28]) {
     ctx.beginPath();
     ctx.ellipse(cx, ey + 3.6 * s, 2.4 * s, 1.4 * s, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
   // Mulut
-  const mx = x + shift * 0.9;
+  const mx = x + shift * 1.15;
   const my = ey + 4.6 * s;
   ctx.strokeStyle = INK;
   ctx.lineWidth = 1.3 * s;

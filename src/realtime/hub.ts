@@ -316,6 +316,7 @@ export class RealtimeHub {
     const raw = await kv.hget(keys.presence(conn.groupId), conn.userId);
     if (raw && (JSON.parse(raw) as { p: Presence }).p.conn === conn.presence.conn) {
       await kv.hdel(keys.presence(conn.groupId), conn.userId);
+      await repo.touchLastSeen(conn.groupId, conn.userId).catch(() => {});
       const zone = privateZoneAt(room.map, conn.presence.x, conn.presence.y);
       if (zone) await this.unlockIfEmpty(room, zone);
     }

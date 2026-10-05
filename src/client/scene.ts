@@ -145,7 +145,7 @@ export class Scene {
     const { dpr, cam, time } = f;
     const scale = cam.zoom * dpr;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = "#0b1613";
+    ctx.fillStyle = "#191715";
     ctx.fillRect(0, 0, f.w * dpr, f.h * dpr);
     ctx.setTransform(scale, 0, 0, scale, -cam.x * scale, -cam.y * scale);
     ctx.imageSmoothingQuality = "high";
@@ -477,7 +477,7 @@ export class Scene {
     ctx.beginPath();
     ctx.roundRect(bx, ly - 8, bw, 20, 10);
     ctx.fill();
-    ctx.fillStyle = v.isSelf ? "rgba(14,30,25,0.95)" : "rgba(255,255,255,0.97)";
+    ctx.fillStyle = v.isSelf ? "rgba(26,25,23,0.95)" : "rgba(255,255,255,0.97)";
     ctx.beginPath();
     ctx.roundRect(bx, ly - 10, bw, 20, 10);
     ctx.fill();

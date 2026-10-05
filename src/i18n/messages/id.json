@@ -536,5 +536,6 @@
   "tpl.current": "Sekarang",
   "avatar.hairStyle.long": "Panjang",
   "avatar.hairStyle.curly": "Keriting",
-  "chat.emoji": "Sisipkan emoji"
+  "chat.emoji": "Sisipkan emoji",
+  "error.inviteCodeNotFound": "Kode undangan tidak ditemukan."
 }
