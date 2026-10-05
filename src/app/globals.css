@@ -2592,6 +2592,10 @@ input.switch:checked::before {
   flex: 1;
   min-width: 0;
 }
+.pin-input {
+  font-size: 22px;
+  text-align: center;
+}
 .input.code {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   letter-spacing: 0.2em;

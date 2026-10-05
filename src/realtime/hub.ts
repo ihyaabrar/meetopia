@@ -36,6 +36,15 @@ import {
   type ServerMessage,
   type ZoneLock,
 } from "@/shared/protocol";
+import { createHash } from "node:crypto";
+
+/** Status ruangan di Redis: pemegang, kunci, dan hash PIN (hanya di server). */
+interface StoredZone extends ZoneLock {
+  pinHash?: string;
+}
+
+const pinHash = (groupId: string, zoneId: string, pin: string) =>
+  createHash("sha256").update(`${groupId}:${zoneId}:${pin}`).digest("hex");
 import { publishToRoom, type Envelope } from "./bus";
 
 const AWAY_AFTER_MS = 5 * 60_000;
@@ -58,6 +67,7 @@ interface Conn {
   musicTimes: number[];
   lastPosSave: number;
   statusExpiresAt: number | null;
+  pinTimes: number[];
   /** Status "rapat" dipasang otomatis karena masuk ruang privat (dicabut saat keluar). */
   autoMeeting: boolean;
 }
@@ -211,6 +221,7 @@ export class RealtimeHub {
       lastPosSave: 0,
       statusExpiresAt: status.statusExpiresAt ? Date.parse(status.statusExpiresAt) : null,
       autoMeeting: false,
+      pinTimes: [],
     };
     room.conns.set(auth.userId, conn);
     await this.writePresence(conn);
@@ -227,6 +238,8 @@ export class RealtimeHub {
       serverNow: Date.now(),
     });
     await publishToRoom(auth.groupId, { msg: { t: "join", peer: presence } });
+    const startZone = privateZoneAt(room.map, presence.x, presence.y);
+    if (startZone) await this.enterZone(room, conn, startZone);
 
     ws.on("message", (raw) => {
       let data: unknown;
@@ -318,7 +331,7 @@ export class RealtimeHub {
       await kv.hdel(keys.presence(conn.groupId), conn.userId);
       await repo.touchLastSeen(conn.groupId, conn.userId).catch(() => {});
       const zone = privateZoneAt(room.map, conn.presence.x, conn.presence.y);
-      if (zone) await this.unlockIfEmpty(room, zone);
+      if (zone) await this.leaveZone(room, conn.userId, zone);
     }
     await publishToRoom(conn.groupId, { msg: { t: "leave", id: conn.userId, conn: conn.presence.conn } });
     // Di Vercel instance bisa dibekukan setelah koneksi terakhir tutup: simpan pesan sekarang.
@@ -378,7 +391,8 @@ export class RealtimeHub {
         if (m.moving) p.sitting = false;
         this.autoMeetingStatus(room, conn);
         await this.broadcastUpdate(conn);
-        if (prevZone && prevZone.id !== zone?.id) await this.unlockIfEmpty(room, prevZone);
+        if (prevZone && prevZone.id !== zone?.id) await this.leaveZone(room, conn.userId, prevZone);
+        if (zone && zone.id !== prevZone?.id) await this.enterZone(room, conn, zone);
         if (!m.moving || Date.now() - conn.lastPosSave > 10_000) {
           conn.lastPosSave = Date.now();
           const kv = await this.kv();
@@ -458,15 +472,36 @@ export class RealtimeHub {
         return this.onTeleport(room, conn, m.toUserId);
 
       case "lockZone": {
-        // Hanya orang yang sedang berada di dalam ruangan yang bisa mengunci/membukanya.
+        // Hanya pemegang ruangan (orang pertama yang masuk) yang bisa mengunci/membuka, dari dalam.
         const zone = room.map.zones.find((z) => z.id === m.zoneId);
         if (!zone || !isLockable(zone) || privateZoneAt(room.map, p.x, p.y)?.id !== zone.id) return;
-        const kv = await this.kv();
+        const st = await this.zoneState(room, zone.id);
+        if (!st || st.masterId !== conn.userId) return send(conn.ws, { t: "error", code: "notRoomMaster" });
         if (m.locked) {
-          const lock: ZoneLock = { by: conn.userId, byName: p.name };
-          await kv.hset(keys.locks(room.groupId), zone.id, JSON.stringify(lock));
-        } else await kv.hdel(keys.locks(room.groupId), zone.id);
+          if (!m.pin || !/^\d{4,6}$/.test(m.pin)) return send(conn.ws, { t: "error", code: "badPin" });
+          await this.saveZone(room, zone.id, {
+            ...st,
+            locked: true,
+            pinHash: pinHash(room.groupId, zone.id, m.pin),
+          });
+        } else await this.saveZone(room, zone.id, { ...st, locked: false, pinHash: undefined });
         return this.publishLocks(room);
+      }
+
+      case "zonePin": {
+        const zone = room.map.zones.find((z) => z.id === m.zoneId);
+        if (!zone || !isLockable(zone)) return;
+        const now = Date.now();
+        conn.pinTimes = conn.pinTimes.filter((t) => now - t < 60_000);
+        if (conn.pinTimes.length >= 5) return send(conn.ws, { t: "error", code: "rateLimited" });
+        conn.pinTimes.push(now);
+        const st = await this.zoneState(room, zone.id);
+        const ok = !st?.locked || st.pinHash === pinHash(room.groupId, zone.id, m.pin);
+        if (ok) {
+          p.allowedZone = zone.id;
+          await this.broadcastUpdate(conn);
+        }
+        return send(conn.ws, { t: "pinResult", zoneId: zone.id, ok });
       }
 
       case "knockReply":
@@ -478,31 +513,74 @@ export class RealtimeHub {
     const kv = await this.kv();
     const raw = await kv.hgetall(keys.locks(room.groupId));
     const out: Record<string, ZoneLock> = {};
-    for (const [id, v] of Object.entries(raw))
-      if (room.map.zones.some((z) => z.id === id && isLockable(z))) out[id] = JSON.parse(v) as ZoneLock;
+    for (const [id, v] of Object.entries(raw)) {
+      if (!room.map.zones.some((z) => z.id === id && isLockable(z))) continue;
+      const st = JSON.parse(v) as StoredZone;
+      // PIN tidak pernah dikirim ke klien.
+      out[id] = { masterId: st.masterId, masterName: st.masterName, locked: st.locked };
+    }
     return out;
   }
 
-  private async lockOf(room: Room, zoneId: string): Promise<ZoneLock | null> {
+  private async zoneState(room: Room, zoneId: string): Promise<StoredZone | null> {
     const kv = await this.kv();
     const raw = await kv.hget(keys.locks(room.groupId), zoneId);
-    return raw ? (JSON.parse(raw) as ZoneLock) : null;
+    return raw ? (JSON.parse(raw) as StoredZone) : null;
+  }
+
+  /** Terkunci = ada pemegang dan sudah diberi PIN. */
+  private async lockOf(room: Room, zoneId: string): Promise<boolean> {
+    return !!(await this.zoneState(room, zoneId))?.locked;
+  }
+
+  private async saveZone(room: Room, zoneId: string, st: StoredZone | null) {
+    const kv = await this.kv();
+    if (st) await kv.hset(keys.locks(room.groupId), zoneId, JSON.stringify(st));
+    else await kv.hdel(keys.locks(room.groupId), zoneId);
   }
 
   private async publishLocks(room: Room) {
     await publishToRoom(room.groupId, { msg: { t: "locks", locks: await this.readLocks(room) } });
   }
 
-  /** Kunci dibuka otomatis saat orang terakhir keluar, agar ruangan tidak terkunci tanpa penghuni. */
-  private async unlockIfEmpty(room: Room, zone: Zone) {
-    if (!isLockable(zone) || !(await this.lockOf(room, zone.id))) return;
-    // Kehadiran orang yang baru pindah sudah ditulis sebelum fungsi ini dipanggil.
-    const inside = (await this.readPresence(room)).some(
-      (o) => privateZoneAt(room.map, o.x, o.y)?.id === zone.id,
+  /** Orang pertama yang masuk ruangan yang bisa dikunci menjadi pemegangnya. */
+  private async enterZone(room: Room, conn: Conn, zone: Zone) {
+    if (!isLockable(zone)) return;
+    const st = await this.zoneState(room, zone.id);
+    if (st) {
+      const masterInside = (await this.readPresence(room)).some(
+        (o) => o.id === st.masterId && privateZoneAt(room.map, o.x, o.y)?.id === zone.id,
+      );
+      if (masterInside) return;
+    }
+    await this.saveZone(room, zone.id, {
+      masterId: conn.userId,
+      masterName: conn.presence.name,
+      locked: st?.locked ?? false,
+      pinHash: st?.pinHash,
+    });
+    await this.publishLocks(room);
+  }
+
+  /**
+   * Pemegang keluar: peran (beserta kunci & PIN) pindah ke orang lain yang masih di dalam;
+   * bila ruangan kosong, kunci direset.
+   */
+  private async leaveZone(room: Room, userId: string, zone: Zone) {
+    if (!isLockable(zone)) return;
+    const st = await this.zoneState(room, zone.id);
+    if (!st) return;
+    // Kehadiran orang yang baru pindah/keluar sudah ditulis sebelum fungsi ini dipanggil.
+    const inside = (await this.readPresence(room)).filter(
+      (o) => o.id !== userId && privateZoneAt(room.map, o.x, o.y)?.id === zone.id,
     );
-    if (inside) return;
-    const kv = await this.kv();
-    await kv.hdel(keys.locks(room.groupId), zone.id);
+    if (!inside.length) {
+      await this.saveZone(room, zone.id, null);
+      return this.publishLocks(room);
+    }
+    if (st.masterId !== userId) return;
+    const next = inside[0];
+    await this.saveZone(room, zone.id, { ...st, masterId: next.id, masterName: next.name });
     await this.publishLocks(room);
   }
 
@@ -571,7 +649,8 @@ export class RealtimeHub {
     this.autoMeetingStatus(room, conn);
     send(conn.ws, { t: "teleported", x: spot.x, y: spot.y, toName: target.name });
     await this.broadcastUpdate(conn);
-    if (fromZone && fromZone.id !== zone?.id) await this.unlockIfEmpty(room, fromZone);
+    if (fromZone && fromZone.id !== zone?.id) await this.leaveZone(room, conn.userId, fromZone);
+    if (zone && zone.id !== fromZone?.id) await this.enterZone(room, conn, zone);
   }
 
   private async readMusic(room: Room): Promise<MusicState[]> {

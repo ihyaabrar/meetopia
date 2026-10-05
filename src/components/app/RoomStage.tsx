@@ -25,6 +25,7 @@ import { STATUSES, audiblePeers, type PresenceStatus } from "@/shared/proximity"
 import { EMOTES, type Direction, type Presence } from "@/shared/protocol";
 import { Minimap } from "./Minimap";
 import { Dropdown } from "@/components/Dropdown";
+import { DoorPrompt, SetPinDialog } from "./ZoneLockDialogs";
 import { speakerVolume } from "@/shared/music";
 import { getPrefs, setPrefs, usePrefs } from "@/client/prefs";
 import type { MusicPlayer } from "@/client/music";
@@ -132,7 +133,9 @@ export function RoomStage({
   const remote = useSyncExternalStore(media.subscribe, media.getSnapshot, () => [] as RemoteMedia[]);
 
   // ------------------------------------------------------------ gerak
-  const zoneLocked = useCallback((zone: Zone) => !!snapRef.current.locks[zone.id], []);
+  const zoneLocked = useCallback((zone: Zone) => !!snapRef.current.locks[zone.id]?.locked, []);
+  const [doorPrompt, setDoorPrompt] = useState<{ zone: Zone; target: Point } | null>(null);
+  const [pinSetup, setPinSetup] = useState<Zone | null>(null);
 
   const walkTo = useCallback(
     (target: Point, onArrive?: () => void) => {
@@ -168,28 +171,11 @@ export function RoomStage({
     st.onArrive = null;
     cb?.();
     if (st.pendingZone) {
-      const { zone, target } = st.pendingZone;
+      // Ruangan terkunci: tampilkan pilihan masukkan PIN atau ketuk.
+      setDoorPrompt(st.pendingZone);
       st.pendingZone = null;
-      toast({
-        text: t("knock.zoneLocked", { zone: t(zone.label) }),
-        action: {
-          label: t("knock.knock"),
-          run: () => {
-            room.send({ t: "knock", zoneId: zone.id });
-            toast({ text: t("knock.sent") });
-            const off = room.on("knockResult", (r) => {
-              if (r.zoneId !== zone.id) return;
-              off();
-              if (r.accept) {
-                room.updateSelf({ allowedZone: zone.id });
-                walkTo(target);
-              }
-            });
-          },
-        },
-      });
     }
-  }, [room, t, toast, walkTo]);
+  }, [setDoorPrompt]);
   useEffect(() => {
     arriveRef.current = arrive;
   }, [arrive]);
@@ -260,7 +246,7 @@ export function RoomStage({
               if (!grid[Math.floor(y + oy)]?.[Math.floor(x + ox)]) return false;
             // Ruangan terkunci: berhenti di pintu dan tawarkan ketuk.
             const z = privateZoneAt(map, x, y);
-            if (z && s.locks[z.id] && room.self?.allowedZone !== z.id) {
+            if (z && s.locks[z.id]?.locked && room.self?.allowedZone !== z.id) {
               if (nowMs - st.lastLockedHint > 4000) {
                 st.lastLockedHint = nowMs;
                 st.pendingZone = { zone: z, target: { x: Math.floor(x), y: Math.floor(y) } };
@@ -419,7 +405,7 @@ export function RoomStage({
           return [{ obj, level: me ? speakerVolume(map, obj, me.x, me.y).volume : 0 }];
         }),
         reducedMotion: reducedMotion(),
-        lockedZones: s.locks,
+        lockedZones: Object.fromEntries(Object.entries(s.locks).filter(([, l]) => l.locked)),
       });
 
       // Posisi popup petunjuk objek
@@ -664,24 +650,28 @@ export function RoomStage({
       <div className="hud-tl">
         {zoneHere && (
           <span className={`hud-chip ${zoneHere.private ? "private" : ""}`}>
-            <Icon name={snap.locks[zoneHere.id] ? "lock" : "pin"} size={14} />
+            <Icon name={snap.locks[zoneHere.id]?.locked ? "lock" : "pin"} size={14} />
             <b>{t(zoneHere.label)}</b>
             {zoneHere.private && (
               <span className="sub">
-                {snap.locks[zoneHere.id]
-                  ? t("room.lockedBy", { name: snap.locks[zoneHere.id].byName })
-                  : t("room.isolated")}
+                {snap.locks[zoneHere.id]?.locked
+                  ? t("room.lockedBy", { name: snap.locks[zoneHere.id].masterName })
+                  : snap.locks[zoneHere.id]
+                    ? t("room.master", { name: snap.locks[zoneHere.id].masterName })
+                    : t("room.isolated")}
               </span>
             )}
-            {isLockable(zoneHere) && (
+            {isLockable(zoneHere) && snap.locks[zoneHere.id]?.masterId === snap.selfId && (
               <button
                 className="btn small secondary"
-                aria-pressed={!!snap.locks[zoneHere.id]}
+                aria-pressed={!!snap.locks[zoneHere.id]?.locked}
                 onClick={() =>
-                  room.send({ t: "lockZone", zoneId: zoneHere.id, locked: !snap.locks[zoneHere.id] })
+                  snap.locks[zoneHere.id]?.locked
+                    ? room.send({ t: "lockZone", zoneId: zoneHere.id, locked: false })
+                    : setPinSetup(zoneHere)
                 }
               >
-                {snap.locks[zoneHere.id] ? t("room.unlock") : t("room.lock")}
+                {snap.locks[zoneHere.id]?.locked ? t("room.unlock") : t("room.lock")}
               </button>
             )}
           </span>
@@ -788,6 +778,34 @@ export function RoomStage({
         </div>
       )}
 
+      {pinSetup && <SetPinDialog room={room} zone={pinSetup} onClose={() => setPinSetup(null)} />}
+      {doorPrompt && (
+        <DoorPrompt
+          room={room}
+          zone={doorPrompt.zone}
+          masterName={snap.locks[doorPrompt.zone.id]?.masterName ?? ""}
+          onClose={() => setDoorPrompt(null)}
+          onEnter={() => {
+            const target = doorPrompt.target;
+            setDoorPrompt(null);
+            walkTo(target);
+          }}
+          onKnocked={() => {
+            const { zone, target } = doorPrompt;
+            setDoorPrompt(null);
+            room.send({ t: "knock", zoneId: zone.id });
+            toast({ text: t("knock.sent") });
+            const off = room.on("knockResult", (r) => {
+              if (r.zoneId !== zone.id) return;
+              off();
+              if (r.accept) {
+                room.updateSelf({ allowedZone: zone.id });
+                walkTo(target);
+              }
+            });
+          }}
+        />
+      )}
       {hint && (
         <div ref={hintRef} className="hint-pop" role="dialog" aria-label={t(hint.obj.label!)}>
           <div className="title">
@@ -890,7 +908,7 @@ export function RoomStage({
             items={map.zones.map((z) => ({
               value: z.id,
               label: t(z.label),
-              lead: <Icon name={snap.locks[z.id] ? "lock" : z.private ? "door" : "pin"} size={14} />,
+              lead: <Icon name={snap.locks[z.id]?.locked ? "lock" : z.private ? "door" : "pin"} size={14} />,
             }))}
           />
           <button

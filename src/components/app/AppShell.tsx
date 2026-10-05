@@ -274,7 +274,8 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
         }
       }),
       room.on("error", (code) => {
-        if (code === "rateLimited" || code === "tooFar") toast({ text: t(`error.${code}`), kind: "error" });
+        if (["rateLimited", "tooFar", "notRoomMaster", "badPin"].includes(code))
+          toast({ text: t(`error.${code}`), kind: "error" });
       }),
       room.on("kicked", (reason) => {
         if (reason === "replaced") {

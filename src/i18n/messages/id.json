@@ -512,7 +512,7 @@
   "action.playResult": "Satu ronde selesai, skor {n}.",
   "room.lock": "Kunci",
   "room.unlock": "Buka kunci",
-  "room.lockedBy": "dikunci oleh {name}",
+  "room.lockedBy": "dikunci PIN oleh {name}",
   "knock.zoneLocked": "{zone} sedang dikunci. Ketuk untuk minta masuk?",
   "tpl.choose": "Jenis ruangan",
   "tpl.office": "Kantor",
@@ -577,5 +577,17 @@
   "ws.codePlaceholder": "Contoh: K7Q2MX",
   "ws.joinSubmit": "Gabung",
   "ws.back": "Kembali ke ruangan",
-  "nav.home": "Beranda"
+  "nav.home": "Beranda",
+  "room.master": "pemegang: {name}",
+  "lock.setTitle": "Kunci {zone}",
+  "lock.setSub": "Buat PIN untuk ruangan ini. Rekan yang tahu PIN bisa masuk; yang lain harus mengetuk. Kunci direset saat ruangan kosong.",
+  "lock.pin": "PIN (4 sampai 6 angka)",
+  "lock.pinHint": "Bila kamu keluar, peran pemegang dan kuncinya pindah ke orang lain di dalam.",
+  "lock.lockNow": "Kunci ruangan",
+  "lock.lockedTitle": "{zone} dikunci",
+  "lock.lockedSub": "Masukkan PIN dari {name}, atau ketuk dan tunggu dibukakan.",
+  "lock.enter": "Masuk",
+  "lock.wrongPin": "PIN salah.",
+  "error.notRoomMaster": "Hanya pemegang ruangan yang bisa mengunci.",
+  "error.badPin": "PIN harus 4 sampai 6 angka."
 }

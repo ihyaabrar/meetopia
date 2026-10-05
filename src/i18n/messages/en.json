@@ -512,7 +512,7 @@
   "action.playResult": "Round over, score {n}.",
   "room.lock": "Lock",
   "room.unlock": "Unlock",
-  "room.lockedBy": "locked by {name}",
+  "room.lockedBy": "locked with a PIN by {name}",
   "knock.zoneLocked": "{zone} is locked. Knock to ask to come in?",
   "tpl.choose": "Room type",
   "tpl.office": "Office",
@@ -577,5 +577,17 @@
   "ws.codePlaceholder": "E.g. K7Q2MX",
   "ws.joinSubmit": "Join",
   "ws.back": "Back to the room",
-  "nav.home": "Home"
+  "nav.home": "Home",
+  "room.master": "host: {name}",
+  "lock.setTitle": "Lock {zone}",
+  "lock.setSub": "Create a PIN for this room. Teammates who know it can come in; others have to knock. The lock resets when the room is empty.",
+  "lock.pin": "PIN (4 to 6 digits)",
+  "lock.pinHint": "If you leave, the host role and the lock pass to someone still inside.",
+  "lock.lockNow": "Lock room",
+  "lock.lockedTitle": "{zone} is locked",
+  "lock.lockedSub": "Enter the PIN from {name}, or knock and wait to be let in.",
+  "lock.enter": "Enter",
+  "lock.wrongPin": "Wrong PIN.",
+  "error.notRoomMaster": "Only the room host can lock it.",
+  "error.badPin": "The PIN must be 4 to 6 digits."
 }

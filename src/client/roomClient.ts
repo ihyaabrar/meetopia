@@ -48,6 +48,7 @@ type EventMap = {
   peerJoined: Presence;
   teleported: Extract<ServerMessage, { t: "teleported" }>;
   teleportRejected: Extract<ServerMessage, { t: "teleportRejected" }>;
+  pinResult: Extract<ServerMessage, { t: "pinResult" }>;
 };
 
 type Listener<K extends keyof EventMap> = (e: EventMap[K]) => void;
@@ -324,6 +325,9 @@ export class RoomClient {
         return this.emit("teleported", m);
       case "locks":
         return this.commit({ locks: m.locks });
+      case "pinResult":
+        if (m.ok) this.updateSelf({ allowedZone: m.zoneId });
+        return this.emit("pinResult", m);
       case "teleportRejected":
         return this.emit("teleportRejected", m);
       case "music": {

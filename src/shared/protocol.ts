@@ -37,10 +37,11 @@ export interface Presence {
   lastActive: number;
 }
 
-/** Ruangan yang sedang dikunci (id zona -> siapa yang mengunci). */
+/** Status ruangan yang bisa dikunci: pemegang (orang pertama yang masuk) dan apakah terkunci PIN. */
 export interface ZoneLock {
-  by: string;
-  byName: string;
+  masterId: string;
+  masterName: string;
+  locked: boolean;
 }
 
 export interface ChatMessage {
@@ -96,7 +97,13 @@ export const clientMessageSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("knockReply"), knockId: z.string().max(64), accept: z.boolean() }),
   z.object({ t: z.literal("emote"), emoji: z.enum(EMOTES) }),
   z.object({ t: z.literal("teleport"), toUserId: z.string().max(64) }),
-  z.object({ t: z.literal("lockZone"), zoneId: z.string().max(64), locked: z.boolean() }),
+  z.object({
+    t: z.literal("lockZone"),
+    zoneId: z.string().max(64),
+    locked: z.boolean(),
+    pin: z.string().max(6).optional(),
+  }),
+  z.object({ t: z.literal("zonePin"), zoneId: z.string().max(64), pin: z.string().max(6) }),
   z.object({
     t: z.literal("music"),
     objectId: z.string().max(64),
@@ -134,6 +141,7 @@ export type ServerMessage =
   | { t: "map"; map: MapData }
   | { t: "groupChanged" }
   | { t: "locks"; locks: Record<string, ZoneLock> }
+  | { t: "pinResult"; zoneId: string; ok: boolean }
   | { t: "teleported"; x: number; y: number; toName: string }
   | { t: "teleportRejected"; reason: "busy" | "privateZone" | "noSpace" | "offline" }
   | { t: "music"; objectId: string; state: MusicState | null; serverNow: number }
