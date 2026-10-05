@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import type { AvatarConfig } from "@/shared/avatar";
 import { drawAvatar } from "@/client/draw";
+import { avatarHeadY } from "@/client/art/avatar";
 
 /** Pratinjau avatar statis. `face` = hanya kepala untuk daftar anggota/chat. */
 export function AvatarCanvas({
@@ -29,8 +30,9 @@ export function AvatarCanvas({
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, size, size);
       if (face) {
-        const s = size / 32;
-        drawAvatar(ctx, avatar, size / 2, size * 1.3, s, {
+        // Kepala (dengan rambut) mengisi lingkaran, sedikit menyisakan bahu di bawah.
+        const s = size / 30;
+        drawAvatar(ctx, avatar, size / 2, size / 2 + (avatarHeadY(avatar) - 1.5) * s, s, {
           dir: "down",
           walk: 0,
           time: animate ? time / 1000 : 0,

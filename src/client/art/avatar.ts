@@ -1,5 +1,6 @@
 /**
- * Avatar kartun "chibi" Meetopia: kepala besar, hoodie, animasi jalan, napas, dan kedip.
+ * Avatar chibi Meetopia (gaya desain baru): kepala besar dengan rambut penuh, mata besar berkilau,
+ * kaus berlengan pendek, celana, dan sepatu. Animasi jalan, napas, dan kedip.
  * Digambar prosedural sehingga setiap kombinasi konfigurasi (FR-11) langsung tersedia.
  */
 import type { AvatarConfig } from "@/shared/avatar";
@@ -17,9 +18,30 @@ export interface AvatarPose {
   seed?: number;
 }
 
-const SHOE = "#2b302d";
+const SHOE = "#2b2623";
+const PANTS = "#34404c";
+const LINE = 1.5;
 
-/** Menggambar avatar dengan titik kaki di (x, y). `s` = skala (1 ≈ tinggi 46px). */
+interface Dims {
+  headR: number;
+  torsoW: number;
+  torsoH: number;
+  legH: number;
+}
+
+function dims(a: AvatarConfig): Dims {
+  if (a.body === "tall") return { headR: 12.5, torsoW: 15, torsoH: 13, legH: 7 };
+  if (a.body === "small") return { headR: 12, torsoW: 14, torsoH: 9, legH: 4.5 };
+  return { headR: 13, torsoW: 17, torsoH: 11, legH: 5.5 };
+}
+
+/** Tinggi pusat kepala di atas titik kaki (skala 1, berdiri). Dipakai untuk ikon wajah. */
+export function avatarHeadY(a: AvatarConfig): number {
+  const d = dims(a);
+  return 3 + d.legH + d.torsoH + d.headR * 0.62;
+}
+
+/** Menggambar avatar dengan titik kaki di (x, y). `s` = skala (1 ≈ tinggi 48px). */
 export function drawAvatar(
   ctx: CanvasRenderingContext2D,
   a: AvatarConfig,
@@ -31,155 +53,184 @@ export function drawAvatar(
   const t = pose.time ?? 0;
   const seed = pose.seed ?? 0;
   const walking = pose.walk !== 0;
-  const breath = walking ? 0 : Math.sin(t * 2.2 + seed * 6) * 0.6 * s;
-  const bob = walking ? Math.abs(Math.sin(pose.walk)) * 1.8 * s : 0;
+  const breath = walking ? 0 : Math.sin(t * 2.2 + seed * 6) * 0.5 * s;
+  const bob = walking ? Math.abs(Math.sin(pose.walk)) * 1.6 * s : 0;
   const blink = !walking && (t + seed * 7) % 4.2 < 0.13;
-
-  const bodyW = (a.body === "tall" ? 17 : a.body === "small" ? 15 : 20) * s;
-  const bodyH = (a.body === "tall" ? 14 : a.body === "small" ? 10 : 12) * s;
-  const headR = (a.body === "small" ? 10.5 : 11.5) * s;
-  const sit = pose.sitting ? 4 * s : 0;
+  const d = dims(a);
+  const headR = d.headR * s;
+  const torsoW = d.torsoW * s;
+  const torsoH = d.torsoH * s;
+  const legH = (pose.sitting ? 2 : d.legH) * s;
   const side = pose.dir === "left" ? -1 : pose.dir === "right" ? 1 : 0;
   const back = pose.dir === "up";
 
   ctx.save();
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
-  groundShadow(ctx, x, y, 12 * s, 4.5 * s, 0.28);
+  ctx.strokeStyle = INK;
+  groundShadow(ctx, x, y, 12 * s, 4.5 * s, 0.3);
 
-  // Kaki / sepatu
-  if (!pose.sitting) {
-    const step = walking ? Math.sin(pose.walk) * 2.6 * s : 0;
+  const step = walking ? Math.sin(pose.walk) * 2.4 * s : 0;
+  const hipY = y - 3 * s - legH - bob;
+  const ty = hipY - torsoH + breath * 0.3;
+  const hy = ty - headR * 0.62 + breath * 0.4;
+  // Rambut panjang/bob di belakang badan
+  if (!back) drawBackHair(ctx, a, x, hy, headR, s, side);
+
+  // Kaki: celana + sepatu, melangkah bergantian
+  for (const [dx, lift] of [
+    [-3.6, Math.max(0, step)],
+    [3.6, Math.max(0, -step)],
+  ] as const) {
+    const lx = x + dx * s + side * 1.2 * s;
+    ctx.fillStyle = PANTS;
+    rr(ctx, lx - 2.8 * s, hipY, 5.6 * s, legH + 1 * s - lift, 2 * s);
+    ctx.fill();
+    ctx.lineWidth = LINE * s;
+    ctx.stroke();
     ctx.fillStyle = SHOE;
-    for (const [dx, lift] of [
-      [-5.5, Math.max(0, step)],
-      [0.5, Math.max(0, -step)],
-    ] as const) {
-      rr(ctx, x + dx * s + side * 1.5 * s, y - 5.5 * s - lift, 5 * s, 5 * s, 2.2 * s);
+    ctx.beginPath();
+    ctx.ellipse(lx + side * 0.8 * s, y - 2.2 * s - lift, 3.6 * s, 2.4 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Badan: kaus berlengan pendek
+  const swing = walking ? Math.sin(pose.walk) * 2 * s : 0;
+  const arm = (sx: number, dy: number) => {
+    const ax = x + sx * (torsoW / 2 + 0.6 * s) + side * 0.8 * s;
+    // lengan baju
+    ctx.fillStyle = shade(a.bodyColor, -0.08);
+    rr(ctx, ax - 2.8 * s, ty + 1 * s + dy * 0.4, 5.6 * s, 5.5 * s, 2.4 * s);
+    ctx.fill();
+    ctx.lineWidth = LINE * s;
+    ctx.stroke();
+    // lengan + tangan
+    ctx.fillStyle = a.skin;
+    rr(ctx, ax - 2 * s, ty + 5 * s + dy, 4 * s, torsoH - 3.5 * s, 2 * s);
+    ctx.fill();
+    ctx.stroke();
+  };
+  const armDy = pose.sitting ? -1 * s : swing;
+  if (side !== 1) arm(-1, armDy);
+  if (side !== -1) arm(1, -armDy);
+  const g = ctx.createLinearGradient(0, ty, 0, ty + torsoH);
+  g.addColorStop(0, shade(a.bodyColor, 0.1));
+  g.addColorStop(1, shade(a.bodyColor, -0.12));
+  rr(ctx, x - torsoW / 2, ty, torsoW, torsoH + 1.5 * s, 5 * s);
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.lineWidth = LINE * 1.1 * s;
+  ctx.stroke();
+  if (side !== 0) arm(side, side === 1 ? -armDy : armDy);
+  if (!back) {
+    // kerah
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.beginPath();
+    ctx.moveTo(x - 3.2 * s + side * 2 * s, ty + 0.6 * s);
+    ctx.quadraticCurveTo(x + side * 2 * s, ty + 4 * s, x + 3.2 * s + side * 2 * s, ty + 0.6 * s);
+    ctx.closePath();
+    ctx.fill();
+    // sablon kecil di dada
+    if (side === 0) {
+      ctx.fillStyle = "rgba(255,255,255,0.32)";
+      ctx.beginPath();
+      ctx.arc(x - torsoW * 0.18, ty + torsoH * 0.5, 1.8 * s, 0, Math.PI * 2);
       ctx.fill();
     }
   }
 
-  const by = y - 4 * s - bodyH - bob + sit + breath * 0.3;
-  const top = shade(a.bodyColor, 0.08);
-  const bottom = shade(a.bodyColor, -0.18);
-
-  // Lengan (di belakang badan saat menghadap samping)
-  const swing = walking ? Math.sin(pose.walk) * 2.2 * s : 0;
-  const arm = (dx: number, dy: number) => {
-    ctx.fillStyle = shade(a.bodyColor, -0.08);
-    rr(ctx, x + dx - 2.6 * s, by + 2 * s + dy, 5.2 * s, bodyH * 0.72, 2.6 * s);
-    ctx.fill();
-    ctx.lineWidth = 1.4 * s;
-    ctx.strokeStyle = INK;
-    ctx.stroke();
-    ctx.fillStyle = a.skin;
-    ctx.beginPath();
-    ctx.arc(x + dx, by + 2 * s + dy + bodyH * 0.72, 2.6 * s, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  };
-  if (pose.sitting) {
-    arm(-bodyW / 2 + 2 * s, -1 * s);
-    arm(bodyW / 2 - 2 * s, -1 * s);
-  } else {
-    arm(-bodyW / 2 + 0.5 * s, swing);
-    arm(bodyW / 2 - 0.5 * s, -swing);
-  }
-
-  // Badan (hoodie)
-  const g = ctx.createLinearGradient(0, by, 0, by + bodyH);
-  g.addColorStop(0, top);
-  g.addColorStop(1, bottom);
-  rr(ctx, x - bodyW / 2, by, bodyW, bodyH + 2 * s, 7 * s);
-  ctx.fillStyle = g;
-  ctx.fill();
-  ctx.lineWidth = 1.7 * s;
-  ctx.strokeStyle = INK;
-  ctx.stroke();
-  if (!back) {
-    // Kantong depan
-    ctx.fillStyle = shade(a.bodyColor, -0.1);
-    rr(ctx, x - bodyW * 0.3 + side * 2 * s, by + bodyH * 0.55, bodyW * 0.6, bodyH * 0.32, 3 * s);
-    ctx.fill();
-    // Tali hoodie
-    if (side === 0) {
-      ctx.strokeStyle = C.cream;
-      ctx.lineWidth = 1.2 * s;
-      ctx.beginPath();
-      ctx.moveTo(x - 2.5 * s, by + 1 * s);
-      ctx.lineTo(x - 2.8 * s, by + 5 * s);
-      ctx.moveTo(x + 2.5 * s, by + 1 * s);
-      ctx.lineTo(x + 2.8 * s, by + 5 * s);
-      ctx.stroke();
-    }
-  }
-
-  // Tudung di belakang leher
-  const hy = by - headR + 4 * s + breath * 0.5;
-  ctx.fillStyle = shade(a.bodyColor, -0.05);
-  ctx.beginPath();
-  ctx.ellipse(x, hy + headR * 0.55, headR * 1.02, headR * 0.6, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.lineWidth = 1.6 * s;
-  ctx.strokeStyle = INK;
-  ctx.stroke();
-
   // Kepala
-  const hg = ctx.createRadialGradient(x - headR * 0.35, hy - headR * 0.4, headR * 0.15, x, hy, headR * 1.1);
-  hg.addColorStop(0, shade(a.skin, 0.25));
-  hg.addColorStop(1, shade(a.skin, -0.06));
+  // telinga
+  ctx.fillStyle = shade(a.skin, -0.04);
+  ctx.lineWidth = LINE * s;
+  for (const ex of side === 0 ? [-1, 1] : [-side]) {
+    ctx.beginPath();
+    ctx.ellipse(x + ex * headR * 0.98, hy + headR * 0.12, 2.6 * s, 3.2 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  const hg = ctx.createRadialGradient(x - headR * 0.3, hy - headR * 0.35, headR * 0.2, x, hy, headR * 1.1);
+  hg.addColorStop(0, shade(a.skin, 0.2));
+  hg.addColorStop(1, shade(a.skin, -0.05));
   ctx.beginPath();
-  ctx.arc(x, hy, headR, 0, Math.PI * 2);
+  ctx.ellipse(x, hy, headR, headR * 0.94, 0, 0, Math.PI * 2);
   ctx.fillStyle = hg;
   ctx.fill();
-  ctx.lineWidth = 1.8 * s;
-  ctx.strokeStyle = INK;
+  ctx.lineWidth = LINE * 1.2 * s;
   ctx.stroke();
 
+  if (!back) drawFace(ctx, a, x, hy, headR, s, side, blink);
   drawHair(ctx, a, x, hy, headR, s, side, back);
-  if (back) {
-    // Tudung hoodie tampak dari belakang
-    ctx.beginPath();
-    ctx.moveTo(x - headR * 0.8, hy + headR * 0.62);
-    ctx.quadraticCurveTo(x, hy + headR * 0.4, x + headR * 0.8, hy + headR * 0.62);
-    ctx.quadraticCurveTo(x + headR * 0.75, hy + headR * 1.15, x, hy + headR * 1.2);
-    ctx.quadraticCurveTo(x - headR * 0.75, hy + headR * 1.15, x - headR * 0.8, hy + headR * 0.62);
-    ctx.fillStyle = shade(a.bodyColor, -0.04);
-    ctx.fill();
-    ctx.lineWidth = 1.6 * s;
-    ctx.strokeStyle = INK;
-    ctx.stroke();
-  } else drawFace(ctx, a, x, hy, headR, s, side, blink);
   ctx.restore();
 }
 
-function hairCap(
+function hairGradient(ctx: CanvasRenderingContext2D, a: AvatarConfig, hy: number, r: number) {
+  const g = ctx.createLinearGradient(0, hy - r, 0, hy + r * 0.4);
+  g.addColorStop(0, shade(a.hairColor, 0.16));
+  g.addColorStop(1, shade(a.hairColor, -0.08));
+  return g;
+}
+
+/** Rambut di belakang kepala (rambut panjang/bob terlihat di samping wajah). */
+function drawBackHair(
+  ctx: CanvasRenderingContext2D,
+  a: AvatarConfig,
+  x: number,
+  hy: number,
+  r: number,
+  s: number,
+  side: number,
+) {
+  if (a.hair !== "bob" && a.hair !== "long") return;
+  const len = a.hair === "long" ? r * 1.35 : r * 0.75;
+  ctx.fillStyle = hairGradient(ctx, a, hy, r);
+  ctx.lineWidth = LINE * s;
+  ctx.beginPath();
+  ctx.moveTo(x - r * 1.08 - side * 2 * s, hy - r * 0.2);
+  ctx.lineTo(x - r * 1.05 - side * 2 * s, hy + len);
+  ctx.quadraticCurveTo(x, hy + len + 3 * s, x + r * 1.05 - side * 2 * s, hy + len);
+  ctx.lineTo(x + r * 1.08 - side * 2 * s, hy - r * 0.2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
+/** Bentuk rambut bagian atas kepala dengan poni; menutupi dahi sampai sedikit di atas mata. */
+function capPath(
   ctx: CanvasRenderingContext2D,
   x: number,
   hy: number,
   r: number,
   s: number,
   side: number,
-  back: boolean,
+  style: string,
 ) {
+  const fringe = hy - r * 0.18;
   ctx.beginPath();
-  if (back) {
-    ctx.arc(x, hy, r + 0.6 * s, Math.PI * 0.95, Math.PI * 2.05);
-    ctx.lineTo(x + r, hy + r * 0.5);
-    ctx.quadraticCurveTo(x, hy + r * 0.85, x - r, hy + r * 0.5);
-    ctx.closePath();
-  } else {
-    ctx.arc(x, hy, r + 0.6 * s, Math.PI * 1.0, Math.PI * 2.0);
-    // poni bergelombang
-    const n = 4;
-    for (let i = n; i >= 0; i--) {
-      const px = x - r + (2 * r * i) / n + side * 2 * s;
-      const py = hy - r * 0.18 + (i % 2 === 0 ? 0 : r * 0.16);
-      ctx.lineTo(px, py);
+  ctx.moveTo(x - r * 1.04, hy + r * 0.1);
+  ctx.bezierCurveTo(x - r * 1.18, hy - r * 1.05, x + r * 1.18, hy - r * 1.05, x + r * 1.04, hy + r * 0.1);
+  // pelipis kanan
+  ctx.lineTo(x + r * 0.86, hy - r * 0.02);
+  if (style === "spiky") {
+    for (let i = 4; i >= 0; i--) {
+      const px = x - r * 0.8 + (r * 1.6 * i) / 4 + side * 2.5 * s;
+      ctx.lineTo(px + r * 0.2, fringe + (i % 2 ? r * 0.08 : -r * 0.1));
+      ctx.lineTo(px, fringe + r * 0.12);
     }
-    ctx.closePath();
+  } else if (style === "curly") {
+    for (let i = 5; i >= 0; i--) {
+      const px = x - r * 0.86 + (r * 1.72 * i) / 5;
+      ctx.quadraticCurveTo(px + r * 0.17, fringe + r * 0.2, px, fringe);
+    }
+  } else {
+    // poni menyamping: menyapu dari kanan ke kiri (atau ke arah hadap)
+    const sw = side === 0 ? 1 : side;
+    ctx.quadraticCurveTo(x + r * 0.5 * sw, fringe + r * 0.22, x + r * 0.05 * sw, fringe - r * 0.02);
+    ctx.quadraticCurveTo(x - r * 0.3 * sw, fringe + r * 0.2, x - r * 0.62 * sw, fringe + r * 0.06);
+    ctx.quadraticCurveTo(x - r * 0.8 * sw, fringe + r * 0.12, x - r * 0.86 * sw, hy - r * 0.02);
   }
+  ctx.lineTo(x - r * 0.86, hy - r * 0.02);
+  ctx.closePath();
 }
 
 function drawHair(
@@ -192,99 +243,75 @@ function drawHair(
   side: number,
   back: boolean,
 ) {
-  ctx.lineWidth = 1.6 * s;
-  ctx.strokeStyle = INK;
-  const hairFill = () => {
-    const g = ctx.createLinearGradient(0, hy - r, 0, hy);
-    g.addColorStop(0, shade(a.hairColor, 0.18));
-    g.addColorStop(1, a.hairColor);
-    return g;
-  };
-  const shine = () => {
-    ctx.strokeStyle = "rgba(255,255,255,0.35)";
+  if (a.hair === "none") {
+    ctx.strokeStyle = "rgba(255,255,255,0.4)";
     ctx.lineWidth = 1.6 * s;
     ctx.beginPath();
-    ctx.arc(x - r * 0.15, hy - r * 0.15, r * 0.7, Math.PI * 1.15, Math.PI * 1.45);
+    ctx.arc(x - r * 0.2, hy - r * 0.25, r * 0.6, Math.PI * 1.15, Math.PI * 1.5);
     ctx.stroke();
-    ctx.strokeStyle = INK;
-  };
+    return;
+  }
+  ctx.fillStyle = hairGradient(ctx, a, hy, r);
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = LINE * 1.1 * s;
 
-  switch (a.hair) {
-    case "short":
-    case "bob":
-    case "spiky":
-    case "bun": {
-      if (a.hair === "bun") {
-        ctx.beginPath();
-        ctx.arc(x, hy - r - 2.5 * s, 4.8 * s, 0, Math.PI * 2);
-        ctx.fillStyle = hairFill();
+  if (a.hair === "bun") {
+    ctx.beginPath();
+    ctx.arc(x, hy - r * 1.02, 5 * s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  if (back) {
+    // Tampak belakang: rambut menutupi hampir seluruh kepala
+    const len = a.hair === "long" ? r * 1.3 : a.hair === "bob" ? r * 0.8 : r * 0.55;
+    ctx.beginPath();
+    ctx.moveTo(x - r * 1.06, hy + r * 0.2);
+    ctx.bezierCurveTo(x - r * 1.2, hy - r * 1.08, x + r * 1.2, hy - r * 1.08, x + r * 1.06, hy + r * 0.2);
+    ctx.lineTo(x + r * 0.98, hy + len);
+    ctx.quadraticCurveTo(x, hy + len + 3 * s, x - r * 0.98, hy + len);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  } else {
+    capPath(ctx, x, hy, r, s, side, a.hair);
+    ctx.fill();
+    ctx.stroke();
+    // cambang di samping wajah
+    if (a.hair !== "spiky") {
+      for (const sx of side === 0 ? [-1, 1] : [-side]) {
+        rr(ctx, x + sx * r * 0.93 - 1.8 * s, hy - r * 0.15, 3.6 * s, r * 0.42, 1.6 * s);
         ctx.fill();
-        ctx.stroke();
       }
-      if (a.hair === "spiky") {
-        ctx.beginPath();
-        for (let i = -2; i <= 2; i++) {
-          const bx = x + i * 4.2 * s;
-          ctx.moveTo(bx - 3.4 * s, hy - r + 3 * s);
-          ctx.lineTo(bx + side * 1.5 * s, hy - r - 4.5 * s + Math.abs(i) * 1.2 * s);
-          ctx.lineTo(bx + 3.4 * s, hy - r + 3 * s);
-        }
-        ctx.fillStyle = hairFill();
-        ctx.fill();
-        ctx.stroke();
-      }
-      if (a.hair === "bob") {
-        ctx.fillStyle = a.hairColor;
-        for (const sx of [-1, 1]) {
-          if (side && sx === side) continue;
-          rr(ctx, x + sx * r - (sx > 0 ? 4 : 0.5) * s, hy - r * 0.3, 4.5 * s, r * 1.15, 2.4 * s);
-          ctx.fill();
-          ctx.stroke();
-        }
-      }
-      hairCap(ctx, x, hy, r, s, side, back);
-      ctx.fillStyle = hairFill();
+    }
+  }
+  // kilau rambut (tipis, agar tidak terlihat seperti helm)
+  ctx.strokeStyle = "rgba(255,255,255,0.22)";
+  ctx.lineWidth = 1.3 * s;
+  ctx.beginPath();
+  ctx.arc(x - r * 0.15, hy - r * 0.25, r * 0.55, Math.PI * 1.25, Math.PI * 1.45);
+  ctx.stroke();
+
+  if (a.hair === "sprout") {
+    // Tunas daun khas Meetopia di puncak kepala
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.4 * s;
+    ctx.beginPath();
+    ctx.moveTo(x + 1 * s, hy - r * 0.9);
+    ctx.quadraticCurveTo(x + 1.5 * s, hy - r * 0.9 - 3 * s, x + 1 * s, hy - r * 0.9 - 4.5 * s);
+    ctx.stroke();
+    for (const sd of [-1, 1]) {
+      ctx.save();
+      ctx.translate(x + 1 * s + sd * 3.6 * s, hy - r * 0.9 - 5.2 * s);
+      ctx.rotate(sd * -0.45);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 4 * s, 2.3 * s, 0, 0, Math.PI * 2);
+      ctx.fillStyle = sd < 0 ? C.green : C.greenLight;
       ctx.fill();
+      ctx.lineWidth = 1.2 * s;
       ctx.stroke();
-      shine();
-      break;
+      ctx.restore();
     }
-    case "sprout": {
-      // Tunas daun khas Meetopia
-      ctx.beginPath();
-      ctx.moveTo(x, hy - r + 0.5 * s);
-      ctx.quadraticCurveTo(x + 0.5 * s, hy - r - 3 * s, x, hy - r - 4.5 * s);
-      ctx.stroke();
-      for (const sd of [-1, 1]) {
-        ctx.save();
-        ctx.translate(x + sd * 4 * s, hy - r - 5.5 * s);
-        ctx.rotate(sd * -0.45);
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 4.6 * s, 2.6 * s, 0, 0, Math.PI * 2);
-        const lg = ctx.createLinearGradient(0, -3 * s, 0, 3 * s);
-        lg.addColorStop(0, C.greenLight);
-        lg.addColorStop(1, C.green);
-        ctx.fillStyle = lg;
-        ctx.fill();
-        ctx.stroke();
-        ctx.strokeStyle = "rgba(27,58,42,0.45)";
-        ctx.lineWidth = 0.9 * s;
-        ctx.beginPath();
-        ctx.moveTo(-3 * s * sd, 0);
-        ctx.lineTo(3 * s * sd, 0);
-        ctx.stroke();
-        ctx.restore();
-        ctx.strokeStyle = INK;
-        ctx.lineWidth = 1.6 * s;
-      }
-      break;
-    }
-    case "none":
-      ctx.strokeStyle = "rgba(255,255,255,0.4)";
-      ctx.beginPath();
-      ctx.arc(x - r * 0.2, hy - r * 0.2, r * 0.6, Math.PI * 1.15, Math.PI * 1.5);
-      ctx.stroke();
-      break;
   }
 }
 
@@ -298,66 +325,85 @@ function drawFace(
   side: number,
   blink: boolean,
 ) {
-  const shift = side * 3.4 * s;
-  const ex = 4.2 * s;
-  const ey = hy + 1.8 * s;
-  ctx.fillStyle = INK;
+  const shift = side * r * 0.32;
+  const ey = hy + r * 0.2;
+  const gap = r * 0.4;
+  const eyes: number[] = side === 0 ? [x - gap, x + gap] : [x + shift - gap * 0.55, x + shift + gap * 0.75];
   ctx.strokeStyle = INK;
-  ctx.lineWidth = 1.4 * s;
-  const dot = (cx: number) => {
+  ctx.lineCap = "round";
+  ctx.lineWidth = 1.5 * s;
+
+  const open = (cx: number) => {
     ctx.beginPath();
-    ctx.ellipse(cx, ey, 1.7 * s, 2.2 * s, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, ey, 2.1 * s, 2.8 * s, 0, 0, Math.PI * 2);
     ctx.fillStyle = INK;
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(cx + 0.6 * s, ey - 0.8 * s, 0.65 * s, 0, Math.PI * 2);
+    ctx.arc(cx + 0.7 * s, ey - 1 * s, 0.9 * s, 0, Math.PI * 2);
     ctx.fillStyle = "#fff";
     ctx.fill();
-  };
-  const line = (cx: number) => {
     ctx.beginPath();
-    ctx.moveTo(cx - 1.8 * s, ey);
-    ctx.lineTo(cx + 1.8 * s, ey);
+    ctx.arc(cx - 0.6 * s, ey + 1.1 * s, 0.45 * s, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  const closed = (cx: number) => {
+    ctx.beginPath();
+    ctx.moveTo(cx - 2 * s, ey + 0.4 * s);
+    ctx.quadraticCurveTo(cx, ey + 1.4 * s, cx + 2 * s, ey + 0.4 * s);
     ctx.stroke();
   };
-  const arc = (cx: number) => {
+  const happyArc = (cx: number) => {
     ctx.beginPath();
-    ctx.arc(cx, ey + 1 * s, 1.9 * s, Math.PI * 1.15, Math.PI * 1.85);
+    ctx.arc(cx, ey + 1.2 * s, 2.1 * s, Math.PI * 1.15, Math.PI * 1.85);
     ctx.stroke();
   };
-  const eyes: number[] = side === 0 ? [x - ex, x + ex] : [x + shift - ex * 0.6, x + shift + ex * 0.9];
   eyes.forEach((cx, i) => {
-    if (blink || a.face === "sleepy") return line(cx);
-    if (a.face === "calm") return arc(cx);
-    if (a.face === "wink" && i === 1) return arc(cx);
-    dot(cx);
+    if (blink || a.face === "sleepy") return closed(cx);
+    if (a.face === "calm") return happyArc(cx);
+    if (a.face === "wink" && i === 1) return happyArc(cx);
+    open(cx);
   });
 
-  // Pipi merona
-  ctx.fillStyle = "rgba(236,120,110,0.38)";
-  for (const cx of side === 0 ? [x - 7 * s, x + 7 * s] : [x + shift + side * 6 * s]) {
+  // Alis tipis
+  ctx.strokeStyle = shade(a.hairColor, -0.2);
+  ctx.lineWidth = 1.1 * s;
+  for (const cx of eyes) {
     ctx.beginPath();
-    ctx.ellipse(cx, ey + 3.4 * s, 2.3 * s, 1.4 * s, 0, 0, Math.PI * 2);
+    const lift = a.face === "surprised" ? 1.2 * s : 0;
+    ctx.moveTo(cx - 1.8 * s, ey - 4.4 * s - lift);
+    ctx.quadraticCurveTo(cx, ey - 5.2 * s - lift, cx + 1.8 * s, ey - 4.4 * s - lift);
+    ctx.stroke();
+  }
+
+  // Pipi merona
+  ctx.fillStyle = "rgba(236,120,110,0.35)";
+  for (const cx of side === 0 ? [x - r * 0.62, x + r * 0.62] : [x + shift + side * r * 0.5]) {
+    ctx.beginPath();
+    ctx.ellipse(cx, ey + 3.6 * s, 2.4 * s, 1.4 * s, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
   // Mulut
   const mx = x + shift * 0.9;
-  const my = ey + 4.4 * s;
+  const my = ey + 4.6 * s;
   ctx.strokeStyle = INK;
   ctx.lineWidth = 1.3 * s;
   ctx.beginPath();
   if (a.face === "surprised") {
-    ctx.ellipse(mx, my + 0.4 * s, 1.5 * s, 1.9 * s, 0, 0, Math.PI * 2);
+    ctx.ellipse(mx, my + 0.4 * s, 1.4 * s, 1.8 * s, 0, 0, Math.PI * 2);
     ctx.fillStyle = "#7a2f2a";
     ctx.fill();
     ctx.stroke();
   } else if (a.face === "calm" || a.face === "sleepy") {
-    ctx.moveTo(mx - 1.6 * s, my);
-    ctx.quadraticCurveTo(mx, my + 0.8 * s, mx + 1.6 * s, my);
+    ctx.moveTo(mx - 1.4 * s, my);
+    ctx.quadraticCurveTo(mx, my + 0.8 * s, mx + 1.4 * s, my);
     ctx.stroke();
   } else {
-    ctx.arc(mx, my - 1.4 * s, 2.4 * s, Math.PI * 0.18, Math.PI * 0.82);
+    ctx.moveTo(mx - 2 * s, my - 0.4 * s);
+    ctx.quadraticCurveTo(mx, my + 2.2 * s, mx + 2 * s, my - 0.4 * s);
+    ctx.closePath();
+    ctx.fillStyle = "#8a3a33";
+    ctx.fill();
     ctx.stroke();
   }
 }

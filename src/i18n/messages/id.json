@@ -87,7 +87,7 @@
   "avatar.faces.wink": "Kedip",
   "avatar.faces.surprised": "Kaget",
   "avatar.faces.sleepy": "Ngantuk",
-  "avatar.hairStyle.sprout": "Tunas",
+  "avatar.hairStyle.sprout": "Tunas daun",
   "avatar.hairStyle.short": "Pendek",
   "avatar.hairStyle.bob": "Bob",
   "avatar.hairStyle.spiky": "Jabrik",
@@ -533,5 +533,7 @@
   "tpl.change": "Ganti jenis ruangan",
   "tpl.changeHint": "Tata ruang diganti untuk semua anggota. Semua orang dipindahkan ke titik muncul, kunci ruangan dibuka, dan musik di speaker lama berhenti. Kanal, pesan, dan catatan tetap.",
   "tpl.changeConfirm": "Ganti ruangan menjadi {name}?",
-  "tpl.current": "Sekarang"
+  "tpl.current": "Sekarang",
+  "avatar.hairStyle.long": "Panjang",
+  "avatar.hairStyle.curly": "Keriting"
 }

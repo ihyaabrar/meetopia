@@ -533,5 +533,7 @@
   "tpl.change": "Change room type",
   "tpl.changeHint": "The layout changes for everyone. People move to the spawn point, locks open and music on old speakers stops. Channels, messages and notes stay.",
   "tpl.changeConfirm": "Change the room to {name}?",
-  "tpl.current": "Current"
+  "tpl.current": "Current",
+  "avatar.hairStyle.long": "Long",
+  "avatar.hairStyle.curly": "Curly"
 }

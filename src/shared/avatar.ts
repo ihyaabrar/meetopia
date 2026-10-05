@@ -21,7 +21,7 @@ export const HAIR_COLORS = [
 ] as const;
 export const BODY_SHAPES = ["round", "tall", "small"] as const;
 export const FACES = ["happy", "calm", "wink", "surprised", "sleepy"] as const;
-export const HAIR_STYLES = ["sprout", "short", "bob", "spiky", "bun", "none"] as const;
+export const HAIR_STYLES = ["short", "bob", "long", "curly", "spiky", "bun", "sprout", "none"] as const;
 
 export type BodyShape = (typeof BODY_SHAPES)[number];
 export type Face = (typeof FACES)[number];
@@ -41,8 +41,8 @@ export const DEFAULT_AVATAR: AvatarConfig = {
   bodyColor: BODY_COLORS[0],
   skin: SKIN_TONES[0],
   face: "happy",
-  hair: "sprout",
-  hairColor: HAIR_COLORS[0],
+  hair: "short",
+  hairColor: HAIR_COLORS[1],
 };
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -70,7 +70,7 @@ export function randomAvatar(): AvatarConfig {
     bodyColor: r(BODY_COLORS),
     skin: r(SKIN_TONES),
     face: r(FACES),
-    hair: r(HAIR_STYLES),
+    hair: r(HAIR_STYLES.filter((h) => h !== "none")),
     hairColor: r(HAIR_COLORS),
   };
 }
