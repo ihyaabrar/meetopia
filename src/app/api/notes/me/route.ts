@@ -10,6 +10,6 @@ export const GET = route(async () => {
 
 export const PUT = route(async (req) => {
   const user = await requireUser();
-  const { content } = await parseBody(req, z.object({ content: z.string().max(50_000) }));
+  const { content } = await parseBody(req, z.object({ content: z.string().max(400_000) }));
   return ok({ updatedAt: await savePrivateNote(user.id, content) });
 });

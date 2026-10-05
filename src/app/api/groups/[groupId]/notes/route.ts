@@ -14,7 +14,7 @@ export const GET = route<Ctx>(async (_req, { params }) => {
 export const PUT = route<Ctx>(async (req, { params }) => {
   const { groupId } = await params;
   const { user } = await requirePermission(groupId, "editSharedNote");
-  const { content } = await parseBody(req, z.object({ content: z.string().max(50_000) }));
+  const { content } = await parseBody(req, z.object({ content: z.string().max(400_000) }));
   const note = await saveSharedNote(groupId, user.id, content);
   await publishToRoom(groupId, { msg: { t: "sharedNote", note } });
   return ok({ note });

@@ -92,7 +92,7 @@ test("live: daftar, grup, undangan, saling melihat, chat, catatan, lalu bersih-b
     // Catatan bersama
     await a.getByRole("button", { name: "# catatan" }).click();
     await a.getByRole("button", { name: "Ubah" }).click();
-    await a.getByLabel("Bersama", { exact: true }).fill(`catatan ${stamp}`);
+    await a.locator(".notes-panel .doc textarea").first().fill(`catatan ${stamp}`);
     await a.getByRole("button", { name: "Simpan" }).click();
     await b.getByRole("button", { name: "# catatan" }).click();
     await expect(b.locator(".side-panel")).toContainText(`catatan ${stamp}`, { timeout: 15_000 });

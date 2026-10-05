@@ -138,14 +138,23 @@ test("MVP: grup, undangan, sinkron posisi, chat, catatan, mic, sambung ulang", a
   // --- Catatan bersama (M5)
   await a.getByRole("button", { name: "# catatan" }).click();
   await a.getByRole("button", { name: "Ubah" }).click();
-  await a.getByLabel("Bersama", { exact: true }).fill("Agenda: rilis MVP");
+  // Editor blok: "# " jadi judul, Enter blok baru, "[] " jadi ceklis
+  await a.locator(".notes-panel .doc textarea").first().click();
+  await a.keyboard.type("# Agenda");
+  await a.keyboard.press("Enter");
+  await a.keyboard.type("[] rilis MVP");
+  await expect(a.locator(".notes-panel .blk-h1 textarea")).toHaveValue("Agenda");
+  await expect(a.locator(".notes-panel .blk-todo textarea")).toHaveValue("rilis MVP");
   await a.getByRole("button", { name: "Simpan" }).click();
   await b.getByRole("button", { name: "# catatan" }).click();
-  await expect(b.locator(".side-panel")).toContainText("Agenda: rilis MVP");
+  await expect(b.locator(".side-panel")).toContainText("rilis MVP");
+  // B mencentang ceklis langsung dari mode baca; A melihat kemajuan 1/1
+  await b.getByRole("checkbox", { name: "rilis MVP" }).check();
+  await expect(a.locator(".todo-progress")).toContainText("1/1", { timeout: 10_000 });
   if (shots) await b.screenshot({ path: `${shots}/notes-b.png` });
   // Catatan pribadi tidak terbaca orang lain
   await a.getByRole("tab", { name: /Pribadi/ }).click();
-  await a.getByLabel("Pribadi", { exact: true }).fill("rahasia Rani");
+  await a.locator(".notes-panel .doc textarea").first().fill("rahasia Rani");
   await expect(a.getByText("Tersimpan", { exact: true })).toBeVisible();
   const bPrivate = await b.evaluate(() => fetch("/api/notes/me").then((r) => r.json()));
   expect(JSON.stringify(bPrivate)).not.toContain("rahasia Rani");
