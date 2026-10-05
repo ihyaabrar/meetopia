@@ -55,6 +55,10 @@ export interface SharedNote {
 
 const num = z.number().finite();
 
+/** Emote yang bisa dimunculkan di atas kepala avatar. */
+export const EMOTES = ["👋", "👍", "❤️", "😂", "🎉", "☕", "🤔", "👏"] as const;
+export type Emote = (typeof EMOTES)[number];
+
 export const clientMessageSchema = z.discriminatedUnion("t", [
   z.object({
     t: z.literal("move"),
@@ -81,6 +85,7 @@ export const clientMessageSchema = z.discriminatedUnion("t", [
     zoneId: z.string().max(64).optional(),
   }),
   z.object({ t: z.literal("knockReply"), knockId: z.string().max(64), accept: z.boolean() }),
+  z.object({ t: z.literal("emote"), emoji: z.enum(EMOTES) }),
   z.object({ t: z.literal("ping") }),
 ]);
 
@@ -92,6 +97,7 @@ export type ServerMessage =
   | { t: "update"; peer: Presence }
   | { t: "leave"; id: string; conn: string }
   | { t: "chat"; message: ChatMessage }
+  | { t: "emote"; id: string; emoji: Emote }
   | { t: "signal"; from: string; data: unknown }
   | { t: "knock"; knockId: string; from: string; fromName: string; zoneId: string | null }
   | { t: "knockResult"; knockId: string; accept: boolean; byName: string; zoneId: string | null }

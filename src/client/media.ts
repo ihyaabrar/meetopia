@@ -68,6 +68,11 @@ export class MediaManager {
   masterVolume = 1;
 
   private links = new Map<string, Link>();
+  private audioCtx: AudioContext | null = null;
+  private analysers = new Map<
+    string,
+    { an: AnalyserNode; src: MediaStreamAudioSourceNode; buf: Uint8Array<ArrayBuffer> }
+  >();
   private timer: ReturnType<typeof setInterval> | null = null;
   private offSignal: () => void;
   private offWelcome: () => void;
@@ -113,6 +118,43 @@ export class MediaManager {
     });
   }
 
+  // ---------------- level suara (indikator "sedang bicara") ----------------
+
+  private attachAnalyser(key: string, track: MediaStreamTrack) {
+    this.detachAnalyser(key);
+    try {
+      this.audioCtx ??= new AudioContext();
+      if (this.audioCtx.state === "suspended") void this.audioCtx.resume();
+      const src = this.audioCtx.createMediaStreamSource(new MediaStream([track]));
+      const an = this.audioCtx.createAnalyser();
+      an.fftSize = 256;
+      src.connect(an);
+      this.analysers.set(key, { an, src, buf: new Uint8Array(new ArrayBuffer(an.fftSize)) });
+    } catch {
+      // Web Audio tidak tersedia: indikator bicara dinonaktifkan.
+    }
+  }
+
+  private detachAnalyser(key: string) {
+    const a = this.analysers.get(key);
+    if (!a) return;
+    a.src.disconnect();
+    this.analysers.delete(key);
+  }
+
+  /** Level suara 0..1 untuk peserta (`self` = diri sendiri). */
+  level(key: string): number {
+    const a = this.analysers.get(key);
+    if (!a) return 0;
+    a.an.getByteTimeDomainData(a.buf);
+    let sum = 0;
+    for (let i = 0; i < a.buf.length; i++) {
+      const v = (a.buf[i] - 128) / 128;
+      sum += v * v;
+    }
+    return Math.min(1, Math.sqrt(sum / a.buf.length) * 5);
+  }
+
   // ---------------- perangkat lokal ----------------
 
   async setMic(on: boolean): Promise<boolean> {
@@ -127,6 +169,7 @@ export class MediaManager {
             },
           });
           this.micTrack = s.getAudioTracks()[0];
+          this.attachAnalyser("self", this.micTrack);
         } catch (e) {
           this.onError(classify(e, "mic"));
           return false;
@@ -136,6 +179,7 @@ export class MediaManager {
     } else if (this.micTrack) {
       this.micTrack.stop();
       this.micTrack = null;
+      this.detachAnalyser("self");
     }
     this.applyTracks();
     this.publishMedia();
@@ -313,6 +357,7 @@ export class MediaManager {
       if (idx === 0) {
         audioEl.srcObject = new MediaStream([e.track]);
         void audioEl.play().catch(() => {});
+        this.attachAnalyser(peerId, e.track);
       } else {
         const target = idx === 1 ? link.cam : link.screen;
         target.getTracks().forEach((t) => target.removeTrack(t));
@@ -377,6 +422,7 @@ export class MediaManager {
     if (sendBye) this.signal(link.peerId, { type: "bye" });
     link.pc.close();
     link.audioEl.srcObject = null;
+    this.detachAnalyser(link.peerId);
     this.links.delete(link.peerId);
     this.notify();
   }
@@ -394,5 +440,7 @@ export class MediaManager {
     this.camTrack?.stop();
     this.screenTrack?.stop();
     this.micTrack = this.camTrack = this.screenTrack = null;
+    this.analysers.clear();
+    void this.audioCtx?.close().catch(() => {});
   }
 }

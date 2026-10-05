@@ -18,6 +18,7 @@ export interface RoomSnapshot {
 
 type EventMap = {
   chat: ChatMessage;
+  emote: { id: string; emoji: string };
   signal: { from: string; data: unknown };
   knock: Extract<ServerMessage, { t: "knock" }>;
   knockResult: Extract<ServerMessage, { t: "knockResult" }>;
@@ -133,6 +134,7 @@ export class RoomClient {
 
   close() {
     this.closedByUser = true;
+    if (this.commitTimer) clearTimeout(this.commitTimer);
     if (this.retryTimer) clearTimeout(this.retryTimer);
     if (this.pingTimer) clearInterval(this.pingTimer);
     this.ws?.close(1000);
@@ -148,9 +150,45 @@ export class RoomClient {
   updateSelf(patch: Partial<Presence>) {
     const self = this.self;
     if (!self) return;
+    if (this.onlyMotion(self, patch)) {
+      Object.assign(self, patch);
+      this.scheduleCommit();
+      return;
+    }
     const peers = new Map(this.snapshot.peers);
     peers.set(self.id, { ...self, ...patch });
     this.commit({ peers });
+  }
+
+  /**
+   * Perubahan yang hanya menyangkut gerak (posisi/arah) diterapkan langsung ke objek kehadiran
+   * agar kanvas (yang membaca tiap frame) mulus, sementara UI React cukup diperbarui ~4x per detik.
+   */
+  private onlyMotion(cur: Presence, patch: Partial<Presence>): boolean {
+    for (const k of Object.keys(patch) as Array<keyof Presence>) {
+      if (k === "x" || k === "y" || k === "dir" || k === "moving") continue;
+      if (patch[k] !== cur[k]) return false;
+    }
+    return true;
+  }
+
+  private sameExceptMotion(a: Presence, b: Presence): boolean {
+    for (const k of Object.keys(b) as Array<keyof Presence>) {
+      if (k === "x" || k === "y" || k === "dir" || k === "moving" || k === "lastActive") continue;
+      const av = a[k];
+      const bv = b[k];
+      if (av !== bv && JSON.stringify(av) !== JSON.stringify(bv)) return false;
+    }
+    return true;
+  }
+
+  private commitTimer: ReturnType<typeof setTimeout> | null = null;
+  private scheduleCommit() {
+    if (this.commitTimer) return;
+    this.commitTimer = setTimeout(() => {
+      this.commitTimer = null;
+      this.commit({ peers: new Map(this.snapshot.peers) });
+    }, 250);
   }
 
   private onMessage(m: ServerMessage) {
@@ -167,6 +205,17 @@ export class RoomClient {
       }
       case "join":
       case "update": {
+        const current = this.snapshot.peers.get(m.peer.id);
+        if (
+          m.t === "update" &&
+          current &&
+          m.peer.id !== this.snapshot.selfId &&
+          this.sameExceptMotion(current, m.peer)
+        ) {
+          Object.assign(current, { x: m.peer.x, y: m.peer.y, dir: m.peer.dir, moving: m.peer.moving });
+          this.scheduleCommit();
+          return;
+        }
         const peers = new Map(this.snapshot.peers);
         const existing = peers.get(m.peer.id);
         if (m.peer.id === this.snapshot.selfId && existing) {
@@ -194,6 +243,8 @@ export class RoomClient {
       }
       case "chat":
         return this.emit("chat", m.message);
+      case "emote":
+        return this.emit("emote", { id: m.id, emoji: m.emoji });
       case "signal":
         return this.emit("signal", { from: m.from, data: m.data });
       case "knock":

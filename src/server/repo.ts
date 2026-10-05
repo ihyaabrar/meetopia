@@ -1,7 +1,7 @@
 /** Kueri database untuk grup, kanal, keanggotaan, peta, undangan, pesan, dan catatan. */
 import { one, sql } from "./db";
 import { newId, newToken, hashToken } from "./ids";
-import { OFFICE_TEMPLATE, type MapData } from "@/shared/map";
+import { OFFICE_TEMPLATE, TEMPLATE_REV, type MapData } from "@/shared/map";
 import { sanitizeAvatar, type AvatarConfig } from "@/shared/avatar";
 import type { Role } from "@/shared/roles";
 import type { ChatMessage, SharedNote } from "@/shared/protocol";
@@ -83,7 +83,22 @@ export async function listMembers(groupId: string): Promise<Member[]> {
 
 export async function getMap(groupId: string): Promise<MapData> {
   const r = await one<{ data: MapData }>("SELECT data FROM maps WHERE group_id = $1", [groupId]);
-  return r?.data ?? OFFICE_TEMPLATE;
+  if (!r) return OFFICE_TEMPLATE;
+  // Peta dari template lama (belum ada editor peta) ikut diperbarui; pengaturan audio dipertahankan.
+  if ((r.data.templateRev ?? 1) < TEMPLATE_REV) {
+    const upgraded: MapData = {
+      ...OFFICE_TEMPLATE,
+      audio: r.data.audio ?? OFFICE_TEMPLATE.audio,
+      version: r.data.version + 1,
+    };
+    await sql("UPDATE maps SET data = $2, version = $3, updated_at = now() WHERE group_id = $1", [
+      groupId,
+      JSON.stringify(upgraded),
+      upgraded.version,
+    ]);
+    return upgraded;
+  }
+  return r.data;
 }
 
 export async function updateMapAudio(groupId: string, audio: MapData["audio"]): Promise<MapData> {

@@ -44,6 +44,7 @@ interface Conn {
   presence: Presence;
   autoAway: boolean;
   chatTimes: number[];
+  emoteTimes: number[];
   lastPosSave: number;
 }
 
@@ -143,10 +144,10 @@ export class RealtimeHub {
       if (this.isWalkable(room, p.x, p.y)) pos = p;
     }
     // Jangan muncul di dalam ruang privat yang sedang dipakai orang lain.
-    const all = await this.readPresence(room);
+    const all = (await this.readPresence(room)).filter((p) => p.id !== auth.userId);
     const z = privateZoneAt(room.map, pos.x, pos.y);
-    if (z && all.some((p) => p.id !== auth.userId && privateZoneAt(room.map, p.x, p.y)?.id === z.id)) {
-      pos = { x: room.map.spawn.x + 0.5, y: room.map.spawn.y + 0.5 };
+    if (!saved || (z && all.some((p) => privateZoneAt(room.map, p.x, p.y)?.id === z.id))) {
+      pos = this.freeSpawn(room, all);
     }
 
     const presence: Presence = {
@@ -184,6 +185,7 @@ export class RealtimeHub {
       presence,
       autoAway: false,
       chatTimes: [],
+      emoteTimes: [],
       lastPosSave: 0,
     };
     room.conns.set(auth.userId, conn);
@@ -213,6 +215,26 @@ export class RealtimeHub {
     ws.on("close", () => {
       if (room.conns.get(conn.userId) === conn) this.scheduleLeave(room, conn);
     });
+  }
+
+  /** Titik muncul di sekitar spawn yang tidak ditempati orang lain (agar avatar tidak menumpuk). */
+  private freeSpawn(room: Room, others: Presence[]): { x: number; y: number } {
+    const { x: sx, y: sy } = room.map.spawn;
+    const candidates: Array<{ x: number; y: number }> = [];
+    // Kandidat berjarak 2 tile agar avatar dan labelnya tidak saling menutupi.
+    for (let r = 0; r <= 6 && candidates.length < 6; r += 2)
+      for (let dy = -r; dy <= r; dy += 2)
+        for (let dx = -r; dx <= r; dx += 2) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          const x = sx + dx + 0.5;
+          const y = sy + dy + 0.5;
+          if (!this.isWalkable(room, x, y) || privateZoneAt(room.map, x, y)) continue;
+          if (others.some((o) => Math.hypot(o.x - x, o.y - y) < 1.5)) continue;
+          candidates.push({ x, y });
+        }
+    return candidates.length
+      ? candidates[Math.floor(Math.random() * Math.min(3, candidates.length))]
+      : { x: sx + 0.5, y: sy + 0.5 };
   }
 
   private isWalkable(room: Room, x: number, y: number): boolean {
@@ -369,6 +391,15 @@ export class RealtimeHub {
 
       case "chat":
         return this.onChat(room, conn, m);
+
+      case "emote": {
+        const now = Date.now();
+        conn.emoteTimes = conn.emoteTimes.filter((t) => now - t < CHAT_WINDOW_MS);
+        if (conn.emoteTimes.length >= CHAT_MAX_PER_WINDOW) return;
+        conn.emoteTimes.push(now);
+        await publishToRoom(conn.groupId, { msg: { t: "emote", id: conn.userId, emoji: m.emoji } });
+        return;
+      }
 
       case "signal": {
         const others = await this.readPresence(room);

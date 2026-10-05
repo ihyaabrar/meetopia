@@ -10,7 +10,7 @@ import { Logo, LogoMark } from "@/components/Logo";
 import { Icon } from "@/components/Icon";
 import { AvatarCanvas } from "@/components/AvatarCanvas";
 import { Modal } from "@/components/Modal";
-import type { ObjectAction } from "@/shared/map";
+import { zoneAt, type ObjectAction } from "@/shared/map";
 import type { Point } from "@/shared/pathfinding";
 import type { Presence } from "@/shared/protocol";
 import { can } from "@/shared/roles";
@@ -43,6 +43,13 @@ export function AppShell(props: { initialUser: Me; initialGroups: GroupSummary[]
   );
 }
 
+const GROUP_COLORS = ["#3f9a55", "#3a8fb7", "#c9784a", "#8a63c9", "#d2554a", "#2f8f87", "#b58a2a"];
+function groupColor(id: string) {
+  let h = 0;
+  for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) | 0;
+  return GROUP_COLORS[Math.abs(h) % GROUP_COLORS.length];
+}
+
 function initials(name: string) {
   return name
     .split(/\s+/)
@@ -72,6 +79,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
   const [showNav, setShowNav] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [devLink, setDevLink] = useState<string | null>(null);
+  const [bannerHidden, setBannerHidden] = useState(false);
   const walkToRef = useRef<((p: Point) => void) | null>(null);
   const registerWalkTo = useCallback((fn: (p: Point) => void) => {
     walkToRef.current = fn;
@@ -82,6 +90,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
     const g = new URLSearchParams(location.search).get("g");
     setActiveId(g && initialGroups.some((x) => x.id === g) ? g : (initialGroups[0]?.id ?? null));
     setDevLink(sessionStorage.getItem("mt_dev_verify"));
+    setBannerHidden(!!sessionStorage.getItem("mt_banner_hidden"));
     try {
       if (!localStorage.getItem("mt_tips_seen")) {
         localStorage.setItem("mt_tips_seen", "1");
@@ -244,6 +253,10 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
         return toast({ text: t("action.comingSoon") });
       case "read":
         return toast({ text: t("action.readResult") });
+      case "drink":
+        return toast({ text: t("action.drinkResult") });
+      case "watch":
+        return toast({ text: t("action.watchResult") });
     }
   };
 
@@ -273,6 +286,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
           <button
             key={g.id}
             className="rail-item"
+            style={{ ["--g" as string]: groupColor(g.id) }}
             aria-current={g.id === activeId}
             onClick={() => switchGroup(g.id)}
             title={g.name}
@@ -327,18 +341,31 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
               </button>
               <div className="section-title">{t("nav.room")}</div>
               <div className="room-card">
-                <div className="row">
-                  <Icon name="door" />
-                  <b style={{ flex: 1 }}>{t("nav.office")}</b>
-                  <span
-                    className={`status-dot s-${snap.conn === "open" ? "active" : "away"}`}
-                    style={{ position: "static" }}
-                  />
+                <div className="room-card-head">
+                  <span className="room-icon" aria-hidden>
+                    <Icon name="door" size={18} />
+                  </span>
+                  <span className="grow">
+                    <b>{t("nav.office")}</b>
+                    <span className="count">
+                      <span className={`live-dot ${snap.conn === "open" ? "" : "off"}`} />
+                      {t("nav.inRoom", { n: onlineCount })}
+                    </span>
+                  </span>
                 </div>
-                <div className="count">{t("nav.inRoom", { n: onlineCount })}</div>
+                {onlineCount > 0 && (
+                  <div className="avatar-stack" aria-hidden>
+                    {[...snap.peers.values()].slice(0, 6).map((p) => (
+                      <span key={p.id} className="stack-item" title={p.name}>
+                        <AvatarCanvas avatar={p.avatar} size={28} face />
+                      </span>
+                    ))}
+                    {onlineCount > 6 && <span className="stack-more">+{onlineCount - 6}</span>}
+                  </div>
+                )}
                 <button
-                  className="btn small secondary"
-                  style={{ marginTop: 8, width: "100%" }}
+                  className="btn small secondary block"
+                  style={{ marginTop: 10 }}
                   onClick={() => setModal("devices")}
                 >
                   <Icon name="speaker" size={16} /> {t("devices.title")}
@@ -381,7 +408,28 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
           >
             <Icon name="menu" />
           </button>
-          <h2>{activeGroup ? `${activeGroup.name} · ${t("nav.office")}` : "Meetopia"}</h2>
+          <div className="head-title">
+            <h2>{activeGroup ? activeGroup.name : "Meetopia"}</h2>
+            {activeGroup && (
+              <span className="head-sub">
+                <Icon name="door" size={13} /> {t("nav.office")} · {t("nav.inRoom", { n: onlineCount })}
+              </span>
+            )}
+          </div>
+          {onlineCount > 0 && (
+            <div className="avatar-stack head-stack" aria-hidden>
+              {[...snap.peers.values()].slice(0, 4).map((p) => (
+                <span key={p.id} className="stack-item" title={p.name}>
+                  <AvatarCanvas avatar={p.avatar} size={26} face />
+                </span>
+              ))}
+            </div>
+          )}
+          {detail && can(role, "createInvite") && (
+            <button className="btn small hide-sm" onClick={() => setModal("invites")}>
+              <Icon name="link" size={15} /> {t("invite.inviteMembers")}
+            </button>
+          )}
           {detail && (
             <button
               className="icon-btn"
@@ -393,14 +441,22 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
             </button>
           )}
         </header>
-        {!me.emailVerified && (
+        {!me.emailVerified && !bannerHidden && (
           <div className="banner" role="status">
-            ✉️ {t("profile.verifyBanner", { email: me.email })}
-            {devLink && (
-              <a href={devLink} style={{ wordBreak: "break-all" }}>
-                {t("profile.devVerify")}
-              </a>
-            )}
+            <span aria-hidden>✉️</span>
+            <span className="grow">{t("profile.verifyBanner", { email: me.email })}</span>
+            {devLink && <a href={devLink}>{t("profile.devVerify")}</a>}
+            <button
+              className="icon-btn"
+              style={{ width: 28, height: 28 }}
+              onClick={() => {
+                setBannerHidden(true);
+                sessionStorage.setItem("mt_banner_hidden", "1");
+              }}
+              aria-label={t("common.close")}
+            >
+              <Icon name="x" size={14} />
+            </button>
           </div>
         )}
         {!activeId ? (
@@ -437,10 +493,11 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
                 registerWalkTo={registerWalkTo}
               />
             ) : (
-              <div className="stage" style={{ display: "grid", placeItems: "center" }}>
-                <span className="pill">
-                  ⟳ {t(snap.conn === "closed" ? "conn.closed" : "conn.connecting")}
-                </span>
+              <div className="stage loading-stage">
+                <div className="loading-mark">
+                  <LogoMark size={56} />
+                  <span>{t(snap.conn === "closed" ? "conn.closed" : "conn.connecting")}</span>
+                </div>
               </div>
             )}
             {detail && (
@@ -481,6 +538,10 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
           presence={snap.peers}
           selfId={me.id}
           onSelect={selectPeer}
+          locate={(p) => {
+            const z = snap.map ? zoneAt(snap.map, p.x, p.y) : null;
+            return z ? t(z.label) : null;
+          }}
           onClose={showMembers ? () => setShowMembers(false) : undefined}
         />
       )}

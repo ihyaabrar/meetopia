@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { RoomClient, RoomSnapshot } from "@/client/roomClient";
 import type { MediaManager, RemoteMedia } from "@/client/media";
-import { PALETTE, drawAvatar, renderStaticMap } from "@/client/draw";
+import { Scene, type PersonView } from "@/client/scene";
+import { hashStr } from "@/client/art/common";
 import { useT } from "@/i18n/client";
 import { useToast } from "@/components/Toasts";
 import { Icon } from "@/components/Icon";
@@ -13,16 +14,19 @@ import {
   buildWalkable,
   distanceToObject,
   privateZoneAt,
+  zoneAt,
   type MapObject,
   type ObjectAction,
   type Zone,
 } from "@/shared/map";
 import { findPath, nearestFree, type Point } from "@/shared/pathfinding";
-import { STATUSES, type PresenceStatus } from "@/shared/proximity";
-import type { Direction, Presence } from "@/shared/protocol";
+import { STATUSES, audiblePeers, type PresenceStatus } from "@/shared/proximity";
+import { EMOTES, type Direction, type Presence } from "@/shared/protocol";
+import { Minimap } from "./Minimap";
 
 const SPEED = 4.2; // tile per detik
 const SEND_INTERVAL = 90;
+const now = () => performance.now() / 1000;
 
 interface Props {
   room: RoomClient;
@@ -41,6 +45,8 @@ interface Display {
   x: number;
   y: number;
   phase: number;
+  lastPuff: number;
+  level: number;
 }
 
 function dirFrom(dx: number, dy: number, fallback: Direction): Direction {
@@ -71,28 +77,31 @@ export function RoomStage({
   const self = snap.selfId ? snap.peers.get(snap.selfId) : undefined;
 
   const grid = useMemo(() => buildWalkable(map), [map]);
-  const bg = useMemo(
-    () => (typeof document === "undefined" ? null : renderStaticMap(map, (k) => t(k))),
+  const scene = useMemo(
+    () => (typeof document === "undefined" ? null : new Scene(map, (k) => t(k))),
     [map, t],
   );
 
   const state = useRef({
     path: [] as Point[],
+    target: null as Point | null,
     lastSend: 0,
     display: new Map<string, Display>(),
     zoom: 0,
     pendingZone: null as null | { zone: Zone; target: Point },
     onArrive: null as null | (() => void),
     pointer: null as null | { x: number; y: number; id: number },
-    camera: { x: 0, y: 0, scale: 1 },
+    hover: null as null | Point,
+    camera: { x: 0, y: 0, zoom: 1 },
   });
   const [hint, setHint] = useState<{ obj: MapObject; pinned: boolean } | null>(null);
   const hintObjRef = useRef<MapObject | null>(null);
   useEffect(() => {
     hintObjRef.current = hint?.obj ?? null;
   }, [hint]);
-  /** Dipanggil saat avatar sampai di tujuan; diisi di efek di bawah (menghindari ketergantungan melingkar). */
   const arriveRef = useRef<() => void>(() => {});
+  const [emoteOpen, setEmoteOpen] = useState(false);
+  const [nearby, setNearby] = useState(0);
 
   const remote = useSyncExternalStore(media.subscribe, media.getSnapshot, () => [] as RemoteMedia[]);
 
@@ -126,6 +135,7 @@ export function RoomStage({
         }
       }
       state.current.path = path;
+      state.current.target = path.length ? path[path.length - 1] : null;
       state.current.onArrive = onArrive ?? null;
       if (me.sitting) room.send({ t: "sit", sitting: false });
       if (!path.length) arriveRef.current();
@@ -135,6 +145,7 @@ export function RoomStage({
 
   const arrive = useCallback(() => {
     const st = state.current;
+    st.target = null;
     const cb = st.onArrive;
     st.onArrive = null;
     cb?.();
@@ -170,24 +181,33 @@ export function RoomStage({
   }, [registerWalkTo, walkTo]);
 
   useEffect(() => {
-    const off1 = room.on("moveRejected", () => {
-      state.current.path = [];
-      toast({ text: t("knock.rejectedMove"), kind: "error" });
-    });
-    return off1;
-  }, [room, t, toast]);
+    const offs = [
+      room.on("moveRejected", () => {
+        state.current.path = [];
+        state.current.target = null;
+        toast({ text: t("knock.rejectedMove"), kind: "error" });
+      }),
+      room.on("emote", (e) => scene?.emote(e.id, e.emoji, now())),
+      room.on("chat", (m) => {
+        if (m.kind === "nearby") scene?.bubble(m.senderId, m.body, now());
+      }),
+    ];
+    return () => offs.forEach((o) => o());
+  }, [room, scene, t, toast]);
 
-  // ------------------------------------------------------------ loop render
+  // ------------------------------------------------------------ loop permainan
   useEffect(() => {
+    if (!scene) return;
     const canvas = canvasRef.current!;
     const ctx = canvas.getContext("2d")!;
     let raf = 0;
     let last = performance.now();
-    let hintCheck = 0;
+    let slowTick = 0;
 
-    const frame = (now: number) => {
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
+    const frame = (nowMs: number) => {
+      const dt = Math.min(0.05, (nowMs - last) / 1000);
+      last = nowMs;
+      const time = nowMs / 1000;
       const st = state.current;
       const s = snapRef.current;
       const me = s.selfId ? s.peers.get(s.selfId) : undefined;
@@ -214,156 +234,123 @@ export function RoomStage({
         const moving = st.path.length > 0;
         const dir = dirFrom(dx, dy, me.dir);
         room.updateSelf({ x: nx, y: ny, dir, moving, sitting: false });
-        if (now - st.lastSend > SEND_INTERVAL || !moving) {
-          st.lastSend = now;
+        if (nowMs - st.lastSend > SEND_INTERVAL || !moving) {
+          st.lastSend = nowMs;
           room.send({ t: "move", x: nx, y: ny, dir, moving });
         }
         if (!moving) arriveRef.current();
       }
 
-      // Ukuran kanvas & kamera
+      // Ukuran kanvas & kamera (mengikuti diri sendiri dengan halus)
       const w = canvas.clientWidth;
       const h = canvas.clientHeight;
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
       if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
         canvas.width = Math.round(w * dpr);
         canvas.height = Math.round(h * dpr);
       }
-      if (!st.zoom) st.zoom = Math.max(0.6, Math.min(1.6, w / (24 * TILE)));
-      const scale = st.zoom * dpr;
-      const meD = me ?? { x: map.spawn.x, y: map.spawn.y };
+      if (!st.zoom)
+        st.zoom = w < 600 ? Math.max(0.8, w / (13 * TILE)) : Math.max(0.8, Math.min(1.7, w / (22 * TILE)));
+      const z = st.zoom;
       const worldW = map.width * TILE;
       const worldH = map.height * TILE;
-      let camX = meD.x * TILE - w / 2 / st.zoom;
-      let camY = meD.y * TILE - h / 2 / st.zoom;
-      camX =
-        worldW * st.zoom < w ? (worldW - w / st.zoom) / 2 : Math.max(0, Math.min(worldW - w / st.zoom, camX));
-      camY =
-        worldH * st.zoom < h ? (worldH - h / st.zoom) / 2 : Math.max(0, Math.min(worldH - h / st.zoom, camY));
-      st.camera = { x: camX, y: camY, scale: st.zoom };
+      const meD = me ?? { x: map.spawn.x, y: map.spawn.y };
+      let camX = meD.x * TILE - w / 2 / z;
+      let camY = meD.y * TILE - h / 2 / z;
+      camX = worldW * z < w ? (worldW - w / z) / 2 : Math.max(-TILE, Math.min(worldW - w / z + TILE, camX));
+      camY = worldH * z < h ? (worldH - h / z) / 2 : Math.max(-TILE, Math.min(worldH - h / z + TILE, camY));
+      const k = st.camera.x === 0 && st.camera.y === 0 ? 1 : 1 - Math.pow(0.001, dt);
+      st.camera = {
+        x: st.camera.x + (camX - st.camera.x) * k,
+        y: st.camera.y + (camY - st.camera.y) * k,
+        zoom: z,
+      };
 
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillStyle = "#cdd8c9";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.setTransform(scale, 0, 0, scale, -camX * scale, -camY * scale);
-      if (bg) ctx.drawImage(bg, 0, 0);
-
-      // Lingkaran radius suara di sekitar avatar saat bergerak (prinsip UX "aturan jarak terlihat")
-      if (me && (me.moving || st.path.length) && !privateZoneAt(map, me.x, me.y)) {
-        ctx.beginPath();
-        ctx.arc(me.x * TILE, me.y * TILE, map.audio.radius * TILE, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(63,154,85,0.08)";
-        ctx.fill();
-        ctx.setLineDash([10, 8]);
-        ctx.strokeStyle = "rgba(63,154,85,0.55)";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-
-      // Titik tujuan
-      if (st.path.length) {
-        const g = st.path[st.path.length - 1];
-        ctx.strokeStyle = PALETTE.green;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.ellipse((g.x + 0.5) * TILE, (g.y + 0.5) * TILE + 6, 9, 4, 0, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
-      // Objek yang sedang disorot
-      const ho = hintObjRef.current;
-      if (ho) {
-        ctx.strokeStyle = "rgba(63,154,85,0.9)";
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.roundRect(ho.x * TILE, ho.y * TILE, ho.w * TILE, ho.h * TILE, 8);
-        ctx.stroke();
-      }
-
-      // Avatar (interpolasi untuk orang lain), urut dari atas ke bawah
-      const people = [...s.peers.values()];
-      for (const p of people) {
+      // Posisi tampilan (interpolasi untuk orang lain), animasi, debu langkah, level suara
+      const people: PersonView[] = [];
+      let selfView: PersonView | null = null;
+      for (const p of s.peers.values()) {
         let d = st.display.get(p.id);
         if (!d) {
-          d = { x: p.x, y: p.y, phase: 0 };
+          d = { x: p.x, y: p.y, phase: 0, lastPuff: 0, level: 0 };
           st.display.set(p.id, d);
         }
         if (p.id === s.selfId) {
           d.x = p.x;
           d.y = p.y;
         } else {
-          const k = 1 - Math.pow(0.0005, dt);
-          d.x += (p.x - d.x) * k;
-          d.y += (p.y - d.y) * k;
+          const kk = 1 - Math.pow(0.0005, dt);
+          d.x += (p.x - d.x) * kk;
+          d.y += (p.y - d.y) * kk;
           if (Math.hypot(p.x - d.x, p.y - d.y) > 6) {
             d.x = p.x;
             d.y = p.y;
           }
         }
-        const walking = p.moving || Math.hypot(p.x - d.x, p.y - d.y) > 0.05;
-        d.phase = walking ? d.phase + dt * 12 : 0;
+        const walking =
+          (p.id === s.selfId ? st.path.length > 0 : p.moving) || Math.hypot(p.x - d.x, p.y - d.y) > 0.05;
+        d.phase = walking ? d.phase + dt * 13 : 0;
+        if (walking && time - d.lastPuff > 0.22) {
+          d.lastPuff = time;
+          scene.puff(d.x, d.y, time);
+        }
+        const lv = p.media.mic ? media.level(p.id === s.selfId ? "self" : p.id) : 0;
+        d.level = Math.max(lv, d.level * 0.85);
+        const view: PersonView = {
+          p,
+          x: d.x,
+          y: d.y,
+          phase: d.phase,
+          speaking: d.level,
+          isSelf: p.id === s.selfId,
+          seed: hashStr(p.id),
+        };
+        people.push(view);
+        if (view.isSelf) selfView = view;
       }
       for (const id of st.display.keys()) if (!s.peers.has(id)) st.display.delete(id);
-      people.sort((a, b) => st.display.get(a.id)!.y - st.display.get(b.id)!.y);
 
-      for (const p of people) {
-        const d = st.display.get(p.id)!;
-        const px = d.x * TILE;
-        const py = d.y * TILE + 8;
-        if (p.status === "busy") {
-          ctx.strokeStyle = "rgba(210,85,74,0.8)";
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.ellipse(px, py, 13, 5, 0, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-        ctx.globalAlpha = p.status === "away" ? 0.6 : 1;
-        drawAvatar(ctx, p.avatar, px, py, 1, { dir: p.dir, walk: d.phase, sitting: p.sitting });
-        ctx.globalAlpha = 1;
-        // Label nama + status
-        const label = p.name;
-        ctx.font = "600 11px Outfit, system-ui, sans-serif";
-        const tw = ctx.measureText(label).width;
-        const lx = px;
-        const ly = py - 48;
-        const bw = tw + 30;
-        ctx.fillStyle = p.id === s.selfId ? "rgba(27,58,42,0.92)" : "rgba(255,255,255,0.94)";
-        ctx.beginPath();
-        ctx.roundRect(lx - bw / 2, ly - 9, bw, 18, 9);
-        ctx.fill();
-        const statusColor = { active: "#4fae63", busy: "#d2554a", meeting: "#8a63c9", away: "#e0a33a" }[
-          p.status
-        ];
-        ctx.fillStyle = statusColor;
-        ctx.beginPath();
-        ctx.arc(lx - bw / 2 + 9, ly, 3.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = p.id === s.selfId ? "#fff" : PALETTE.ink;
-        ctx.textAlign = "left";
-        ctx.textBaseline = "middle";
-        ctx.fillText(label, lx - bw / 2 + 16, ly + 0.5);
-        // Status mikrofon (FR-22: terlihat oleh orang lain)
-        ctx.fillStyle = p.media.mic ? "#4fae63" : "#d2554a";
-        ctx.beginPath();
-        ctx.arc(lx + bw / 2 - 7, ly, 3, 0, Math.PI * 2);
-        ctx.fill();
-        if (p.media.screen) {
-          ctx.font = "13px system-ui";
-          ctx.fillText("🖥️", lx + bw / 2 + 2, ly);
+      // Garis ke orang yang bisa didengar (bila ada yang menyalakan mic)
+      const links: Array<{ x: number; y: number; volume: number }> = [];
+      let near = 0;
+      if (me) {
+        const others = [...s.peers.values()].filter((p) => p.id !== me.id);
+        for (const a of audiblePeers(map, me, others)) {
+          near++;
+          if (!me.media.mic && !a.peer.media.mic) continue;
+          const d = st.display.get(a.peer.id);
+          if (d) links.push({ x: d.x, y: d.y, volume: a.volume });
         }
       }
+
+      scene.draw(ctx, {
+        w,
+        h,
+        dpr,
+        cam: st.camera,
+        time,
+        people,
+        self: selfView,
+        target: st.target,
+        hoverTile: st.hover,
+        focusObj: hintObjRef.current,
+        links,
+        privateZone: me ? privateZoneAt(map, me.x, me.y) : null,
+        showRadius: !!me && (me.moving || st.path.length > 0),
+      });
 
       // Posisi popup petunjuk objek
+      const ho = hintObjRef.current;
       const hel = hintRef.current;
       if (hel && ho) {
-        hel.style.left = `${(ho.x + ho.w / 2) * TILE * st.zoom - camX * st.zoom}px`;
-        hel.style.top = `${ho.y * TILE * st.zoom - camY * st.zoom}px`;
+        hel.style.left = `${((ho.x + ho.w / 2) * TILE - st.camera.x) * z}px`;
+        hel.style.top = `${(ho.y * TILE - 18 - st.camera.y) * z}px`;
       }
 
-      // Petunjuk otomatis saat avatar dalam jangkauan objek (FR-74)
-      if (me && now - hintCheck > 200) {
-        hintCheck = now;
+      // Tiap 200 ms: petunjuk otomatis (FR-74) dan jumlah orang di dekat
+      if (me && nowMs - slowTick > 200) {
+        slowTick = nowMs;
+        setNearby((n) => (n === near ? n : near));
         let best: MapObject | null = null;
         let bestD = INTERACT_RANGE;
         for (const o of map.objects) {
@@ -389,30 +376,39 @@ export function RoomStage({
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [bg, map, room]);
+  }, [scene, map, room, media]);
 
   // ------------------------------------------------------------ input
   const toWorld = (clientX: number, clientY: number) => {
     const r = canvasRef.current!.getBoundingClientRect();
     const cam = state.current.camera;
     return {
-      x: (clientX - r.left) / cam.scale / TILE + cam.x / TILE,
-      y: (clientY - r.top) / cam.scale / TILE + cam.y / TILE,
+      x: ((clientX - r.left) / cam.zoom + cam.x) / TILE,
+      y: ((clientY - r.top) / cam.zoom + cam.y) / TILE,
     };
   };
 
-  const onTap = (wx: number, wy: number) => {
+  const peerAt = (wx: number, wy: number) => {
     const s = snapRef.current;
-    // Klik avatar orang lain
     for (const p of s.peers.values()) {
       if (p.id === s.selfId) continue;
       const d = state.current.display.get(p.id) ?? p;
-      if (Math.abs(wx - d.x) < 0.6 && wy < d.y + 0.4 && wy > d.y - 1.6) return onPeerClick(p);
+      if (Math.abs(wx - d.x) < 0.6 && wy < d.y + 0.5 && wy > d.y - 1.7) return p;
     }
-    // Klik objek interaktif: tampilkan petunjuk dan berjalan mendekat
-    const obj = map.objects.find(
-      (o) => o.label && wx >= o.x && wx < o.x + o.w && wy >= o.y && wy < o.y + o.h,
+    return null;
+  };
+  const objectAt = (wx: number, wy: number) =>
+    map.objects.find(
+      (o) =>
+        o.label && wx >= o.x && wx < o.x + o.w && wy >= o.y - (o.kind === "desk" ? 0.6 : 0) && wy < o.y + o.h,
     );
+
+  const onTap = (wx: number, wy: number) => {
+    setEmoteOpen(false);
+    const peer = peerAt(wx, wy);
+    if (peer) return onPeerClick(peer);
+    // Klik objek interaktif: tampilkan petunjuk dan berjalan mendekat
+    const obj = objectAt(wx, wy);
     if (obj) {
       setHint({ obj, pinned: true });
       const me = room.self;
@@ -422,6 +418,7 @@ export function RoomStage({
       return;
     }
     setHint(null);
+    scene?.ripple(wx, wy, now());
     walkTo({ x: wx, y: wy });
   };
 
@@ -436,8 +433,17 @@ export function RoomStage({
     const w = toWorld(e.clientX, e.clientY);
     onTap(w.x, w.y);
   };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (e.pointerType !== "mouse") return;
+    const w = toWorld(e.clientX, e.clientY);
+    const interactive = !!peerAt(w.x, w.y) || !!objectAt(w.x, w.y);
+    const tx = Math.floor(w.x);
+    const ty = Math.floor(w.y);
+    state.current.hover = !interactive && grid[ty]?.[tx] ? { x: tx, y: ty } : null;
+    canvasRef.current!.style.cursor = interactive ? "pointer" : grid[ty]?.[tx] ? "pointer" : "default";
+  };
   const zoomBy = (f: number) => {
-    state.current.zoom = Math.max(0.45, Math.min(2.4, (state.current.zoom || 1) * f));
+    state.current.zoom = Math.max(0.5, Math.min(2.6, (state.current.zoom || 1) * f));
   };
 
   const runAction = (action: ObjectAction, obj: MapObject) => {
@@ -476,10 +482,15 @@ export function RoomStage({
     if (z) walkTo({ x: z.x + Math.floor(z.w / 2), y: z.y + Math.floor(z.h / 2) });
   };
 
+  const sendEmote = (emoji: (typeof EMOTES)[number]) => {
+    room.send({ t: "emote", emoji });
+    setEmoteOpen(false);
+  };
+
   const presenter = remote.find((r) => r.screen && snap.peers.get(r.peerId)?.media.screen);
   const presenterName = presenter ? snap.peers.get(presenter.peerId)?.name : null;
   const videoPeers = remote.filter((r) => r.cam && snap.peers.get(r.peerId)?.media.cam).slice(0, 8);
-  const zoneHere = self ? privateZoneAt(map, self.x, self.y) : null;
+  const zoneHere = self ? zoneAt(map, self.x, self.y) : null;
   const selfCamOn = !!self?.media.cam;
   const selfCam = useMemo(
     () => (selfCamOn && media.camTrack ? new MediaStream([media.camTrack]) : null),
@@ -495,14 +506,25 @@ export function RoomStage({
         aria-label={t("room.canvasLabel")}
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
+        onPointerMove={onPointerMove}
+        onPointerLeave={() => (state.current.hover = null)}
         onWheel={(e) => zoomBy(e.deltaY < 0 ? 1.1 : 0.9)}
       />
 
-      <div className="overlay-tl">
-        {snap.conn !== "open" && <span className="pill warn">⟳ {t(`conn.${snap.conn}`)}</span>}
-        {zoneHere && <span className="pill">🔒 {t("room.inPrivate", { zone: t(zoneHere.label) })}</span>}
+      <div className="hud-tl">
+        {zoneHere && (
+          <span className={`hud-chip ${zoneHere.private ? "private" : ""}`}>
+            <span aria-hidden>{zoneHere.private ? "🔒" : "📍"}</span>
+            <b>{t(zoneHere.label)}</b>
+            {zoneHere.private && <span className="sub">{t("room.isolated")}</span>}
+          </span>
+        )}
+        <span className="hud-chip subtle" title={t("room.nearbyHint")}>
+          <Icon name="users" size={14} /> {t("room.nearby", { n: nearby })}
+        </span>
+        {snap.conn !== "open" && <span className="hud-chip warn">⟳ {t(`conn.${snap.conn}`)}</span>}
         {self?.media.screen && (
-          <span className="pill" style={{ background: "#ffe3df", color: "#8a2a20" }}>
+          <span className="hud-chip danger">
             🖥️ {t("media.youPresent")}
             <button className="btn small danger" onClick={() => void media.setScreen(false)}>
               {t("media.stop")}
@@ -511,13 +533,41 @@ export function RoomStage({
         )}
       </div>
 
-      <div className="zoom">
-        <button onClick={() => zoomBy(1.2)} aria-label={t("room.zoomIn")}>
-          +
-        </button>
-        <button onClick={() => zoomBy(1 / 1.2)} aria-label={t("room.zoomOut")}>
-          −
-        </button>
+      <div className="hud-tr">
+        {scene && (
+          <Minimap
+            scene={scene}
+            getPeople={() => {
+              const s = snapRef.current;
+              return [...s.peers.values()].map((p) => ({
+                x: state.current.display.get(p.id)?.x ?? p.x,
+                y: state.current.display.get(p.id)?.y ?? p.y,
+                self: p.id === s.selfId,
+                status: p.status,
+              }));
+            }}
+            getView={() => {
+              const c = canvasRef.current;
+              const cam = state.current.camera;
+              return {
+                x: cam.x,
+                y: cam.y,
+                w: (c?.clientWidth ?? 0) / cam.zoom,
+                h: (c?.clientHeight ?? 0) / cam.zoom,
+              };
+            }}
+            onPick={(p) => walkTo(p)}
+            label={t("room.minimap")}
+          />
+        )}
+        <div className="zoom">
+          <button onClick={() => zoomBy(1.2)} aria-label={t("room.zoomIn")}>
+            +
+          </button>
+          <button onClick={() => zoomBy(1 / 1.2)} aria-label={t("room.zoomOut")}>
+            −
+          </button>
+        </div>
       </div>
 
       {(videoPeers.length > 0 || self?.media.cam) && (
@@ -532,7 +582,7 @@ export function RoomStage({
       {presenter && (
         <div className="screen-view">
           <div className="bar">
-            🖥️ <b>{t("media.presenting", { name: presenterName ?? "" })}</b>
+            <span className="live-dot" /> <b>{t("media.presenting", { name: presenterName ?? "" })}</b>
           </div>
           <VideoEl stream={presenter.screen!} />
         </div>
@@ -541,7 +591,10 @@ export function RoomStage({
       {hint && (
         <div ref={hintRef} className="hint-pop" role="dialog" aria-label={t(hint.obj.label!)}>
           <div className="title">
-            ✨ {t(hint.obj.label!)}
+            <span className="hint-icon" aria-hidden>
+              ✨
+            </span>
+            {t(hint.obj.label!)}
             <span className="spacer" />
             <button
               className="icon-btn"
@@ -562,78 +615,110 @@ export function RoomStage({
         </div>
       )}
 
-      <div className="controls" role="toolbar" aria-label={t("room.controls")}>
-        <button
-          className={`ctl big ${self?.media.mic ? "on" : "off"}`}
-          onClick={() => void toggle("mic")}
-          aria-pressed={!!self?.media.mic}
-          aria-label={self?.media.mic ? t("media.micOn") : t("media.micOff")}
-          title={self?.media.mic ? t("media.micOn") : t("media.micOff")}
-        >
-          <Icon name={self?.media.mic ? "mic" : "micOff"} size={22} />
-          <span className="lbl">{self?.media.mic ? t("media.mute") : t("media.unmute")}</span>
-        </button>
-        <button
-          className={`ctl ${self?.media.cam ? "on" : ""}`}
-          onClick={() => void toggle("cam")}
-          aria-pressed={!!self?.media.cam}
-          aria-label={t("media.camera")}
-        >
-          <Icon name={self?.media.cam ? "cam" : "camOff"} />
-        </button>
-        <button
-          className={`ctl ${self?.media.screen ? "on" : ""}`}
-          onClick={() => void toggle("screen")}
-          aria-pressed={!!self?.media.screen}
-          aria-label={self?.media.screen ? t("media.stopShare") : t("media.share")}
-        >
-          <Icon name="screen" />
-          <span className="lbl">{self?.media.screen ? t("media.stopShare") : t("media.share")}</span>
-        </button>
-        <span className="ctl-sep" />
-        <label className="ctl">
-          <span
-            className={`status-dot s-${self?.status ?? "active"}`}
-            style={{ position: "static", border: "none" }}
-          />
-          <span className="sr-only">{t("status.label")}</span>
-          <select
-            value={self?.status ?? "active"}
-            onChange={(e) => setStatus(e.target.value as PresenceStatus)}
+      {emoteOpen && (
+        <div className="emote-pop" role="menu" aria-label={t("emote.title")}>
+          {EMOTES.map((e) => (
+            <button key={e} role="menuitem" onClick={() => sendEmote(e)} aria-label={e}>
+              {e}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="dock" role="toolbar" aria-label={t("room.controls")}>
+        <div className="dock-group">
+          <button
+            className={`dock-btn mic ${self?.media.mic ? "on" : "off"}`}
+            onClick={() => void toggle("mic")}
+            aria-pressed={!!self?.media.mic}
+            aria-label={self?.media.mic ? t("media.micOn") : t("media.micOff")}
+            title={self?.media.mic ? t("media.micOn") : t("media.micOff")}
           >
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {t(`status.${s}`)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="ctl hide-sm">
-          <Icon name="pin" />
-          <span className="sr-only">{t("room.goTo")}</span>
-          <select value="" onChange={(e) => e.target.value && goToZone(e.target.value)}>
-            <option value="">{t("room.goTo")}</option>
-            {map.zones.map((z) => (
-              <option key={z.id} value={z.id}>
-                {t(z.label)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button className="ctl" onClick={onOpenNotes} aria-label={t("notes.title")} title={t("notes.title")}>
-          <Icon name="notes" />
-        </button>
-        <button
-          className="ctl"
-          onClick={onOpenDevices}
-          aria-label={t("devices.title")}
-          title={t("devices.title")}
-        >
-          <Icon name="settings" />
-        </button>
-        <button className="ctl hide-sm" onClick={onHelp} aria-label={t("tips.title")} title={t("tips.title")}>
-          <Icon name="help" />
-        </button>
+            <Icon name={self?.media.mic ? "mic" : "micOff"} size={20} />
+            <span className="lbl">{self?.media.mic ? t("media.mute") : t("media.unmute")}</span>
+          </button>
+          <button
+            className={`dock-btn ${self?.media.cam ? "active" : ""}`}
+            onClick={() => void toggle("cam")}
+            aria-pressed={!!self?.media.cam}
+            aria-label={t("media.camera")}
+            title={t("media.camera")}
+          >
+            <Icon name={self?.media.cam ? "cam" : "camOff"} />
+          </button>
+          <button
+            className={`dock-btn hide-sm ${self?.media.screen ? "active" : ""}`}
+            onClick={() => void toggle("screen")}
+            aria-pressed={!!self?.media.screen}
+            aria-label={self?.media.screen ? t("media.stopShare") : t("media.share")}
+            title={self?.media.screen ? t("media.stopShare") : t("media.share")}
+          >
+            <Icon name="screen" />
+          </button>
+        </div>
+        <div className="dock-group">
+          <button
+            className={`dock-btn ${emoteOpen ? "active" : ""}`}
+            onClick={() => setEmoteOpen((v) => !v)}
+            aria-expanded={emoteOpen}
+            aria-label={t("emote.title")}
+            title={t("emote.title")}
+          >
+            <span style={{ fontSize: 18 }}>😊</span>
+          </button>
+          <label className="dock-select" title={t("status.label")}>
+            <span className={`status-dot s-${self?.status ?? "active"}`} />
+            <span className="sr-only">{t("status.label")}</span>
+            <select
+              value={self?.status ?? "active"}
+              onChange={(e) => setStatus(e.target.value as PresenceStatus)}
+            >
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {t(`status.${s}`)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="dock-group">
+          <label className="dock-select hide-sm" title={t("room.goTo")}>
+            <Icon name="pin" size={16} />
+            <span className="sr-only">{t("room.goTo")}</span>
+            <select value="" onChange={(e) => e.target.value && goToZone(e.target.value)}>
+              <option value="">{t("room.goTo")}</option>
+              {map.zones.map((z) => (
+                <option key={z.id} value={z.id}>
+                  {t(z.label)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="dock-btn"
+            onClick={onOpenNotes}
+            aria-label={t("notes.title")}
+            title={t("notes.title")}
+          >
+            <Icon name="notes" />
+          </button>
+          <button
+            className="dock-btn"
+            onClick={onOpenDevices}
+            aria-label={t("devices.title")}
+            title={t("devices.title")}
+          >
+            <Icon name="settings" />
+          </button>
+          <button
+            className="dock-btn hide-sm"
+            onClick={onHelp}
+            aria-label={t("tips.title")}
+            title={t("tips.title")}
+          >
+            <Icon name="help" />
+          </button>
+        </div>
       </div>
     </div>
   );

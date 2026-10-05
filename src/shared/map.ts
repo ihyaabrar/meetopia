@@ -20,10 +20,15 @@ export type ObjectKind =
   | "table"
   | "bookshelf"
   | "welcome"
-  | "rug";
+  | "rug"
+  | "lamp"
+  | "tv"
+  | "beanbag"
+  | "cooler"
+  | "art";
 
 export type ObjectAction =
-  "sit" | "openSharedNotes" | "openPrivateNotes" | "showTips" | "buy" | "brew" | "read";
+  "sit" | "openSharedNotes" | "openPrivateNotes" | "showTips" | "buy" | "brew" | "read" | "drink" | "watch";
 
 export interface MapObject {
   id: string;
@@ -34,6 +39,8 @@ export interface MapObject {
   h: number;
   /** Menghalangi jalan avatar. */
   solid: boolean;
+  /** Arah hadap kursi (sandaran di sisi sebaliknya). */
+  facing?: "up" | "down";
   /** Kunci terjemahan nama objek. Bila ada, objek bisa diinteraksi (FR-74). */
   label?: string;
   actions?: ObjectAction[];
@@ -62,6 +69,8 @@ export interface AudioConfig {
 
 export interface MapData {
   version: number;
+  /** Revisi template asal; peta yang belum diubah admin ikut diperbarui saat template diperbaiki. */
+  templateRev?: number;
   width: number;
   height: number;
   /** Baris-baris tile; satu karakter per tile. Lihat FLOOR_CHARS. */
@@ -80,6 +89,8 @@ export const FLOOR_CHARS: Record<string, FloorKind> = {
   l: "lounge",
   d: "door",
 };
+
+export const TEMPLATE_REV = 2;
 
 export const DEFAULT_AUDIO: AudioConfig = { fullVolumeRadius: 1.5, radius: 6, curve: 1.4 };
 
@@ -152,6 +163,10 @@ function buildTemplate(): MapData {
   });
   add({ kind: "plant", x: 21, y: 12, w: 1, h: 1, solid: true });
   add({ kind: "plant", x: 1, y: 12, w: 1, h: 1, solid: true });
+  add({ kind: "lamp", x: 1, y: 6, w: 1, h: 1, solid: true });
+  add({ kind: "plant", x: 7, y: 1, w: 1, h: 1, solid: true });
+  add({ kind: "plant", x: 13, y: 1, w: 1, h: 1, solid: true });
+  add({ kind: "lamp", x: 21, y: 6, w: 1, h: 1, solid: true });
 
   // Ruang rapat
   add({
@@ -165,8 +180,28 @@ function buildTemplate(): MapData {
     actions: ["openSharedNotes"],
   });
   for (const x of [30, 32, 34, 36]) {
-    add({ kind: "chair", x, y: 3, w: 1, h: 1, solid: false, label: "object.chair", actions: ["sit"] });
-    add({ kind: "chair", x, y: 7, w: 1, h: 1, solid: false, label: "object.chair", actions: ["sit"] });
+    add({
+      kind: "chair",
+      x,
+      y: 3,
+      w: 1,
+      h: 1,
+      solid: false,
+      facing: "down",
+      label: "object.chair",
+      actions: ["sit"],
+    });
+    add({
+      kind: "chair",
+      x,
+      y: 7,
+      w: 1,
+      h: 1,
+      solid: false,
+      facing: "up",
+      label: "object.chair",
+      actions: ["sit"],
+    });
   }
   add({
     kind: "whiteboard",
@@ -179,6 +214,18 @@ function buildTemplate(): MapData {
     actions: ["openSharedNotes"],
   });
   add({ kind: "plant", x: 41, y: 9, w: 1, h: 1, solid: true });
+  add({ kind: "plant", x: 25, y: 9, w: 1, h: 1, solid: true });
+  add({
+    kind: "tv",
+    x: 31,
+    y: 1,
+    w: 3,
+    h: 1,
+    solid: true,
+    label: "object.screen",
+    actions: ["openSharedNotes"],
+  });
+  add({ kind: "lamp", x: 25, y: 1, w: 1, h: 1, solid: true });
 
   // Lobi
   add({ kind: "rug", x: 8, y: 19, w: 7, h: 4, solid: false });
@@ -205,6 +252,13 @@ function buildTemplate(): MapData {
   add({ kind: "plant", x: 1, y: 25, w: 1, h: 1, solid: true });
   add({ kind: "plant", x: 21, y: 25, w: 1, h: 1, solid: true });
   add({ kind: "sofa", x: 17, y: 24, w: 3, h: 1, solid: false, label: "object.sofa", actions: ["sit"] });
+  add({ kind: "cooler", x: 21, y: 15, w: 1, h: 1, solid: true, label: "object.cooler", actions: ["drink"] });
+  add({ kind: "beanbag", x: 3, y: 21, w: 1, h: 1, solid: false, label: "object.beanbag", actions: ["sit"] });
+  add({ kind: "beanbag", x: 5, y: 23, w: 1, h: 1, solid: false, label: "object.beanbag", actions: ["sit"] });
+  add({ kind: "plant", x: 15, y: 15, w: 1, h: 1, solid: true });
+  add({ kind: "lamp", x: 1, y: 18, w: 1, h: 1, solid: true });
+  add({ kind: "art", x: 6, y: 14, w: 2, h: 1, solid: false });
+  add({ kind: "art", x: 16, y: 14, w: 2, h: 1, solid: false });
 
   // Lounge
   add({ kind: "sofa", x: 27, y: 16, w: 3, h: 1, solid: false, label: "object.sofa", actions: ["sit"] });
@@ -215,9 +269,17 @@ function buildTemplate(): MapData {
   add({ kind: "plant", x: 41, y: 25, w: 1, h: 1, solid: true });
   add({ kind: "plant", x: 25, y: 25, w: 1, h: 1, solid: true });
   add({ kind: "rug", x: 31, y: 22, w: 6, h: 3, solid: false });
+  add({ kind: "tv", x: 27, y: 13, w: 3, h: 1, solid: true, label: "object.tv", actions: ["watch"] });
+  add({ kind: "beanbag", x: 32, y: 23, w: 1, h: 1, solid: false, label: "object.beanbag", actions: ["sit"] });
+  add({ kind: "beanbag", x: 35, y: 23, w: 1, h: 1, solid: false, label: "object.beanbag", actions: ["sit"] });
+  add({ kind: "lamp", x: 42, y: 17, w: 1, h: 1, solid: true });
+  add({ kind: "lamp", x: 24, y: 13, w: 1, h: 1, solid: true });
+  add({ kind: "art", x: 34, y: 11, w: 2, h: 1, solid: false });
+  add({ kind: "art", x: 38, y: 11, w: 2, h: 1, solid: false });
 
   return {
     version: 1,
+    templateRev: TEMPLATE_REV,
     width: W,
     height: H,
     tiles: grid.map((r) => r.join("")),

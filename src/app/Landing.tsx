@@ -5,12 +5,13 @@ import { useEffect, useRef } from "react";
 import { PublicShell } from "@/components/PublicShell";
 import { Icon, type IconName } from "@/components/Icon";
 import { useT } from "@/i18n/client";
-import { drawAvatar, renderStaticMap } from "@/client/draw";
+import { Scene, type PersonView } from "@/client/scene";
 import { OFFICE_TEMPLATE, TILE, buildWalkable } from "@/shared/map";
+import { EMOTES, type Presence } from "@/shared/protocol";
 import { findPath, type Point } from "@/shared/pathfinding";
 import { randomAvatar, DEFAULT_AVATAR } from "@/shared/avatar";
 
-/** Pratinjau hidup: beberapa karakter berjalan acak di peta template. */
+/** Pratinjau hidup: karakter berjalan acak di kantor template, lengkap dengan emote dan balon chat. */
 function HeroMap() {
   const ref = useRef<HTMLCanvasElement>(null);
   const t = useT();
@@ -18,73 +19,119 @@ function HeroMap() {
     const canvas = ref.current!;
     const ctx = canvas.getContext("2d")!;
     const map = OFFICE_TEMPLATE;
-    const bg = renderStaticMap(map, (k) => t(k));
+    const scene = new Scene(map, (k) => t(k));
     const grid = buildWalkable(map);
     const free: Point[] = [];
     grid.forEach((row, y) => row.forEach((ok, x) => ok && y > 11 && free.push({ x, y })));
-    const bots = Array.from({ length: 9 }, (_, i) => {
-      const p = free[(i * 37) % free.length];
-      return {
+    const names = ["Rani", "Dito", "Ayu", "Bima", "Sari", "Joko", "Lala", "Tegar"];
+    const lines = [t("landing.bubble1"), t("landing.bubble2"), t("landing.bubble3")];
+    const statuses = ["active", "active", "busy", "active", "meeting", "active", "away", "active"] as const;
+    const bots = names.map((name, i) => {
+      const p = free[(i * 53 + 17) % free.length];
+      const presence: Presence = {
+        id: `bot-${i}`,
+        conn: "",
+        name,
         avatar: i === 0 ? DEFAULT_AVATAR : randomAvatar(),
+        role: "member",
         x: p.x + 0.5,
         y: p.y + 0.5,
-        path: [] as Point[],
-        dir: "down" as const as "down" | "up" | "left" | "right",
-        phase: 0,
-        wait: i * 30,
+        dir: "down",
+        moving: false,
+        sitting: false,
+        status: statuses[i],
+        manualStatus: false,
+        media: { mic: i % 3 !== 2, cam: false, screen: false },
+        allowedZone: null,
+        allowedPeers: [],
+        lastActive: 0,
       };
+      return { presence, path: [] as Point[], phase: 0, wait: 30 + i * 40, lastPuff: 0 };
     });
     let raf = 0;
-    const frame = () => {
+    let nextFx = 1;
+    const frame = (ms: number) => {
+      const time = ms / 1000;
       const w = canvas.clientWidth;
       const h = canvas.clientHeight;
-      const dpr = window.devicePixelRatio || 1;
-      if (canvas.width !== w * dpr) {
-        canvas.width = w * dpr;
-        canvas.height = h * dpr;
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      if (canvas.width !== Math.round(w * dpr)) {
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(h * dpr);
       }
-      // Tampilkan seluruh kantor (mode "cover"), dipusatkan.
-      const W = map.width * TILE;
-      const H = map.height * TILE;
-      const scale = Math.max(w / W, h / H) * dpr;
-      ctx.setTransform(scale, 0, 0, scale, (w * dpr - W * scale) / 2, (h * dpr - H * scale) / 2);
-      ctx.drawImage(bg, 0, 0);
       for (const b of bots) {
+        const p = b.presence;
         if (!b.path.length) {
+          p.moving = false;
           if (b.wait-- <= 0) {
             const target = free[Math.floor(Math.random() * free.length)];
-            b.path = findPath(grid, b, target) ?? [];
-            b.wait = 60 + Math.random() * 120;
+            b.path = findPath(grid, p, target) ?? [];
+            b.wait = 90 + Math.random() * 200;
           }
         } else {
           const n = b.path[0];
-          const dx = n.x + 0.5 - b.x;
-          const dy = n.y + 0.5 - b.y;
+          const dx = n.x + 0.5 - p.x;
+          const dy = n.y + 0.5 - p.y;
           const d = Math.hypot(dx, dy);
-          const step = 0.05;
+          const step = 0.045;
           if (d < step) {
-            b.x = n.x + 0.5;
-            b.y = n.y + 0.5;
+            p.x = n.x + 0.5;
+            p.y = n.y + 0.5;
             b.path.shift();
           } else {
-            b.x += (dx / d) * step;
-            b.y += (dy / d) * step;
-            b.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
+            p.x += (dx / d) * step;
+            p.y += (dy / d) * step;
+            p.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
           }
-          b.phase += 0.25;
+          p.moving = true;
+          b.phase += 0.22;
+          if (time - b.lastPuff > 0.25) {
+            b.lastPuff = time;
+            scene.puff(p.x, p.y, time);
+          }
         }
       }
-      [...bots]
-        .sort((a, b) => a.y - b.y)
-        .forEach((b) =>
-          drawAvatar(ctx, b.avatar, b.x * TILE, b.y * TILE + 8, 1, {
-            dir: b.dir,
-            walk: b.path.length ? b.phase : 0,
-          }),
-        );
+      if (time > nextFx) {
+        const b = bots[Math.floor(Math.random() * bots.length)];
+        if (Math.random() < 0.5)
+          scene.emote(b.presence.id, EMOTES[Math.floor(Math.random() * EMOTES.length)], time);
+        else scene.bubble(b.presence.id, lines[Math.floor(Math.random() * lines.length)], time);
+        nextFx = time + 1.6 + Math.random() * 1.5;
+      }
+      // Kamera menyapu pelan lobi dan lounge
+      const zoom = Math.max(0.8, w / (15 * TILE));
+      const viewW = w / zoom;
+      const viewH = h / zoom;
+      const span = map.width * TILE - viewW;
+      const cx = span / 2 + (Math.sin(time * 0.06) * span) / 2;
+      const cy = Math.min(map.height * TILE - viewH, 15 * TILE);
+      const people: PersonView[] = bots.map((b, i) => ({
+        p: b.presence,
+        x: b.presence.x,
+        y: b.presence.y,
+        phase: b.presence.moving ? b.phase : 0,
+        speaking: i === 1 || i === 3 ? (Math.sin(time * 9 + i) + 1) / 2 : 0,
+        isSelf: i === 0,
+        seed: i * 0.13,
+      }));
+      scene.draw(ctx, {
+        w,
+        h,
+        dpr,
+        cam: { x: cx, y: cy, zoom },
+        time,
+        people,
+        self: null,
+        target: null,
+        hoverTile: null,
+        focusObj: null,
+        links: [],
+        privateZone: null,
+        showRadius: false,
+      });
       raf = requestAnimationFrame(frame);
     };
-    frame();
+    raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
   }, [t]);
   return <canvas ref={ref} aria-label={t("landing.previewAlt")} role="img" />;

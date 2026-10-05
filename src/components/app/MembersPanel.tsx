@@ -12,10 +12,12 @@ interface Props {
   selfId: string;
   onSelect: (m: MemberInfo, p: Presence | undefined) => void;
   onClose?: () => void;
+  /** Nama area tempat anggota berada di peta. */
+  locate?: (p: Presence) => string | null;
 }
 
 /** Panel anggota di kanan: siapa yang ada di ruangan beserta statusnya (FR-30). */
-export function MembersPanel({ members, presence, selfId, onSelect, onClose }: Props) {
+export function MembersPanel({ members, presence, selfId, onSelect, onClose, locate }: Props) {
   const t = useT();
   const online = members.filter((m) => presence.has(m.id));
   const offline = members.filter((m) => !presence.has(m.id));
@@ -31,10 +33,13 @@ export function MembersPanel({ members, presence, selfId, onSelect, onClose }: P
         <span className="info">
           <b>
             {p?.name ?? m.name} {m.id === selfId && <span className="hint">({t("members.you")})</span>}
+            {(m.role === "owner" || m.role === "admin") && (
+              <span className={`role-tag ${m.role}`}>{t(`role.${m.role}`)}</span>
+            )}
           </b>
           <span>
             {t(`status.${status}`)}
-            {m.role !== "member" && ` · ${t(`role.${m.role}`)}`}
+            {p && locate?.(p) && ` · ${locate(p)}`}
           </span>
         </span>
         {p && (

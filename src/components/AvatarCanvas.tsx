@@ -29,11 +29,15 @@ export function AvatarCanvas({
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, size, size);
       if (face) {
-        const s = size / 30;
-        drawAvatar(ctx, avatar, size / 2, size * 1.35, s, { dir: "down", walk: 0 });
+        const s = size / 32;
+        drawAvatar(ctx, avatar, size / 2, size * 1.3, s, {
+          dir: "down",
+          walk: 0,
+          time: animate ? time / 1000 : 0,
+        });
       } else {
-        const s = size / 46;
-        drawAvatar(ctx, avatar, size / 2, size * 0.9, s, { dir: "down", walk: animate ? time / 160 : 0 });
+        const s = size / 54;
+        drawAvatar(ctx, avatar, size / 2, size * 0.93, s, { dir: "down", walk: 0, time: time / 1000 });
       }
       if (animate) raf = requestAnimationFrame(render);
     };

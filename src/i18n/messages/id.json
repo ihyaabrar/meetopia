@@ -293,5 +293,21 @@
   "tips.2.body": "Suara terdengar makin keras saat kamu mendekat. Ruang rapat 🔒 bersifat privat — ketuk dulu bila sedang dipakai.",
   "tips.3.title": "Objek bisa dipakai",
   "tips.3.body": "Dekati kursi, papan tulis, atau meja untuk melihat aksinya: duduk, buka catatan bersama, atau catatan pribadi.",
-  "tips.ok": "Mengerti!"
+  "tips.ok": "Mengerti!",
+  "object.cooler": "Dispenser air",
+  "object.beanbag": "Bean bag",
+  "object.tv": "TV lounge",
+  "object.screen": "Layar presentasi",
+  "action.drink": "Minum air",
+  "action.watch": "Nonton sebentar",
+  "action.drinkResult": "Segar! Jangan lupa minum ya 💧",
+  "action.watchResult": "Ada video kucing lucu di TV 🐱",
+  "room.isolated": "audio terisolasi",
+  "room.nearby": "{n} di dekatmu",
+  "room.nearbyHint": "Orang yang bisa mendengarmu saat mikrofon menyala",
+  "room.minimap": "Peta mini — klik untuk berjalan ke sana",
+  "emote.title": "Reaksi",
+  "landing.bubble1": "Ngopi dulu yuk ☕",
+  "landing.bubble2": "Rapat jam 2 di ruang rapat ya",
+  "landing.bubble3": "Desainnya keren! 🎉"
 }

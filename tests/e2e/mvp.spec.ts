@@ -67,7 +67,7 @@ test("MVP: grup, undangan, sinkron posisi, chat, catatan, mic, sambung ulang", a
   await enterRoom(a);
 
   // --- Undangan
-  await a.getByRole("button", { name: "Undang anggota" }).click();
+  await a.getByRole("button", { name: "Undang anggota" }).first().click();
   await a.getByRole("button", { name: "Buat tautan undangan" }).click();
   const link = (await a.getByTestId("invite-link").textContent())!.trim();
   expect(link).toContain("/invite/");
@@ -142,6 +142,15 @@ test("MVP: grup, undangan, sinkron posisi, chat, catatan, mic, sambung ulang", a
   // --- Mic (M6): mati saat masuk, status terlihat orang lain, WebRTC tersambung saat berdekatan
   const aId = await dbg(a, (d) => d.room.self!.id);
   expect(await dbg(a, (d) => d.room.self!.media.mic)).toBe(false);
+  // B menghampiri A lewat daftar anggota → "Hampiri"
+  await b.locator(".members .member", { hasText: "Rani" }).click();
+  await b.getByRole("button", { name: "Hampiri" }).click();
+  await b.waitForFunction((id) => {
+    const r = (window as unknown as { __meetopia: Debug }).__meetopia.room;
+    const me = r.self!;
+    const other = r.snapshot.peers.get(id)!;
+    return !(me as unknown as { moving: boolean }).moving && Math.hypot(me.x - other.x, me.y - other.y) < 3;
+  }, aId);
   await a.getByRole("button", { name: "Mikrofon mati", exact: true }).click();
   await b.waitForFunction(
     (id) =>
@@ -183,7 +192,7 @@ test("Ruang privat: masuk perlu ketuk bila sedang dipakai (FR-23, FR-31)", async
   await a.getByLabel("Nama grup").fill("Kantor Privat");
   await a.getByRole("button", { name: "Buat", exact: true }).click();
   await enterRoom(a);
-  await a.getByRole("button", { name: "Undang anggota" }).click();
+  await a.getByRole("button", { name: "Undang anggota" }).first().click();
   await a.getByRole("button", { name: "Buat tautan undangan" }).click();
   const link = (await a.getByTestId("invite-link").textContent())!.trim();
   await a.keyboard.press("Escape");

@@ -89,7 +89,19 @@ Sesuai cadangan di bagian 7 PRD:
 
 Logo memakai **konsep 7 (Minimalist)**: dua daun pintu — satu hijau terbuka, satu hijau tua tertutup dengan gagang — sebagai "pintu" ke ruang kerja virtual, dengan tagline _Work • Talk • Together_. Komponennya di `src/components/Logo.tsx`, favicon di `src/app/icon.svg`.
 
-Palet UI diambil dari logo: hijau daun `#3f9a55`, hijau tua `#1b3a2a`, krem `#f7f5ec`, mint `#eef5ea`; huruf Outfit. Mendukung mode gelap (mengikuti sistem) dan pilihan kontras tinggi di pengaturan profil. Avatar kartun digambar prosedural (`src/client/draw.ts`); gaya rambut "tunas" adalah anggukan ke maskot di konsep logo lain.
+Palet UI diambil dari logo: hijau daun `#3f9a55`, hijau tua `#1b3a2a`, krem `#f7f5ec`, mint `#eef5ea`; huruf Outfit. Mendukung mode gelap (mengikuti sistem) dan pilihan kontras tinggi di pengaturan profil.
+
+### Grafis in-game
+
+Semua aset digambar prosedural (tanpa gambar pihak lain), di `src/client/art/` dan `src/client/scene.ts`:
+
+- **Dunia:** lantai bertekstur per area (papan kayu, karpet ruang rapat, ubin batu lobi), dinding 3/4 dengan jendela dan cahaya matahari, bayangan di kaki dinding, lukisan dinding, label area.
+- **Perabot:** meja dengan monitor, kursi kantor, sofa, bean bag, rak buku, papan tulis, mesin penjual, mesin kopi, dispenser, TV, lampu, tanaman (3 jenis), meja resepsionis berlogo. Perabot tinggi diurutkan kedalamannya bersama avatar, jadi avatar bisa berjalan di belakangnya.
+- **Avatar:** gaya chibi dengan hoodie, animasi jalan, napas dan kedip, tampak depan/samping/belakang.
+- **Efek:** cincin hijau saat seseorang berbicara (dari level suara WebRTC), garis putus-putus ke orang yang bisa kamu dengar, lingkaran radius suara saat berjalan, riak klik, debu langkah, cahaya lampu/layar, sorotan saat berada di ruang privat (area lain diredupkan), emote 👋🎉 dan balon chat "Sekitar" di atas kepala, label nama yang tidak saling bertumpuk.
+- **HUD:** chip area saat ini dan jumlah orang di dekatmu, peta mini (klik untuk berjalan), dock kontrol, popup petunjuk objek.
+
+Grup lama ikut mendapat dekorasi baru otomatis (`templateRev` di data peta), pengaturan audionya tetap.
 
 ## Belum diputuskan (perlu jawaban pemilik proyek)
 

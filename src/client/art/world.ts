@@ -1,0 +1,317 @@
+/**
+ * Lapisan statis peta: lantai bertekstur per area, dinding 3/4 dengan jendela, cahaya jendela,
+ * bayangan kontak, dan perabot rendah. Perabot tinggi dikembalikan sebagai sprite agar bisa
+ * diurutkan kedalamannya bersama avatar (avatar bisa lewat di belakang tanaman/rak).
+ */
+import { TILE, tileAt, type FloorKind, type MapData, type MapObject } from "@/shared/map";
+import { C, hash } from "./common";
+import { drawObject, isTall, SPRITE_PAD_TOP, SPRITE_PAD_X } from "./objects";
+
+export interface Sprite {
+  canvas: HTMLCanvasElement;
+  x: number;
+  y: number;
+  /** Koordinat-y dasar (px dunia) untuk pengurutan kedalaman. */
+  sortY: number;
+  obj: MapObject;
+}
+
+export interface Light {
+  x: number;
+  y: number;
+  r: number;
+  color: string;
+}
+
+export interface WorldLayers {
+  floor: HTMLCanvasElement;
+  sprites: Sprite[];
+  lights: Light[];
+}
+
+const T = TILE;
+const WALL_CAP = 10;
+
+const isFloor = (k: FloorKind) => k !== "wall";
+
+function floorKindAt(map: MapData, x: number, y: number): FloorKind {
+  const k = tileAt(map, x, y);
+  if (k !== "door") return k;
+  // Pintu memakai lantai area tetangga
+  for (const [dx, dy] of [
+    [0, 1],
+    [1, 0],
+    [0, -1],
+    [-1, 0],
+  ]) {
+    const n = tileAt(map, x + dx, y + dy);
+    if (n !== "wall" && n !== "door") return n;
+  }
+  return "lobby";
+}
+
+function drawPlanks(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  base: [number, number, number],
+  seam: string,
+  tx: number,
+  ty: number,
+) {
+  const rows = 4;
+  const ph = T / rows;
+  for (let r = 0; r < rows; r++) {
+    const v = hash(tx, ty * rows + r) * 0.08 - 0.04;
+    const [h, s, l] = base;
+    ctx.fillStyle = `hsl(${h} ${s}% ${l + v * 100}%)`;
+    ctx.fillRect(x, y + r * ph, T, ph);
+    // sambungan ujung papan, berselang-seling per baris (panjang papan 64px)
+    const off = Math.floor(hash(ty * rows + r, 7) * 8) * 8;
+    const seamX = 64 - ((tx * T + off) % 64);
+    if (seamX < T) {
+      ctx.fillStyle = seam;
+      ctx.fillRect(x + seamX, y + r * ph, 1, ph);
+    }
+    ctx.fillStyle = seam;
+    ctx.fillRect(x, y + r * ph + ph - 1, T, 1);
+    // serat kayu
+    ctx.fillStyle = "rgba(120,80,40,0.06)";
+    ctx.fillRect(x + hash(tx, ty, r) * 20, y + r * ph + 3, 8 + hash(r, tx) * 10, 1);
+  }
+}
+
+function drawFloorTile(ctx: CanvasRenderingContext2D, kind: FloorKind, tx: number, ty: number) {
+  const x = tx * T;
+  const y = ty * T;
+  switch (kind) {
+    case "work":
+      drawPlanks(ctx, x, y, [36, 52, 80], "rgba(140,100,60,0.22)", tx, ty);
+      break;
+    case "lounge":
+      drawPlanks(ctx, x, y, [28, 46, 72], "rgba(110,70,40,0.25)", tx, ty);
+      break;
+    case "meeting": {
+      ctx.fillStyle = "#cddbc9";
+      ctx.fillRect(x, y, T, T);
+      // tekstur karpet
+      for (let i = 0; i < 10; i++) {
+        ctx.fillStyle = hash(tx, ty, i) > 0.5 ? "rgba(255,255,255,0.10)" : "rgba(40,80,50,0.07)";
+        ctx.fillRect(x + hash(i, tx, ty) * T, y + hash(ty, i, tx) * T, 2, 2);
+      }
+      break;
+    }
+    case "lobby":
+    default: {
+      // ubin batu besar 2x2
+      const v = hash(Math.floor(tx / 2), Math.floor(ty / 2)) * 0.05;
+      ctx.fillStyle = `hsl(43 38% ${90 - v * 100}%)`;
+      ctx.fillRect(x, y, T, T);
+      ctx.fillStyle = "rgba(255,255,255,0.18)";
+      for (let i = 0; i < 4; i++) ctx.fillRect(x + hash(tx, ty, i) * T, y + hash(i, ty, tx) * T, 3, 1);
+      ctx.fillStyle = "rgba(150,130,90,0.22)";
+      if (tx % 2 === 0) ctx.fillRect(x, y, 1, T);
+      if (ty % 2 === 0) ctx.fillRect(x, y, T, 1);
+    }
+  }
+}
+
+function drawWalls(ctx: CanvasRenderingContext2D, map: MapData) {
+  for (let ty = 0; ty < map.height; ty++) {
+    for (let tx = 0; tx < map.width; tx++) {
+      if (tileAt(map, tx, ty) !== "wall") continue;
+      const x = tx * T;
+      const y = ty * T;
+      const faceBelow = ty + 1 < map.height && isFloor(tileAt(map, tx, ty + 1));
+      // Tutup dinding
+      ctx.fillStyle = C.wallCap;
+      ctx.fillRect(x, y, T, T);
+      ctx.fillStyle = C.wallCapLight;
+      if (ty > 0 && tileAt(map, tx, ty - 1) !== "wall") ctx.fillRect(x, y, T, 3);
+      if (tileAt(map, tx - 1, ty) !== "wall") ctx.fillRect(x, y, 2, T);
+      if (tileAt(map, tx + 1, ty) !== "wall") ctx.fillRect(x + T - 2, y, 2, T);
+      if (faceBelow) {
+        // Muka dinding (wallpaper + list bawah)
+        const fy = y + WALL_CAP;
+        const fh = T - WALL_CAP;
+        ctx.fillStyle = C.wallFace;
+        ctx.fillRect(x, fy, T, fh);
+        ctx.fillStyle = C.wallFaceDark;
+        for (let i = 0; i < T; i += 8) ctx.fillRect(x + i, fy, 3, fh - 5);
+        ctx.fillStyle = C.baseboard;
+        ctx.fillRect(x, y + T - 5, T, 5);
+        ctx.fillStyle = "rgba(0,0,0,0.12)";
+        ctx.fillRect(x, fy, T, 2);
+      }
+    }
+  }
+  // Jendela di dinding luar bagian atas
+  for (let tx = 2; tx < map.width - 2; tx += 4) {
+    if (tileAt(map, tx, 0) !== "wall" || !isFloor(tileAt(map, tx, 1)) || !isFloor(tileAt(map, tx + 1, 1)))
+      continue;
+    const x = tx * T + 6;
+    const y = WALL_CAP - 2;
+    const w = T * 2 - 12;
+    const h = T - WALL_CAP - 4;
+    const g = ctx.createLinearGradient(x, y, x + w, y + h);
+    g.addColorStop(0, "#e3f4f8");
+    g.addColorStop(1, "#9fcfdd");
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(x - 3, y - 2, w + 6, h + 4);
+    ctx.fillStyle = g;
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = "rgba(255,255,255,0.6)";
+    ctx.beginPath();
+    ctx.moveTo(x + 6, y + h);
+    ctx.lineTo(x + 14, y);
+    ctx.lineTo(x + 20, y);
+    ctx.lineTo(x + 12, y + h);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(x + w / 2 - 1, y, 2, h);
+    ctx.strokeStyle = C.ink;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x - 3, y - 2, w + 6, h + 4);
+  }
+}
+
+/** Cahaya matahari dari jendela jatuh ke lantai. */
+function drawWindowLight(ctx: CanvasRenderingContext2D, map: MapData) {
+  ctx.save();
+  for (let tx = 2; tx < map.width - 2; tx += 4) {
+    if (tileAt(map, tx, 0) !== "wall" || !isFloor(tileAt(map, tx, 1)) || !isFloor(tileAt(map, tx + 1, 1)))
+      continue;
+    const x = tx * T + 6;
+    const g = ctx.createLinearGradient(0, T, 0, T * 4.5);
+    g.addColorStop(0, "rgba(255,250,225,0.35)");
+    g.addColorStop(1, "rgba(255,250,225,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(x, T);
+    ctx.lineTo(x + T * 2 - 12, T);
+    ctx.lineTo(x + T * 2 + 20, T * 4.5);
+    ctx.lineTo(x + 26, T * 4.5);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** Bayangan di lantai tepat di bawah dan di samping dinding (ambient occlusion sederhana). */
+function drawWallShadows(ctx: CanvasRenderingContext2D, map: MapData) {
+  for (let ty = 0; ty < map.height; ty++) {
+    for (let tx = 0; tx < map.width; tx++) {
+      if (tileAt(map, tx, ty) === "wall") continue;
+      const x = tx * T;
+      const y = ty * T;
+      if (tileAt(map, tx, ty - 1) === "wall") {
+        const g = ctx.createLinearGradient(0, y, 0, y + 12);
+        g.addColorStop(0, "rgba(16,38,25,0.22)");
+        g.addColorStop(1, "rgba(16,38,25,0)");
+        ctx.fillStyle = g;
+        ctx.fillRect(x, y, T, 12);
+      }
+      if (tileAt(map, tx - 1, ty) === "wall") {
+        const g = ctx.createLinearGradient(x, 0, x + 8, 0);
+        g.addColorStop(0, "rgba(16,38,25,0.16)");
+        g.addColorStop(1, "rgba(16,38,25,0)");
+        ctx.fillStyle = g;
+        ctx.fillRect(x, y, 8, T);
+      }
+      if (tileAt(map, tx + 1, ty) === "wall") {
+        const g = ctx.createLinearGradient(x + T, 0, x + T - 8, 0);
+        g.addColorStop(0, "rgba(16,38,25,0.16)");
+        g.addColorStop(1, "rgba(16,38,25,0)");
+        ctx.fillStyle = g;
+        ctx.fillRect(x + T - 8, y, 8, T);
+      }
+    }
+  }
+}
+
+function drawZoneDecor(ctx: CanvasRenderingContext2D, map: MapData, zoneLabel: (k: string) => string) {
+  // Garis tepi karpet ruang rapat dan label area sebagai "stiker lantai"
+  for (const z of map.zones) {
+    if (z.private) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(44,116,66,0.35)";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(z.x * T + 6, z.y * T + 6, z.w * T - 12, z.h * T - 12);
+      ctx.restore();
+    }
+    const label = zoneLabel(z.label).toUpperCase();
+    ctx.save();
+    ctx.font = "700 12px Outfit, system-ui, sans-serif";
+    ctx.textBaseline = "middle";
+    const tw = ctx.measureText(label).width + (z.private ? 18 : 0);
+    const px = z.x * T + 12;
+    const py = (z.y + z.h) * T - 18;
+    ctx.fillStyle = "rgba(27,58,42,0.10)";
+    ctx.beginPath();
+    ctx.roundRect(px - 6, py - 10, tw + 16, 20, 10);
+    ctx.fill();
+    ctx.fillStyle = "rgba(27,58,42,0.55)";
+    ctx.fillText((z.private ? "🔒 " : "") + label, px + 2, py + 1);
+    ctx.restore();
+  }
+}
+
+export function makeSprite(o: MapObject): Sprite {
+  const c = document.createElement("canvas");
+  c.width = o.w * T + SPRITE_PAD_X * 2;
+  c.height = o.h * T + SPRITE_PAD_TOP + 8;
+  const ctx = c.getContext("2d")!;
+  ctx.translate(SPRITE_PAD_X - o.x * T, SPRITE_PAD_TOP - o.y * T);
+  drawObject(ctx, o);
+  return {
+    canvas: c,
+    x: o.x * T - SPRITE_PAD_X,
+    y: o.y * T - SPRITE_PAD_TOP,
+    sortY: (o.y + o.h) * T,
+    obj: o,
+  };
+}
+
+export function renderWorld(map: MapData, zoneLabel: (key: string) => string): WorldLayers {
+  const c = document.createElement("canvas");
+  c.width = map.width * T;
+  c.height = map.height * T;
+  const ctx = c.getContext("2d")!;
+  for (let ty = 0; ty < map.height; ty++)
+    for (let tx = 0; tx < map.width; tx++) {
+      const k = tileAt(map, tx, ty);
+      if (k === "wall") continue;
+      drawFloorTile(ctx, floorKindAt(map, tx, ty), tx, ty);
+      if (k === "door") {
+        ctx.fillStyle = "rgba(169,138,99,0.45)";
+        ctx.fillRect(tx * T + 2, ty * T + 2, T - 4, T - 4);
+      }
+    }
+  drawWindowLight(ctx, map);
+  drawZoneDecor(ctx, map, zoneLabel);
+  drawWallShadows(ctx, map);
+  drawWalls(ctx, map);
+
+  const sprites: Sprite[] = [];
+  const lights: Light[] = [];
+  const order = [...map.objects].sort(
+    (a, b) => (a.kind === "rug" ? -1 : 0) - (b.kind === "rug" ? -1 : 0) || a.y - b.y,
+  );
+  for (const o of order) {
+    if (isTall(o.kind)) sprites.push(makeSprite(o));
+    else drawObject(ctx, o);
+    if (o.kind === "lamp") lights.push({ x: (o.x + 0.5) * T, y: o.y * T - 6, r: 110, color: "255,214,140" });
+    if (o.kind === "tv") lights.push({ x: (o.x + o.w / 2) * T, y: o.y * T + 4, r: 70, color: "150,210,255" });
+    if (o.kind === "vending")
+      lights.push({ x: (o.x + o.w / 2) * T, y: o.y * T, r: 60, color: "255,170,150" });
+  }
+  return { floor: c, sprites, lights };
+}
+
+/** Kompatibilitas: hanya lapisan lantai + semua objek (untuk pratinjau statis). */
+export function renderStaticMap(map: MapData, zoneLabel: (key: string) => string): HTMLCanvasElement {
+  const w = renderWorld(map, zoneLabel);
+  const ctx = w.floor.getContext("2d")!;
+  for (const s of w.sprites) ctx.drawImage(s.canvas, s.x, s.y);
+  return w.floor;
+}
