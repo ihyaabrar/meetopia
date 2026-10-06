@@ -43,8 +43,15 @@ export function avatarHeadY(a: AvatarConfig): number {
   const d = paintedDims(a);
   return 3 + d.leg + d.torso + paintedHeadOffset(a);
 }
+/**
+ * Skala avatar di peta. Peta ilustrasi memperlihatkan seluruh denah, jadi avatar sedikit lebih besar dari
+ * perabot agar orang tetap mudah dikenali (sekitar 1,8 tile tingginya).
+ */
+export const AVATAR_MAP_SCALE = 1.5;
+
 export function avatarNameOffset(a: AvatarConfig, dir: AvatarDirection, sitting = false) {
-  return Math.max(66, paintedTopY(a, dir) * 1.24 + 20 - (sitting ? 4 : 0));
+  const s = AVATAR_MAP_SCALE;
+  return Math.max(53 * s, paintedTopY(a, dir) * s + 20 - (sitting ? 4 : 0));
 }
 export function avatarPartY(a: AvatarConfig, part: "body" | "legs"): number {
   const d = paintedDims(a);

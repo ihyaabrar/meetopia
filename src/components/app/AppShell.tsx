@@ -436,9 +436,6 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
       className={`app ${showNav ? "show-nav" : ""} ${showMembers ? "show-members" : ""} ${detail && !home ? "" : "no-members"} ${home ? "home" : ""}`}
     >
       <nav className="rail" aria-label={t("nav.groups")}>
-        <div className="rail-home" title="Meetopia">
-          <LogoMark size={36} title="Meetopia" />
-        </div>
         <button
           className="rail-item nav"
           aria-current={home}
@@ -636,8 +633,8 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
             <Icon name="menu" />
           </button>
           <div className="head-title">
-            <h2>{activeGroup ? activeGroup.name : "Meetopia"}</h2>
-            {activeGroup && (
+            <h2>{home ? t("nav.home") : activeGroup ? activeGroup.name : "Meetopia"}</h2>
+            {activeGroup && !home && (
               <span className="head-sub">
                 <Icon name="door" size={13} /> {snap.map ? t(`tpl.${templateOf(snap.map)}`) : t("nav.office")}{" "}
                 · {t("nav.inRoom", { n: onlineCount })}

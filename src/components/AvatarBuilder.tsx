@@ -1,7 +1,7 @@
 "use client";
 import { useId, useState } from "react";
 import { AvatarCanvas } from "./AvatarCanvas";
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
 import { useT, useI18n } from "@/i18n/client";
 import { actionLabel } from "@/shared/avatar-animation";
 import {
@@ -42,6 +42,16 @@ const PRESETS: Record<AvatarGender, Partial<AvatarConfig>> = {
 };
 const TABS = ["base", "head", "hair", "eyes", "brows", "mouth", "clothing", "accessory"] as const;
 type Tab = (typeof TABS)[number];
+const TAB_ICONS: Record<Tab, IconName> = {
+  base: "user",
+  head: "smile",
+  hair: "hair",
+  eyes: "eye",
+  brows: "brow",
+  mouth: "chat",
+  clothing: "shirt",
+  accessory: "glasses",
+};
 type ChoiceKey =
   | "head"
   | "eyes"
@@ -57,6 +67,12 @@ type ChoiceKey =
   | "bottom"
   | "prop"
   | "eyewear";
+
+/** Putar pratinjau ke arah berikutnya (searah / berlawanan jarum jam), melewati 8 arah. */
+function turn(dir: AvatarDirection, step: 1 | -1): AvatarDirection {
+  const i = AVATAR_DIRECTIONS.indexOf(dir);
+  return AVATAR_DIRECTIONS[(i + step + AVATAR_DIRECTIONS.length) % AVATAR_DIRECTIONS.length];
+}
 
 /** Thumbnail choices share the world renderer. Simulations never change private needs. */
 export function AvatarBuilder({
@@ -120,13 +136,7 @@ export function AvatarBuilder({
                   : {}),
               }}
               size={64}
-              part={
-                key === "outfit" || key === "body"
-                  ? "body"
-                  : key === "shoes" || key === "bottom"
-                    ? "legs"
-                    : undefined
-              }
+              part={key === "outfit" ? "body" : key === "shoes" || key === "bottom" ? "legs" : undefined}
               face={face}
             />
             <small>{t(`${prefix}.${v}`)}</small>
@@ -175,6 +185,25 @@ export function AvatarBuilder({
             activity={activity}
             condition={condition}
           />
+          <div className="avatar-rotate" role="group" aria-label={t("avatar.viewLabel")}>
+            <button
+              type="button"
+              aria-label={t("avatar.rotateLeft")}
+              title={t("avatar.rotateLeft")}
+              onClick={() => setDirection(turn(direction, -1))}
+            >
+              <Icon name="rotateLeft" size={18} />
+            </button>
+            <span aria-live="polite">{t(`avatar.view.${direction}`)}</span>
+            <button
+              type="button"
+              aria-label={t("avatar.rotateRight")}
+              title={t("avatar.rotateRight")}
+              onClick={() => setDirection(turn(direction, 1))}
+            >
+              <Icon name="rotateRight" size={18} />
+            </button>
+          </div>
         </div>
         <button
           type="button"
@@ -186,18 +215,6 @@ export function AvatarBuilder({
           {t(previewExpanded ? "avatar.hideControls" : "avatar.showControls")}
         </button>
         <div className="avatar-preview-extra" id={`${id}-preview-controls`}>
-          <div className="avatar-view-controls" role="group" aria-label={t("avatar.viewLabel")}>
-            {AVATAR_DIRECTIONS.map((view) => (
-              <button
-                key={view}
-                type="button"
-                aria-pressed={direction === view}
-                onClick={() => setDirection(view)}
-              >
-                {t(`avatar.view.${view}`)}
-              </button>
-            ))}
-          </div>
           <div className="avatar-simulation">
             <label>
               {t("avatar.activity")}
@@ -276,7 +293,8 @@ export function AvatarBuilder({
                 e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("button")[next]?.focus();
               }}
             >
-              {t(`avatar.tab.${item}`)}
+              <Icon name={TAB_ICONS[item]} size={17} />
+              <span>{t(`avatar.tab.${item}`)}</span>
             </button>
           ))}
         </div>

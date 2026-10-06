@@ -43,6 +43,18 @@ const motionQuery =
 const reducedMotion = () => getPrefs().reducedMotion || !!motionQuery?.matches;
 
 const SPEED = 4.2; // tile per detik
+
+/** Ruang yang tertutup HUD di atas dan dock di bawah kanvas (px). */
+function viewInsets(w: number) {
+  return w < 600 ? { top: 104, bottom: 84 } : { top: 60, bottom: 92 };
+}
+
+/** Zoom yang memperlihatkan seluruh denah di area yang tidak tertutup HUD/dock (ponsel: sekitar 13 tile). */
+function fitZoom(map: { width: number; height: number }, w: number, h: number) {
+  if (w < 600) return Math.max(0.8, w / (13 * TILE));
+  const inset = viewInsets(w);
+  return Math.min(w / (map.width * TILE), (h - inset.top - inset.bottom) / (map.height * TILE)) * 0.98;
+}
 const SEND_INTERVAL = 90;
 const now = () => performance.now() / 1000;
 
@@ -133,6 +145,9 @@ export function RoomStage({
     pointer: null as null | { x: number; y: number; id: number },
     hover: null as null | Point,
     camera: { x: 0, y: 0, zoom: 1 },
+    /** Zoom masih "pas peta" otomatis (belum diubah pengguna). */
+    autoZoom: true,
+    sizeKey: "",
     /** Tombol arah yang sedang ditekan (WASD / panah). */
     keys: new Set<string>(),
     keyMoving: false,
@@ -353,19 +368,28 @@ export function RoomStage({
         canvas.width = Math.round(w * dpr);
         canvas.height = Math.round(h * dpr);
       }
-      if (!st.zoom)
-        st.zoom =
-          w < 600
-            ? Math.max(0.8, w / (13 * TILE))
-            : Math.min(w / (map.width * TILE), (h - 72) / (map.height * TILE)) * 0.98;
+      // Peta diletakkan di antara HUD atas dan dock bawah, bukan di bawahnya. Selama pengguna belum
+      // memperbesar/memperkecil sendiri, zoom "pas peta" dihitung ulang saat ukuran kanvas berubah
+      // (mis. panel chat atau anggota dibuka).
+      const inset = viewInsets(w);
+      const sizeKey = `${w}x${h}`;
+      if (!st.zoom || (st.autoZoom && st.sizeKey !== sizeKey)) {
+        st.zoom = fitZoom(map, w, h);
+        st.autoZoom = true;
+      }
+      st.sizeKey = sizeKey;
       const z = st.zoom;
       const worldW = map.width * TILE;
       const worldH = map.height * TILE;
+      const viewH = Math.max(1, h - inset.top - inset.bottom);
       const meD = me ?? { x: map.spawn.x, y: map.spawn.y };
       let camX = meD.x * TILE - w / 2 / z;
-      let camY = meD.y * TILE - h / 2 / z;
+      let camY = meD.y * TILE - (inset.top + viewH / 2) / z;
       camX = worldW * z < w ? (worldW - w / z) / 2 : Math.max(-TILE, Math.min(worldW - w / z + TILE, camX));
-      camY = worldH * z < h ? (worldH - h / z) / 2 : Math.max(-TILE, Math.min(worldH - h / z + TILE, camY));
+      camY =
+        worldH * z < viewH
+          ? worldH / 2 - (inset.top + viewH / 2) / z
+          : Math.max(-inset.top / z - TILE / 2, Math.min(worldH - (h - inset.bottom) / z + TILE / 2, camY));
       const k = st.camera.x === 0 && st.camera.y === 0 ? 1 : 1 - Math.pow(0.001, dt);
       st.camera = {
         x: st.camera.x + (camX - st.camera.x) * k,
@@ -498,7 +522,7 @@ export function RoomStage({
     for (const p of s.peers.values()) {
       if (p.id === s.selfId) continue;
       const d = state.current.display.get(p.id) ?? p;
-      if (Math.abs(wx - d.x) < 0.6 && wy < d.y + 0.5 && wy > d.y - 1.7) return p;
+      if (Math.abs(wx - d.x) < 0.7 && wy < d.y + 0.5 && wy > d.y - 2.1) return p;
     }
     return null;
   };
@@ -621,6 +645,7 @@ export function RoomStage({
   }, []);
 
   const zoomBy = (f: number) => {
+    state.current.autoZoom = false;
     state.current.zoom = Math.max(0.25, Math.min(2.6, (state.current.zoom || 1) * f));
   };
 
@@ -745,6 +770,9 @@ export function RoomStage({
           <span className={`hud-chip ${zoneHere.private ? "private" : ""}`}>
             <Icon name={snap.locks[zoneHere.id]?.locked ? "lock" : "pin"} size={14} />
             <b>{t(zoneHere.label)}</b>
+            <span className="sub" title={t("room.nearbyHint")}>
+              · {t("room.nearby", { n: nearby })}
+            </span>
             {zoneHere.private && (
               <span className="sub">
                 {snap.locks[zoneHere.id]?.locked
@@ -769,9 +797,11 @@ export function RoomStage({
             )}
           </span>
         )}
-        <span className="hud-chip subtle" title={t("room.nearbyHint")}>
-          <Icon name="users" size={14} /> {t("room.nearby", { n: nearby })}
-        </span>
+        {!zoneHere && (
+          <span className="hud-chip subtle" title={t("room.nearbyHint")}>
+            <Icon name="users" size={14} /> {t("room.nearby", { n: nearby })}
+          </span>
+        )}
         {presenter && viewMode === "hidden" && (
           <button className="hud-chip chip-btn" onClick={() => setViewMode("full")}>
             <Icon name="screen" size={14} /> {t("media.screenShow", { name: presenterName ?? "" })}
@@ -856,9 +886,10 @@ export function RoomStage({
             onClick={() => {
               const c = canvasRef.current;
               if (c)
-                state.current.zoom =
-                  Math.min(c.clientWidth / (map.width * TILE), (c.clientHeight - 72) / (map.height * TILE)) *
-                  0.98;
+                Object.assign(state.current, {
+                  zoom: fitZoom(map, c.clientWidth, c.clientHeight),
+                  autoZoom: true,
+                });
             }}
           >
             <Icon name="expand" size={17} />

@@ -27,6 +27,15 @@ Verifikasi: `npm run typecheck`, `npm test`, `npm run lint`, `npm run build`; br
 - Pratinjau map mempertahankan rasio denah saat aset dimuat untuk mengurangi layout shift. Galeri map mendukung panah/Home/End dan roving focus pada radio.
 - Hero berhenti saat di luar viewport atau tab tidak aktif. Reduced-motion membekukan karakter, kamera, dan efek; aset ilustrasi tetap digambar kembali setelah selesai dimuat.
 
+### Perapian 7 Oktober 2026
+
+- **Ruangan:** peta diletakkan di antara HUD atas dan dock bawah (tidak lagi tertutup), dan zoom "pas peta" dihitung ulang saat ukuran layar atau panel berubah sampai pengguna memperbesar sendiri. Avatar di peta 1,5x (sekitar 1,8 tile tinggi) agar orang mudah dikenali; label nama diperbesar balik saat peta diperkecil agar tetap terbaca. Label area digambar di bawah avatar.
+- **HUD:** area dan jumlah orang di dekat digabung dalam satu chip. Logo hanya di header (tidak dobel di rail).
+- **Buat workspace:** modal ringkas berisi nama, ikon, dan lima kartu dunia; galeri lengkap (cari, filter, detail, simulasi cahaya) tetap di Pengaturan workspace.
+- **Editor avatar:** tab bagian berikon dalam satu baris, tombol putar arah di pratinjau (bukan 8 tombol arah), pilihan tubuh memperlihatkan avatar utuh.
+- **Ponsel:** header halaman publik muat satu baris (tombol Daftar ada di hero).
+- **Aset:** atlas avatar WebP lossless (warna dan posisi leher dibaca dari piksel), latar peta WebP q88. Total aset runtime 8,4 MB, sebelumnya 22 MB.
+
 ## Riwayat arahan — 5 Oktober 2026
 
 Arah desain dari pemilik proyek (dijawab 5 Oktober 2026). Agen hanya menuliskan jawaban ini; keputusan teknis yang diturunkan darinya ada di bagian "Turunan" dan selalu bisa diubah pemilik.

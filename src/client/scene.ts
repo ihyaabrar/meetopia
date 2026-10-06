@@ -6,7 +6,7 @@
 import { TILE, isLockable, tileAt, type MapData, type MapObject, type Zone } from "@/shared/map";
 import type { Presence } from "@/shared/protocol";
 import type { AvatarCondition } from "@/shared/avatar";
-import { drawAvatar, avatarNameOffset } from "./art/avatar";
+import { AVATAR_MAP_SCALE, drawAvatar, avatarNameOffset } from "./art/avatar";
 import { renderWorld, type WorldLayers } from "./art/world";
 import { INK } from "./art/common";
 
@@ -306,20 +306,29 @@ export class Scene {
 
     // Label nama, emote, balon chat (selalu di atas). Label yang bertabrakan digeser ke atas.
     ctx.font = "600 11px Outfit, system-ui, sans-serif";
+    // Label digambar di ruang dunia, jadi ikut mengecil saat peta diperkecil. Saat zoom di bawah 1,
+    // label diperbesar balik (maks. 1,4x) agar nama tetap terbaca (~11px di layar).
+    const ls = Math.min(1.4, Math.max(1, 1 / (f.cam.zoom || 1)));
     const placed: Array<{ x0: number; x1: number; y: number }> = [];
     const ordered = [...f.people].sort((a, b) => b.y - a.y);
     for (const v of ordered) {
-      const half = (ctx.measureText(v.p.name).width + 42 + (v.p.media.screen ? 14 : 0)) / 2;
+      const half = ((ctx.measureText(v.p.name).width + 42 + (v.p.media.screen ? 14 : 0)) / 2) * ls;
       const x0 = v.x * T - half;
       const x1 = v.x * T + half;
-      let ly = v.y * T + FOOT - avatarNameOffset(v.p.avatar, v.p.dir, v.p.sitting);
+      let ly = v.y * T + FOOT - avatarNameOffset(v.p.avatar, v.p.dir, v.p.sitting) - (ls - 1) * 10;
       for (let guard = 0; guard < 8; guard++) {
-        const hit = placed.find((r) => x0 < r.x1 && x1 > r.x0 && Math.abs(ly - r.y) < 22);
+        const hit = placed.find((r) => x0 < r.x1 && x1 > r.x0 && Math.abs(ly - r.y) < 22 * ls);
         if (!hit) break;
-        ly = hit.y - 23;
+        ly = hit.y - 23 * ls;
       }
       placed.push({ x0, x1, y: ly });
+      ctx.save();
+      const ax = v.x * T;
+      ctx.translate(ax, ly);
+      ctx.scale(ls, ls);
+      ctx.translate(-ax, -ly);
       this.drawLabels(ctx, v, time, ly, f.showNames !== false || v.isSelf);
+      ctx.restore();
     }
 
     // Vignette layar
@@ -475,24 +484,24 @@ export class Scene {
       ctx.strokeStyle = `rgba(79,174,99,${0.5 + k * 0.5})`;
       ctx.lineWidth = 2.5;
       ctx.beginPath();
-      ctx.ellipse(px, py, 14 + k * 4, 5.5 + k * 1.5, 0, 0, Math.PI * 2);
+      ctx.ellipse(px, py, 17 + k * 4, 6.5 + k * 1.5, 0, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     } else if (p.status === "busy") {
       ctx.strokeStyle = "rgba(210,85,74,0.75)";
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.ellipse(px, py, 14, 5.5, 0, 0, Math.PI * 2);
+      ctx.ellipse(px, py, 17, 6.5, 0, 0, Math.PI * 2);
       ctx.stroke();
     } else if (v.isSelf) {
       ctx.strokeStyle = "rgba(38,235,174,0.85)";
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.ellipse(px, py, 14, 5.5, 0, 0, Math.PI * 2);
+      ctx.ellipse(px, py, 17, 6.5, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
     ctx.globalAlpha = p.status === "away" ? 0.55 : 1;
-    drawAvatar(ctx, p.avatar, px, py, 1.24, {
+    drawAvatar(ctx, p.avatar, px, py, AVATAR_MAP_SCALE, {
       dir: p.dir,
       walk: v.phase,
       sitting: p.sitting,

@@ -18,10 +18,13 @@ export function TemplatePicker({
   value,
   onChange,
   current,
+  compact = false,
 }: {
   value: TemplateId;
   onChange: (id: TemplateId) => void;
   current?: TemplateId;
+  /** Ringkas untuk modal buat workspace: hanya kartu dunia + deskripsi pilihan, tanpa galeri lengkap. */
+  compact?: boolean;
 }) {
   const t = useT();
   const [query, setQuery] = useState("");
@@ -34,6 +37,55 @@ export function TemplatePicker({
         .toLocaleLowerCase()
         .includes(query.toLocaleLowerCase().trim()),
   );
+  if (compact)
+    return (
+      <div className="map-gallery compact">
+        <div className="tpl-list" role="radiogroup" aria-label={t("tpl.choose")}>
+          {TEMPLATE_IDS.map((id, index) => (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              aria-checked={value === id}
+              tabIndex={value === id ? 0 : -1}
+              className={`tpl tpl-${id}`}
+              onClick={() => onChange(id)}
+              onKeyDown={(event) => {
+                const step = ["ArrowRight", "ArrowDown"].includes(event.key)
+                  ? 1
+                  : ["ArrowLeft", "ArrowUp"].includes(event.key)
+                    ? -1
+                    : 0;
+                if (!step) return;
+                event.preventDefault();
+                const next = (index + step + TEMPLATE_IDS.length) % TEMPLATE_IDS.length;
+                onChange(TEMPLATE_IDS[next]);
+                event.currentTarget.parentElement
+                  ?.querySelectorAll<HTMLButtonElement>("button.tpl")
+                  [next]?.focus();
+              }}
+            >
+              <MapPreview id={id} className="tpl-thumb" />
+              {value === id && (
+                <span className="tpl-check">
+                  <Icon name="check" size={14} />
+                </span>
+              )}
+              <span className="tpl-body">
+                <Icon name={WORLD_ICONS[id]} size={18} />
+                <b className="tpl-name">{t(`tpl.${id}`)}</b>
+              </span>
+            </button>
+          ))}
+        </div>
+        <p className="tpl-compact-desc">
+          <Icon name={WORLD_ICONS[value]} size={16} />
+          <span>
+            <b>{t(`tpl.${value}`)}</b> · {t(`tpl.${value}.desc`)}
+          </span>
+        </p>
+      </div>
+    );
   return (
     <div className="map-gallery">
       <div className="gallery-heading">

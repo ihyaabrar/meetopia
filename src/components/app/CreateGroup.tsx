@@ -39,7 +39,13 @@ export function CreateGroup({
     }
   };
   return (
-    <Modal title={t("group.createTitle")} sub={t("group.createSub")} onClose={onClose} wide>
+    <Modal
+      title={t("group.createTitle")}
+      sub={t("group.createSub")}
+      onClose={onClose}
+      wide
+      className="create-group"
+    >
       <form onSubmit={submit}>
         {error && <p className="error-text">{error}</p>}
         <div className="field">
@@ -58,7 +64,7 @@ export function CreateGroup({
         <div className="section-title" style={{ paddingLeft: 0 }}>
           {t("tpl.choose")}
         </div>
-        <TemplatePicker value={template} onChange={setTemplate} />
+        <TemplatePicker value={template} onChange={setTemplate} compact />
         <div className="modal-actions">
           <button type="button" className="btn secondary" onClick={onClose}>
             {t("common.cancel")}

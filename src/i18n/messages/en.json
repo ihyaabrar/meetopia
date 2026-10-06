@@ -1,5 +1,5 @@
 {
-  "avatar.showControls": "Avatar angles & poses",
+  "avatar.showControls": "Pose & condition",
   "avatar.hideControls": "Collapse preview",
   "avatar.parts": "Character parts",
   "avatar.tab.base": "Character",
@@ -184,7 +184,7 @@
   "zone.viewpoint": "View Point",
   "object.bbq": "Barbecue",
   "object.foosball": "Foosball",
-  "object.arcade": "Arcade",
+  "object.arcade": "Arcade machine",
   "meta.description": "A 2D virtual office: proximity voice, screen sharing and shared notes.",
   "common.back": "Back",
   "common.cancel": "Cancel",
@@ -728,7 +728,6 @@
   "object.bed": "Bed",
   "object.streamScreen": "Watch-party screen",
   "object.gamingPc": "Gaming PC",
-  "object.arcade": "Arcade machine",
   "object.designDesk": "Design desk",
   "object.moodboard": "Moodboard",
   "object.recordingTable": "Production table",
@@ -963,5 +962,7 @@
   "us.showLifeHud": "Show needs bars and coins",
   "us.showLifeHudHint": "A small chip at the top left of the map.",
   "us.lifeEffects": "Character need effects",
-  "us.lifeEffectsHint": "Turn off for yourself: walking, voices, and the screen stay normal even when bars run low."
+  "us.lifeEffectsHint": "Turn off for yourself: walking, voices, and the screen stay normal even when bars run low.",
+  "avatar.rotateLeft": "Rotate left",
+  "avatar.rotateRight": "Rotate right"
 }

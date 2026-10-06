@@ -1,5 +1,5 @@
 {
-  "avatar.showControls": "Sudut & pose avatar",
+  "avatar.showControls": "Pose & kondisi",
   "avatar.hideControls": "Ringkas pratinjau",
   "avatar.parts": "Bagian karakter",
   "avatar.tab.base": "Karakter",
@@ -184,7 +184,7 @@
   "zone.viewpoint": "View Point",
   "object.bbq": "Barbeku",
   "object.foosball": "Foosball",
-  "object.arcade": "Arcade",
+  "object.arcade": "Mesin arcade",
   "meta.description": "Kantor virtual 2D: ngobrol berdasarkan jarak, berbagi layar, dan catatan bersama.",
   "common.back": "Kembali",
   "common.cancel": "Batal",
@@ -728,7 +728,6 @@
   "object.bed": "Kasur",
   "object.streamScreen": "Layar nonton bareng",
   "object.gamingPc": "PC gaming",
-  "object.arcade": "Mesin arcade",
   "object.designDesk": "Meja desain",
   "object.moodboard": "Moodboard",
   "object.recordingTable": "Meja produksi",
@@ -963,5 +962,7 @@
   "us.showLifeHud": "Tampilkan bar kebutuhan dan koin",
   "us.showLifeHudHint": "Chip kecil di kiri atas peta.",
   "us.lifeEffects": "Efek kebutuhan karakter",
-  "us.lifeEffectsHint": "Matikan untuk dirimu sendiri: jalan, suara, dan layar tetap normal walau bar hampir habis."
+  "us.lifeEffectsHint": "Matikan untuk dirimu sendiri: jalan, suara, dan layar tetap normal walau bar hampir habis.",
+  "avatar.rotateLeft": "Putar ke kiri",
+  "avatar.rotateRight": "Putar ke kanan"
 }
