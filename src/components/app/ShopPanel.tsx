@@ -6,7 +6,8 @@ import { useT } from "@/i18n/client";
 import { Modal } from "@/components/Modal";
 import { distanceToObject, type MapObject } from "@/shared/map";
 import { ITEMS, MENUS, NEED_KEYS, SHOP_RANGE, venueOf, type ItemId, type LifeState } from "@/shared/life";
-import { NEED_EMOJI, NeedBar } from "./LifeHud";
+import { Icon } from "@/components/Icon";
+import { NEED_ICON, NeedBar } from "./LifeHud";
 
 /**
  * Mesin penjual, mesin kopi, dispenser, kulkas, dan dapur/kantin (FR-51, FR-54, FR-55).
@@ -66,7 +67,7 @@ export function ShopPanel({
           ))}
         </div>
         <span className="coin-amt big">
-          <span aria-hidden>🪙</span> {t("life.coins", { n: life.coins })}
+          <Icon name="coin" size={17} /> {t("life.coins", { n: life.coins })}
         </span>
       </div>
 
@@ -95,12 +96,15 @@ export function ShopPanel({
                 <span className="shop-effects">
                   {NEED_KEYS.filter((k) => item.effect[k]).map((k) => (
                     <span key={k} className="fx" data-neg={(item.effect[k] ?? 0) < 0}>
-                      {NEED_EMOJI[k]} {(item.effect[k] ?? 0) > 0 ? "+" : ""}
+                      <Icon name={NEED_ICON[k]} size={12} label={t(`life.${k}`)} />
+                      {(item.effect[k] ?? 0) > 0 ? "+" : ""}
                       {item.effect[k]}
                     </span>
                   ))}
                   {e.waitMs > 0 && (
-                    <span className="fx wait">⏱ {t("shop.wait", { n: e.waitMs / 1000 })}</span>
+                    <span className="fx wait">
+                      <Icon name="clock" size={12} /> {t("shop.wait", { n: e.waitMs / 1000 })}
+                    </span>
                   )}
                 </span>
               </span>

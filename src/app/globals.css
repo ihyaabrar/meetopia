@@ -3339,7 +3339,9 @@ input.switch:checked::before {
   line-height: 1;
 }
 .need-ico {
-  text-align: center;
+  display: grid;
+  place-items: center;
+  color: var(--need-color);
 }
 .need-val {
   text-align: right;
@@ -3472,6 +3474,9 @@ input.switch:checked::before {
   gap: 4px;
 }
 .shop-effects .fx {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   padding: 1px 6px;
   border-radius: 6px;
   background: var(--accent-soft);

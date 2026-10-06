@@ -14,9 +14,10 @@ import {
   type LifeState,
   type NeedKey,
 } from "@/shared/life";
+import { Icon, type IconName } from "@/components/Icon";
 import { Toggle } from "./UserSettings";
 
-export const NEED_EMOJI: Record<NeedKey, string> = { energy: "⚡", hunger: "🍽️", thirst: "💧" };
+export const NEED_ICON: Record<NeedKey, IconName> = { energy: "bolt", hunger: "food", thirst: "drop" };
 
 /**
  * Kondisi karakter sendiri, diperkirakan di klien di antara kiriman server (tiap ~20 detik) dengan
@@ -47,7 +48,7 @@ export function NeedBar({ need, value, compact }: { need: NeedKey; value: number
   return (
     <div className={`need ${compact ? "compact" : ""}`} data-level={level(value)}>
       <span className="need-ico" aria-hidden>
-        {NEED_EMOJI[need]}
+        <Icon name={NEED_ICON[need]} size={compact ? 10 : 15} />
       </span>
       {!compact && <span className="need-name">{t(`life.${need}`)}</span>}
       <span
@@ -98,7 +99,7 @@ export function LifeHud({ life }: { life: LifeState }) {
         data-low={low.length > 0}
       >
         <span className="coin-amt">
-          <span aria-hidden>🪙</span> <b data-testid="coins">{life.coins}</b>
+          <Icon name="coin" size={16} /> <b data-testid="coins">{life.coins}</b>
         </span>
         <span className="need-minis">
           {NEED_KEYS.map((k) => (
@@ -111,7 +112,7 @@ export function LifeHud({ life }: { life: LifeState }) {
           <div className="life-pop-head">
             <b>{t("life.title")}</b>
             <span className="coin-amt">
-              <span aria-hidden>🪙</span> {t("life.coins", { n: life.coins })}
+              <Icon name="coin" size={15} /> {t("life.coins", { n: life.coins })}
             </span>
           </div>
           {NEED_KEYS.map((k) => (
