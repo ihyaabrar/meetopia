@@ -1,6 +1,7 @@
 import type { AudioConfig } from "@/shared/map";
 import type { Role } from "@/shared/roles";
 import type { AvatarConfig } from "@/shared/avatar";
+import type { LifeSettings } from "@/shared/life";
 
 export interface GroupSummary {
   id: string;
@@ -39,6 +40,7 @@ export interface GroupDetail {
   members: MemberInfo[];
   audio: AudioConfig;
   template: string;
+  life: LifeSettings;
 }
 
 export interface Me {

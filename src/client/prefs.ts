@@ -28,6 +28,10 @@ export interface Prefs {
   showMinimap: boolean;
   /** Label nama di atas avatar. */
   showNames: boolean;
+  /** Bar kebutuhan & koin di layar ruangan. */
+  showLifeHud: boolean;
+  /** Efek ringan saat bar hampir kosong (lebih lambat, suara mengecil, buram). Aturan 6 PRD. */
+  lifeEffects: boolean;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -47,6 +51,8 @@ export const DEFAULT_PREFS: Prefs = {
   reducedMotion: false,
   showMinimap: true,
   showNames: true,
+  showLifeHud: true,
+  lifeEffects: true,
 };
 
 const KEY = "mt_prefs";

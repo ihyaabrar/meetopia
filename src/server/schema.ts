@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS groups (
 ALTER TABLE groups ADD COLUMN IF NOT EXISTS icon_color TEXT;
 ALTER TABLE groups ADD COLUMN IF NOT EXISTS icon_symbol TEXT NOT NULL DEFAULT 'initials';
 ALTER TABLE groups ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT '';
+-- Pengaturan karakter hidup & koin (Fase 2); NULL = bawaan (lihat src/shared/life.ts).
+ALTER TABLE groups ADD COLUMN IF NOT EXISTS life JSONB;
 
 CREATE TABLE IF NOT EXISTS channels (
   id TEXT PRIMARY KEY,
@@ -111,4 +113,16 @@ CREATE TABLE IF NOT EXISTS notes (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS notes_owner_idx ON notes(owner_user_id) WHERE owner_user_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS notes_group_idx ON notes(group_id) WHERE group_id IS NOT NULL;
+
+-- Dompet koin virtual per anggota per grup (FR-53, FR-54). Ditulis hanya saat gaji dicairkan
+-- (per beberapa menit, bukan tiap detik) atau saat membeli, agar Neon tetap bisa tidur.
+CREATE TABLE IF NOT EXISTS wallets (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  coins INTEGER NOT NULL DEFAULT 0 CHECK (coins >= 0),
+  earned_today INTEGER NOT NULL DEFAULT 0,
+  earned_day TEXT NOT NULL DEFAULT '',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, group_id)
+);
 `;

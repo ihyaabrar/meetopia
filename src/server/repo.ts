@@ -13,6 +13,7 @@ import { sanitizeAvatar, type AvatarConfig } from "@/shared/avatar";
 import type { Role } from "@/shared/roles";
 import { defaultGroupColor, type GroupColor, type GroupSymbol } from "@/shared/groupIcon";
 import type { ChatMessage, SharedNote } from "@/shared/protocol";
+import { STARTING_COINS, sanitizeLife, type LifeSettings } from "@/shared/life";
 
 export interface GroupSummary {
   id: string;
@@ -488,4 +489,70 @@ export async function saveSharedNote(groupId: string, userId: string, content: s
     [newId(), groupId, content, userId],
   );
   return getSharedNote(groupId);
+}
+
+// ---------- Karakter hidup & koin (Fase 2: FR-50 sampai FR-55) ----------
+
+export async function getLifeSettings(groupId: string): Promise<LifeSettings> {
+  const r = await one<{ life: unknown }>("SELECT life FROM groups WHERE id = $1", [groupId]);
+  return sanitizeLife(r?.life);
+}
+
+export async function saveLifeSettings(groupId: string, life: LifeSettings): Promise<void> {
+  await sql("UPDATE groups SET life = $2 WHERE id = $1", [groupId, JSON.stringify(life)]);
+}
+
+export interface Wallet {
+  coins: number;
+  earnedToday: number;
+  earnedDay: string;
+}
+
+/** Dompet anggota di grup ini; dibuat dengan koin awal saat pertama kali masuk ruangan. */
+export async function getWallet(userId: string, groupId: string): Promise<Wallet> {
+  const read = () =>
+    one<{ coins: number; earned_today: number; earned_day: string }>(
+      "SELECT coins, earned_today, earned_day FROM wallets WHERE user_id = $1 AND group_id = $2",
+      [userId, groupId],
+    );
+  let r = await read();
+  if (!r) {
+    await sql("INSERT INTO wallets (user_id, group_id, coins) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", [
+      userId,
+      groupId,
+      STARTING_COINS,
+    ]);
+    r = await read();
+  }
+  return { coins: r?.coins ?? 0, earnedToday: r?.earned_today ?? 0, earnedDay: r?.earned_day ?? "" };
+}
+
+/**
+ * Cairkan gaji yang terkumpul. Perolehan hari ini dihitung di database (bukan ditimpa) agar tetap benar
+ * saat koneksi lama dan baru sama-sama mencairkan setelah sambung ulang.
+ */
+export async function creditWallet(
+  userId: string,
+  groupId: string,
+  amount: number,
+  day: string,
+): Promise<Wallet | null> {
+  const r = await one<{ coins: number; earned_today: number; earned_day: string }>(
+    `UPDATE wallets SET coins = coins + $3,
+       earned_today = CASE WHEN earned_day = $4 THEN earned_today + $3 ELSE $3 END,
+       earned_day = $4, updated_at = now()
+     WHERE user_id = $1 AND group_id = $2 RETURNING coins, earned_today, earned_day`,
+    [userId, groupId, amount, day],
+  );
+  return r ? { coins: r.coins, earnedToday: r.earned_today, earnedDay: r.earned_day } : null;
+}
+
+/** Bayar dengan koin. Saldo tidak bisa negatif (FR-54): null bila koin kurang. */
+export async function spendWallet(userId: string, groupId: string, price: number): Promise<number | null> {
+  const r = await one<{ coins: number }>(
+    `UPDATE wallets SET coins = coins - $3, updated_at = now()
+     WHERE user_id = $1 AND group_id = $2 AND coins >= $3 RETURNING coins`,
+    [userId, groupId, price],
+  );
+  return r?.coins ?? null;
 }

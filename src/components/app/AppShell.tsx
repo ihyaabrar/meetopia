@@ -28,6 +28,9 @@ import { UserSettings, type UserSection } from "./UserSettings";
 import { GroupSettings, type GroupSection } from "./GroupSettings";
 import { SpeakerPanel } from "./SpeakerPanel";
 import { TvPanel } from "./TvPanel";
+import { ShopPanel } from "./ShopPanel";
+import { activeEffects, useLiveLife } from "./LifeHud";
+import { ITEMS, venueOf } from "@/shared/life";
 import { ProfileCard } from "./ProfileCard";
 import { StatusEditor } from "./StatusEditor";
 import { InviteModal } from "./InviteModal";
@@ -56,6 +59,8 @@ const EMPTY_SNAP: RoomSnapshot = {
   tv: {},
   locks: {},
   clockOffset: 0,
+  life: null,
+  lifeAt: 0,
   version: 0,
 };
 const noopSubscribe = () => () => {};
@@ -81,6 +86,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
   const [music, setMusic] = useState<MusicPlayer | null>(null);
   const [speaker, setSpeaker] = useState<MapObject | null>(null);
   const [tv, setTv] = useState<MapObject | null>(null);
+  const [shop, setShop] = useState<MapObject | null>(null);
   const [chatTarget, setChatTarget] = useState<ChatTarget>({ kind: "nearby" });
   const [dmTabs, setDmTabs] = useState<string[]>([]);
   const [notes, setNotes] = useState<null | "private" | "shared">(null);
@@ -174,6 +180,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
     setMusic(mp);
     setSpeaker(null);
     setTv(null);
+    setShop(null);
     void r.connect();
     // Hook debug untuk tes e2e dan pengukuran spike (hanya di pengembangan).
     if (process.env.NODE_ENV !== "production")
@@ -277,6 +284,11 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
           if (prefs.desktopNotify) desktopNotify(m.senderName, m.body.slice(0, 140));
         }
       }),
+      room.on("order", (m) => toast({ text: t("shop.preparing", { item: t(`item.${m.item}`) }) })),
+      room.on("consumed", (m) =>
+        toast({ text: t("shop.enjoy", { item: `${ITEMS[m.item].emoji} ${t(`item.${m.item}`)}` }) }),
+      ),
+      room.on("shopRejected", (m) => toast({ text: t(`shop.rejected.${m.reason}`), kind: "error" })),
       room.on("error", (code) => {
         if (["rateLimited", "tooFar", "notRoomMaster", "badPin", "badVideo"].includes(code))
           toast({ text: t(`error.${code}`), kind: "error" });
@@ -328,6 +340,13 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
   const self = snap.selfId ? snap.peers.get(snap.selfId) : undefined;
   const role = detail?.role ?? "guest";
 
+  // Karakter hidup (Fase 2): efek ringan saat bar hampir kosong; suara orang lain paling pelan 50%.
+  const life = useLiveLife(snap);
+  const effects = activeEffects(life, prefs.lifeEffects);
+  useEffect(() => {
+    media?.setLifeVolume(effects.volume);
+  }, [media, effects.volume]);
+
   const openDm = (userId: string) => {
     setDmTabs((l) => (l.includes(userId) ? l : [...l, userId]));
     setChatTarget({ kind: "dm", userId });
@@ -345,15 +364,17 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
         return setModal("tips");
       case "buy":
       case "brew":
-        return toast({ text: t("action.comingSoon") });
+      case "drink":
+      case "cook":
+        // Mesin penjual, kopi, dispenser, kulkas, dapur: buka menu bila fitur kebutuhan menyala.
+        if (venueOf(obj) && snap.life?.settings.enabled) return setShop(obj);
+        if (action === "drink") return toast({ text: t("action.drinkResult") });
+        if (action === "cook") return toast({ text: t("action.cookResult") });
+        return toast({ text: t("life.disabled") });
       case "read":
         return toast({ text: t("action.readResult") });
-      case "drink":
-        return toast({ text: t("action.drinkResult") });
       case "watch":
         return obj.kind === "tv" ? setTv(obj) : toast({ text: t("action.watchResult") });
-      case "cook":
-        return toast({ text: t("action.cookResult") });
       case "play":
         return toast({
           text: t(obj.kind === "arcade" ? "action.arcadeResult" : "action.playResult", {
@@ -751,6 +772,8 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
                 onOpenNotes={() => setNotes("private")}
                 onHelp={() => setModal("tips")}
                 registerWalkTo={registerWalkTo}
+                life={prefs.showLifeHud ? life : null}
+                effects={effects}
               />
             ) : (
               <div className="stage loading-stage">
@@ -927,6 +950,9 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
       )}
       {modal === "tips" && <Tips onClose={() => setModal(null)} />}
       {tv && room && <TvPanel room={room} snap={snap} obj={tv} role={role} onClose={() => setTv(null)} />}
+      {shop && room && life && (
+        <ShopPanel room={room} snap={snap} obj={shop} life={life} onClose={() => setShop(null)} />
+      )}
       {speaker && room && (
         <SpeakerPanel room={room} snap={snap} obj={speaker} role={role} onClose={() => setSpeaker(null)} />
       )}

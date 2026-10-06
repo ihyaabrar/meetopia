@@ -6,6 +6,7 @@ import type { MapData } from "./map";
 import type { Role } from "./roles";
 import { musicSourceSchema, type MusicState } from "./music";
 import { tvMessageSchema, type TvState } from "./tv";
+import { ITEM_IDS, type ItemId, type LifeState } from "./life";
 
 export type Direction = "up" | "down" | "left" | "right";
 
@@ -112,6 +113,7 @@ export const clientMessageSchema = z.discriminatedUnion("t", [
     action: z.enum(["play", "stop"]),
     source: musicSourceSchema.optional(),
   }),
+  z.object({ t: z.literal("consume"), objectId: z.string().max(64), item: z.enum(ITEM_IDS) }),
   z.object({ t: z.literal("ping") }),
 ]);
 
@@ -134,7 +136,8 @@ export type ServerMessage =
   | { t: "update"; peer: Presence }
   | { t: "leave"; id: string; conn: string }
   | { t: "chat"; message: ChatMessage }
-  | { t: "emote"; id: string; emoji: Emote }
+  /** Emote pilihan, atau emoji makanan/minuman yang sedang dinikmati. */
+  | { t: "emote"; id: string; emoji: string }
   | { t: "signal"; from: string; data: unknown }
   | { t: "knock"; knockId: string; from: string; fromName: string; zoneId: string | null }
   | { t: "knockResult"; knockId: string; accept: boolean; byName: string; zoneId: string | null }
@@ -149,6 +152,11 @@ export type ServerMessage =
   | { t: "teleported"; x: number; y: number; toName: string }
   | { t: "teleportRejected"; reason: "busy" | "privateZone" | "noSpace" | "offline" }
   | { t: "music"; objectId: string; state: MusicState | null; serverNow: number }
+  | { t: "life"; life: LifeState }
+  /** Pesanan diterima; item siap setelah `waitMs` (kantin, mesin kopi). */
+  | { t: "order"; item: ItemId; waitMs: number }
+  | { t: "consumed"; item: ItemId; price: number }
+  | { t: "shopRejected"; reason: "coins" | "tooFar" | "disabled" | "busy" }
   | { t: "kicked"; reason: string }
   | { t: "error"; code: string }
   | { t: "pong" };

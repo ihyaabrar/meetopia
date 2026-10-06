@@ -481,3 +481,71 @@ test("Berbagi layar: rekan di dekat melihat layar, bisa diperkecil dan disembuny
   await a.getByRole("button", { name: "Berhenti berbagi layar" }).first().click();
   await expect(b.getByRole("button", { name: /Tampilkan layar Sari/ })).toHaveCount(0, { timeout: 15_000 });
 });
+
+test("Dunia hidup: beli dari mesin penjual dan kopi, saldo tidak bisa negatif (FR-51, FR-54, FR-55)", async ({
+  browser,
+}) => {
+  const a = await (await browser.newContext()).newPage();
+  const stamp = Date.now();
+  await register(a, `l${stamp}@contoh.id`, "Lina");
+  await a.waitForURL(/\/app/);
+  await a.getByRole("button", { name: "Mengerti!" }).click();
+  await a.getByRole("button", { name: "Buat workspace" }).first().click();
+  await a.getByLabel("Nama workspace").fill("Kantin");
+  await a.getByRole("button", { name: "Buat", exact: true }).click();
+  await enterRoom(a);
+  const coins = a.getByTestId("coins");
+  await expect(coins).toHaveText("50");
+
+  // Berdiri di depan mesin penjual (lounge kantor), lalu buka petunjuk objek dengan Enter.
+  const standAt = (x: number, y: number) =>
+    a.evaluate(
+      ([x, y]) => {
+        const r = (
+          window as unknown as {
+            __meetopia: { room: { updateSelf: (p: object) => void; send: (m: object) => void } };
+          }
+        ).__meetopia.room;
+        r.updateSelf({ x, y, dir: "up", moving: false });
+        r.send({ t: "move", x, y, dir: "up", moving: false });
+      },
+      [x, y],
+    );
+  await standAt(40.5, 14.5);
+  await a.locator("canvas.map").focus();
+  await a.keyboard.press("Enter");
+  await expect(a.locator(".hint-pop")).toContainText("Mesin penjual otomatis");
+  await a.locator(".hint-pop").getByRole("button", { name: "Beli" }).click();
+  const dialog = a.getByRole("dialog", { name: "Mesin penjual otomatis" });
+  await expect(dialog).toBeVisible();
+
+  const energy = dialog.locator(".shop-item", { hasText: "Minuman energi" }).getByRole("button");
+  await energy.click();
+  await expect(a.getByText("Kamu menikmati 🥤 Minuman energi.")).toBeVisible();
+  await expect(coins).toHaveText(/^3[01]$/);
+  await expect(energy).toBeEnabled();
+  await energy.click();
+  await expect(coins).toHaveText(/^1[01]$/);
+  // Koin tidak cukup: tombol dimatikan di UI, dan server tetap menolak bila dipaksa.
+  await expect(energy).toBeDisabled();
+  await a.evaluate(() =>
+    (window as unknown as { __meetopia: { room: { send: (m: object) => void } } }).__meetopia.room.send({
+      t: "consume",
+      objectId: "vending-75",
+      item: "energyDrink",
+    }),
+  );
+  await expect(a.getByText("Koinmu tidak cukup.")).toBeVisible();
+  await expect(coins).toHaveText(/^1[01]$/);
+  await a.keyboard.press("Escape");
+
+  // Mesin kopi: dibayar lalu menunggu sebentar sampai siap.
+  await standAt(37.5, 14.5);
+  await a.locator("canvas.map").focus();
+  await a.keyboard.press("Enter");
+  await a.locator(".hint-pop").getByRole("button", { name: "Seduh kopi" }).click();
+  await a.getByRole("dialog").locator(".shop-item", { hasText: "Kopi" }).getByRole("button").click();
+  await expect(a.locator(".shop-pending")).toContainText("Kopi sedang disiapkan");
+  await expect(a.getByText("Kamu menikmati ☕ Kopi.")).toBeVisible({ timeout: 8_000 });
+  await expect(coins).toHaveText(/^[45]$/);
+});

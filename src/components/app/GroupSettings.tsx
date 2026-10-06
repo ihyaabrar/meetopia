@@ -12,6 +12,8 @@ import { isGroupColor, isGroupSymbol, type GroupColor, type GroupSymbol } from "
 import type { GroupDetail } from "./types";
 import { TemplatePicker } from "@/components/TemplatePicker";
 import { isTemplateId, type TemplateId } from "@/shared/templates";
+import { DECAY_SPEEDS, type LifeSettings } from "@/shared/life";
+import { Toggle } from "./UserSettings";
 
 interface Invite {
   id: string;
@@ -22,7 +24,7 @@ interface Invite {
   revoked: boolean;
 }
 
-export type GroupSection = "overview" | "room" | "channels" | "members" | "invites" | "danger";
+export type GroupSection = "overview" | "room" | "life" | "channels" | "members" | "invites" | "danger";
 
 /**
  * Pengaturan grup dengan menu: ringkasan (ikon, nama, deskripsi), ruangan (audio jarak), kanal,
@@ -50,6 +52,7 @@ export function GroupSettings({
     ? [
         { id: "overview", label: t("gs.overview"), icon: "edit", group: detail.group.name },
         { id: "room", label: t("gs.room"), icon: "door" },
+        { id: "life", label: t("gs.life"), icon: "coffee" },
         { id: "channels", label: t("gs.channels"), icon: "hash" },
         { id: "members", label: t("gs.members"), icon: "users", group: t("gs.people") },
         { id: "invites", label: t("gs.invites"), icon: "link" },
@@ -107,6 +110,7 @@ export function GroupSettings({
       )}
       {section === "overview" && <Overview {...ctx} />}
       {section === "room" && <RoomSection {...ctx} />}
+      {section === "life" && <LifeSection {...ctx} />}
       {section === "channels" && <Channels {...ctx} />}
       {section === "members" && <Members {...ctx} />}
       {section === "invites" && <Invites {...ctx} />}
@@ -261,6 +265,109 @@ function RoomSection({ detail, run }: Ctx) {
           onClick={() =>
             run(
               () => api(`/api/groups/${detail.group.id}`, { method: "PATCH", body: { audio } }),
+              t("common.saved"),
+            )
+          }
+        >
+          {t("common.save")}
+        </button>
+      </div>
+    </>
+  );
+}
+
+/** Karakter hidup & koin (Fase 2): admin bisa mematikan semuanya, efeknya, atau gajinya (aturan 6). */
+function LifeSection({ detail, run }: Ctx) {
+  const { t } = useI18n();
+  const [life, setLife] = useState<LifeSettings>(detail.life);
+  const changed = JSON.stringify(life) !== JSON.stringify(detail.life);
+  const set = (patch: Partial<LifeSettings>) => setLife({ ...life, ...patch });
+  return (
+    <>
+      <p className="hint" style={{ marginTop: 0 }}>
+        {t("gs.lifeHint")}
+      </p>
+      <section className="setting-card">
+        <Toggle
+          id="gs-life-enabled"
+          label={t("gs.lifeEnabled")}
+          hint={t("gs.lifeEnabledHint")}
+          checked={life.enabled}
+          onChange={(v) => set({ enabled: v })}
+        />
+      </section>
+      {life.enabled && (
+        <>
+          <section className="setting-card" style={{ marginTop: 12 }}>
+            <div className="setting-row">
+              <span className="grow">
+                <b>{t("gs.lifeDecay")}</b>
+              </span>
+              <div className="seg" role="radiogroup" aria-label={t("gs.lifeDecay")}>
+                {DECAY_SPEEDS.map((d) => (
+                  <button
+                    key={d}
+                    role="radio"
+                    aria-checked={life.decay === d}
+                    className={`seg-btn ${life.decay === d ? "on" : ""}`}
+                    onClick={() => set({ decay: d })}
+                  >
+                    {t(`gs.decay.${d}`)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <Toggle
+              id="gs-life-effects"
+              label={t("gs.lifeEffects")}
+              hint={t("gs.lifeEffectsHint")}
+              checked={life.effects}
+              onChange={(v) => set({ effects: v })}
+            />
+          </section>
+          <section className="setting-card" style={{ marginTop: 12 }}>
+            <Toggle
+              id="gs-life-salary"
+              label={t("gs.lifeSalary")}
+              hint={t("gs.lifeSalaryHint")}
+              checked={life.salary}
+              onChange={(v) => set({ salary: v })}
+            />
+            {life.salary &&
+              (
+                [
+                  ["coinsPerHour", 0, 300, 10],
+                  ["dailyCap", 0, 2000, 20],
+                ] as const
+              ).map(([k, min, max, step]) => (
+                <div className="field" key={k}>
+                  <label htmlFor={`gs-${k}`}>
+                    {t(`gs.${k}`)}: <b>{life[k]}</b>
+                  </label>
+                  <input
+                    id={`gs-${k}`}
+                    type="range"
+                    min={min}
+                    max={max}
+                    step={step}
+                    value={life[k]}
+                    onChange={(e) => set({ [k]: Number(e.target.value) })}
+                  />
+                </div>
+              ))}
+          </section>
+        </>
+      )}
+      <div className="save-bar" data-visible={changed}>
+        <span className="grow">{t("us.unsaved")}</span>
+        <button className="btn ghost small" onClick={() => setLife(detail.life)}>
+          {t("us.reset")}
+        </button>
+        <button
+          className="btn small"
+          onClick={() =>
+            run(
+              () => api(`/api/groups/${detail.group.id}`, { method: "PATCH", body: { life } }),
               t("common.saved"),
             )
           }

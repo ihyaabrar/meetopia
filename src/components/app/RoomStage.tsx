@@ -29,6 +29,8 @@ import { DoorPrompt, SetPinDialog } from "./ZoneLockDialogs";
 import { speakerVolume } from "@/shared/music";
 import { getPrefs, setPrefs, usePrefs } from "@/client/prefs";
 import type { MusicPlayer } from "@/client/music";
+import type { LifeEffects, LifeState } from "@/shared/life";
+import { LifeHud } from "./LifeHud";
 
 const noSub = () => () => {};
 const NO_AUDIBLE: never[] = [];
@@ -54,6 +56,9 @@ interface Props {
   onHelp: () => void;
   /** Dipanggil komponen induk untuk meminta avatar berjalan ke titik/orang tertentu. */
   registerWalkTo: (fn: (p: Point) => void) => void;
+  /** Kondisi karakter sendiri (null = disembunyikan atau belum diterima). */
+  life: LifeState | null;
+  effects: LifeEffects;
 }
 
 interface Display {
@@ -81,6 +86,8 @@ export function RoomStage({
   onOpenNotes,
   onHelp,
   registerWalkTo,
+  life,
+  effects,
 }: Props) {
   const t = useT();
   const toast = useToast();
@@ -90,6 +97,10 @@ export function RoomStage({
   useEffect(() => {
     snapRef.current = snap;
   }, [snap]);
+  const speedRef = useRef(SPEED);
+  useEffect(() => {
+    speedRef.current = SPEED * effects.speed;
+  }, [effects.speed]);
   const prefs = usePrefs();
   const audible = useSyncExternalStore(music?.subscribe ?? noSub, music?.getSnapshot ?? noAudible, noAudible);
   const nowPlaying = audible.reduce<(typeof audible)[number] | null>(
@@ -235,7 +246,7 @@ export function RoomStage({
           st.target = null;
           st.onArrive = null;
           const len = Math.hypot(vx, vy);
-          const step = SPEED * dt;
+          const step = speedRef.current * dt;
           const free = (x: number, y: number) => {
             for (const [ox, oy] of [
               [-0.25, -0.15],
@@ -282,7 +293,7 @@ export function RoomStage({
         const dx = tx - me.x;
         const dy = ty - me.y;
         const d = Math.hypot(dx, dy);
-        const step = SPEED * dt;
+        const step = speedRef.current * dt;
         let nx = me.x;
         let ny = me.y;
         if (d <= step) {
@@ -650,6 +661,7 @@ export function RoomStage({
       <canvas
         ref={canvasRef}
         className="map"
+        style={effects.blur > 0 ? { filter: `blur(${effects.blur}px)` } : undefined}
         tabIndex={0}
         aria-label={t("room.canvasLabel")}
         onPointerDown={onPointerDown}
@@ -661,6 +673,7 @@ export function RoomStage({
       />
 
       <div className="hud-tl">
+        {life && life.settings.enabled && <LifeHud life={life} />}
         {zoneHere && (
           <span className={`hud-chip ${zoneHere.private ? "private" : ""}`}>
             <Icon name={snap.locks[zoneHere.id]?.locked ? "lock" : "pin"} size={14} />

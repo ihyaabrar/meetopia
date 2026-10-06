@@ -71,9 +71,14 @@ export class MediaManager {
   micDeviceId: string | undefined = getPrefs().micDeviceId || undefined;
   camDeviceId: string | undefined = getPrefs().camDeviceId || undefined;
   speakerDeviceId: string | undefined = getPrefs().speakerDeviceId || undefined;
+  /** Pengali dari kebutuhan karakter yang hampir kosong (0,5..1; aturan 6 PRD). */
+  private lifeVolume = 1;
+  setLifeVolume(v: number) {
+    this.lifeVolume = Math.max(0.5, Math.min(1, v));
+  }
   /** Volume suara orang lain dikalikan nilai ini (pengaturan "Volume orang lain"). */
   get masterVolume() {
-    return getPrefs().othersVolume;
+    return getPrefs().othersVolume * this.lifeVolume;
   }
 
   private links = new Map<string, Link>();

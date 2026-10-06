@@ -3,12 +3,15 @@ import { sql } from "@/server/db";
 import { ok, parseBody, requirePermission, route } from "@/server/api";
 import {
   getGroup,
+  getLifeSettings,
   getMap,
   listChannels,
   listMembers,
   replaceMapTemplate,
+  saveLifeSettings,
   updateMapAudio,
 } from "@/server/repo";
+import { lifeSettingsSchema } from "@/shared/life";
 import { TEMPLATE_IDS, templateOf } from "@/shared/templates";
 import { notifyGroupChanged, publishToRoom } from "@/realtime/bus";
 import { GROUP_COLOR_KEYS, GROUP_SYMBOLS, defaultGroupColor } from "@/shared/groupIcon";
@@ -18,11 +21,12 @@ type Ctx = { params: Promise<{ groupId: string }> };
 export const GET = route<Ctx>(async (_req, { params }) => {
   const { groupId } = await params;
   const { role } = await requirePermission(groupId, "enterRoom");
-  const [group, channels, members, map] = await Promise.all([
+  const [group, channels, members, map, life] = await Promise.all([
     getGroup(groupId),
     listChannels(groupId),
     listMembers(groupId),
     getMap(groupId),
+    getLifeSettings(groupId),
   ]);
   return ok({
     group: {
@@ -39,6 +43,7 @@ export const GET = route<Ctx>(async (_req, { params }) => {
     members,
     audio: map.audio,
     template: templateOf(map),
+    life,
   });
 });
 
@@ -56,6 +61,7 @@ const patchSchema = z.object({
     })
     .refine((a) => a.fullVolumeRadius < a.radius)
     .optional(),
+  life: lifeSettingsSchema.optional(),
 });
 
 export const PATCH = route<Ctx>(async (req, { params }) => {
@@ -75,6 +81,10 @@ export const PATCH = route<Ctx>(async (req, { params }) => {
   if (body.audio) {
     const map = await updateMapAudio(groupId, body.audio);
     await publishToRoom(groupId, { control: { kind: "map", map } });
+  }
+  if (body.life) {
+    await saveLifeSettings(groupId, body.life);
+    await publishToRoom(groupId, { control: { kind: "life", life: body.life } });
   }
   if (body.name || body.description !== undefined || body.iconColor || body.iconSymbol)
     await notifyGroupChanged(groupId);

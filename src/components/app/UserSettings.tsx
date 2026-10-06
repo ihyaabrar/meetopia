@@ -518,6 +518,20 @@ function AppearanceSection({ me, onSaved }: { me: Me; onSaved: (me: Me) => void 
           onChange={(v) => setPrefs({ showNames: v })}
         />
         <Toggle
+          id="us-life-hud"
+          label={t("us.showLifeHud")}
+          hint={t("us.showLifeHudHint")}
+          checked={prefs.showLifeHud}
+          onChange={(v) => setPrefs({ showLifeHud: v })}
+        />
+        <Toggle
+          id="us-life-effects"
+          label={t("us.lifeEffects")}
+          hint={t("us.lifeEffectsHint")}
+          checked={prefs.lifeEffects}
+          onChange={(v) => setPrefs({ lifeEffects: v })}
+        />
+        <Toggle
           id="us-motion"
           label={t("us.avatarAnimation")}
           hint={t("us.avatarAnimationHint")}

@@ -7,6 +7,7 @@ import type { AvatarConfig } from "@/shared/avatar";
 import type { MapData } from "@/shared/map";
 import type { ServerMessage } from "@/shared/protocol";
 import type { Role } from "@/shared/roles";
+import type { LifeSettings } from "@/shared/life";
 
 export type Control =
   | { kind: "replaced"; userId: string; conn: string }
@@ -22,6 +23,7 @@ export type Control =
   | { kind: "grantZone"; userId: string; zoneId: string }
   | { kind: "grantPeer"; userId: string; peerId: string }
   | { kind: "map"; map: MapData }
+  | { kind: "life"; life: LifeSettings }
   | { kind: "groupDeleted" };
 
 export interface Envelope {

@@ -4,7 +4,7 @@ Kantor virtual 2D berbasis browser dengan karakter kartun yang "hidup". Tampilan
 
 **Istilah:** "grup" setara dengan server di Discord. Di dokumen ini kata "organisasi" berarti grup yang sama.
 
-Versi dokumen: 5 Oktober 2026. Status centang diperbarui saat implementasi MVP (M0–M8); diuji dengan unit test dan tes end-to-end. Nama "Meetopia" adalah nama kerja (lihat bagian 14 soal nama yang sudah dipakai pihak lain).
+Versi dokumen: 6 Oktober 2026. Status centang diperbarui saat implementasi MVP (M0–M8) dan Fase 2 langkah 1–3; diuji dengan unit test dan tes end-to-end. Nama "Meetopia" adalah nama kerja (lihat bagian 14 soal nama yang sudah dipakai pihak lain).
 
 ---
 
@@ -165,9 +165,9 @@ Jadwal tidak dipatok per bulan. Urutan dan kriteria selesai yang tetap.
 
 Kerjakan setelah M0 sampai M8 stabil. Urutan yang disarankan:
 
-1. **Karakter hidup:** bar energi, lapar, haus; efek ringan bila kosong; istirahat di kursi, sofa, atau ruang istirahat (FR-50, FR-52).
-2. **Kantin dan mesin penjual otomatis** dengan item dan efek berbeda (FR-51, FR-55).
-3. **Gaji koin per jam aktif** dengan batas harian dan anti-idle (FR-53).
+1. **Karakter hidup:** bar energi, lapar, haus; efek ringan bila kosong; istirahat di kursi, sofa, atau ruang istirahat (FR-50, FR-52). *(selesai: bar di Redis, efek ringan dengan batas minimum, bisa dimatikan admin dan pengguna; kasur memulihkan paling cepat)*
+2. **Kantin dan mesin penjual otomatis** dengan item dan efek berbeda (FR-51, FR-55). *(selesai: mesin penjual, mesin kopi, dispenser, kulkas, dapur; tabel item dari bagian 6. Kantor belum punya meja kantin khusus; menu lengkap ada di dapur template Rumah)*
+3. **Gaji koin per jam aktif** dengan batas harian dan anti-idle (FR-53). *(selesai: dihitung per menit aktif, tidak saat jauh dari layar, batas harian menurut WIB; dompet di Neon ditulis per ~10 koin, bukan tiap menit)*
 4. **Toko pakaian dan aksesori** plus lemari (FR-60, FR-61); toko perabot (FR-54).
 5. **Dekorasi tarik-letakkan, ganti latar, meja pribadi** (FR-56, FR-57, FR-58) dan editor peta (FR-13).
 6. **Kerja sampingan minigame:** simulasi saham virtual (FR-62, FR-63), pengaturan admin untuk menyalakan atau mematikan minigame (FR-65).

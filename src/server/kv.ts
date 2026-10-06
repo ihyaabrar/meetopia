@@ -125,4 +125,6 @@ export const keys = {
   music: (groupId: string) => `music:${groupId}`,
   locks: (groupId: string) => `locks:${groupId}`,
   tv: (groupId: string) => `tv:${groupId}`,
+  /** Bar kebutuhan karakter (berubah terus selama online, jadi di Redis, bukan Neon). */
+  needs: (groupId: string, userId: string) => `needs:${groupId}:${userId}`,
 };

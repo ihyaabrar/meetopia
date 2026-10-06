@@ -17,14 +17,14 @@ Tanpa `DATABASE_URL`, data disimpan di PostgreSQL lokal dalam proses (PGlite) di
 
 Coba dengan dua jendela (misalnya satu jendela biasa dan satu jendela penyamaran): daftar, buat grup, buat tautan undangan, buka di jendela kedua, lalu jalan-jalan dan nyalakan mikrofon.
 
-| Perintah                             | Kegunaan                                                                                                                                   |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `npm run dev`                        | Server pengembangan (Next.js + WebSocket di satu port)                                                                                     |
-| `npm run build` / `npm start`        | Build dan jalankan mode produksi (self-host)                                                                                               |
-| `npm run start:realtime`             | Server real-time saja (untuk deploy terpisah dari Vercel)                                                                                  |
-| `npm run lint` / `npm run typecheck` | ESLint dan TypeScript                                                                                                                      |
-| `npm test`                           | Unit test (Vitest): peta, pencarian jalur, aturan audio, peran, terjemahan                                                                 |
-| `npm run test:e2e`                   | Tes end-to-end (Playwright, dua browser): grup, undangan, sinkron posisi, chat, catatan, mic + WebRTC, sambung ulang, ruang privat + ketuk |
+| Perintah                             | Kegunaan                                                                                                                                                         |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`                        | Server pengembangan (Next.js + WebSocket di satu port)                                                                                                           |
+| `npm run build` / `npm start`        | Build dan jalankan mode produksi (self-host)                                                                                                                     |
+| `npm run start:realtime`             | Server real-time saja (untuk deploy terpisah dari Vercel)                                                                                                        |
+| `npm run lint` / `npm run typecheck` | ESLint dan TypeScript                                                                                                                                            |
+| `npm test`                           | Unit test (Vitest): peta, pencarian jalur, aturan audio, peran, terjemahan, kebutuhan karakter & koin                                                            |
+| `npm run test:e2e`                   | Tes end-to-end (Playwright, dua browser): grup, undangan, sinkron posisi, chat, catatan, mic + WebRTC, sambung ulang, ruang privat + ketuk, mesin penjual & kopi |
 
 Variabel lingkungan ada di [`.env.example`](.env.example). Jangan commit `.env`.
 
@@ -68,6 +68,16 @@ PRD meminta solusi paling sederhana untuk pengembang tunggal yang baru mengenal 
 4. **Hak akses di server** untuk setiap API dan pesan WebSocket (`src/shared/roles.ts`, `src/server/api.ts`). Masuk ruang privat yang sedang dipakai ditolak di server sampai ketukan diterima.
 5. **Tidak ada pelacakan layar/keystroke**: "jauh dari layar" hanya dari aktivitas di dalam aplikasi (sinyal "masih di sini" paling sering tiap 30 detik, tanpa isi).
 6. **Mikrofon dan kamera mati saat masuk.**
+
+### Dunia hidup (Fase 2, langkah 1–3)
+
+Logika ada di `src/shared/life.ts` (murni, dipakai server dan klien); server menghitungnya di `src/realtime/hub.ts`.
+
+- **Bar energi, makan, minum** turun pelan hanya selama online dan disimpan di Redis (`needs:<grup>:<pengguna>`), bukan Neon (aturan 1). Duduk memulihkan energi: kursi pelan, sofa/beanbag lebih cepat, kasur paling cepat.
+- **Efek ringan** saat bar di bawah 15: jalan paling lambat 70%, suara orang lain paling pelan 50%, layar buram maksimal 1,5 px. Chat dan berbagi layar tidak pernah terkunci. Admin bisa mematikan efek per grup, pengguna per perangkat (aturan 6).
+- **Tempat makan/minum** ditentukan jenis objek: mesin penjual (instan, lebih mahal), mesin kopi (menunggu 3 detik), dispenser & kulkas (air gratis), dapur (menu lengkap, lebih murah, menunggu). Harga, jarak, dan saldo diperiksa di server; saldo tidak bisa negatif (`CHECK (coins >= 0)` dan `UPDATE ... WHERE coins >= harga`).
+- **Gaji koin**: 1 koin per menit aktif (bawaan 60/jam, batas 480/hari, keduanya bisa diatur admin). Tidak dihitung saat status "jauh dari layar". Koin terkumpul di memori dan dicairkan ke tabel `wallets` setiap ~10 koin, saat membeli, dan saat keluar, agar Neon tetap bisa tidur. Koin hanya virtual (aturan 5).
+- Pengaturan per grup di **Pengaturan workspace → Dunia hidup** (kolom `groups.life`), berlaku langsung ke semua orang di ruangan lewat pub/sub.
 
 ## Deploy
 

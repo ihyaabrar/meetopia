@@ -30,6 +30,22 @@ import { pairVolume } from "@/shared/proximity";
 import { sanitizeAvatar } from "@/shared/avatar";
 import { can, type Role } from "@/shared/roles";
 import {
+  FULL_NEEDS,
+  ITEMS,
+  SHOP_RANGE,
+  applyItem,
+  dayKey,
+  menuEntry,
+  msPerCoin,
+  restKindAt,
+  sanitizeNeeds,
+  tickNeeds,
+  venueOf,
+  type LifeSettings,
+  type LifeState,
+  type Needs,
+} from "@/shared/life";
+import {
   clientMessageSchema,
   type ChatMessage,
   type ClientMessage,
@@ -55,6 +71,9 @@ const LEAVE_GRACE_MS = 3_000;
 const LAST_POSITION_TTL = 24 * 3600;
 const CHAT_WINDOW_MS = 5_000;
 const CHAT_MAX_PER_WINDOW = 6;
+const NEEDS_TTL = 30 * 24 * 3600;
+/** Gaji dicairkan ke Neon setiap terkumpul sekian koin (sekitar 10 menit), bukan tiap menit. */
+const WALLET_FLUSH_COINS = 10;
 
 interface Conn {
   ws: WebSocket;
@@ -71,13 +90,30 @@ interface Conn {
   pinTimes: number[];
   /** Status "rapat" dipasang otomatis karena masuk ruang privat (dicabut saat keluar). */
   autoMeeting: boolean;
+  /** Karakter hidup (Fase 2): bar kebutuhan dan kapan terakhir dihitung. */
+  needs: Needs;
+  needsAt: number;
+  wallet: repo.Wallet;
+  /** Koin gaji yang sudah terlihat di saldo tetapi belum dicairkan ke Neon. */
+  pendingCoins: number;
+  /** Waktu aktif (ms) yang belum menjadi koin. */
+  activeMs: number;
+  shopTimes: number[];
+  shopBusy: boolean;
+  /** Pesanan kantin/kopi yang sedang disiapkan. */
+  order: { timer: NodeJS.Timeout; serve: () => Promise<void> } | null;
+  /** Bar & gaji koneksi ini sudah disimpan saat dilepas (jangan menimpa koneksi baru). */
+  lifeSaved: boolean;
 }
 
 interface Room {
   groupId: string;
   conns: Map<string, Conn>;
+  /** Koneksi yang baru tertutup dan masih dalam masa tenggang sebelum benar-benar keluar. */
+  leaving: Map<string, Conn>;
   map: MapData;
   walkable: boolean[][];
+  life: LifeSettings;
   unsubscribe: () => Promise<void>;
 }
 
@@ -124,13 +160,15 @@ export class RealtimeHub {
       this.roomLoading.set(
         groupId,
         (async () => {
-          const map = await repo.getMap(groupId);
+          const [map, life] = await Promise.all([repo.getMap(groupId), repo.getLifeSettings(groupId)]);
           const kv = await this.kv();
           const room: Room = {
             groupId,
             conns: new Map(),
+            leaving: new Map(),
             map,
             walkable: buildWalkable(map),
+            life,
             unsubscribe: async () => {},
           };
           room.unsubscribe = await kv.subscribe(keys.roomChannel(groupId), (raw) => this.onBus(room, raw));
@@ -205,6 +243,13 @@ export class RealtimeHub {
     // Satu koneksi per pengguna per grup: tutup koneksi lama (di instance mana pun).
     const old = room.conns.get(auth.userId);
     if (old) this.closeConn(room, old, "replaced", false);
+    // Gaji dan bar dari koneksi sebelumnya (mis. muat ulang halaman) disimpan dulu sebelum dibaca lagi.
+    const prev = old ?? room.leaving.get(auth.userId);
+    if (prev) await this.persistLife(room, prev).catch(() => {});
+    const [rawNeeds, wallet] = await Promise.all([
+      kv.get(keys.needs(auth.groupId, auth.userId)),
+      repo.getWallet(auth.userId, auth.groupId),
+    ]);
     await publishToRoom(auth.groupId, {
       control: { kind: "replaced", userId: auth.userId, conn: presence.conn },
     });
@@ -223,6 +268,15 @@ export class RealtimeHub {
       statusExpiresAt: status.statusExpiresAt ? Date.parse(status.statusExpiresAt) : null,
       autoMeeting: false,
       pinTimes: [],
+      needs: rawNeeds ? sanitizeNeeds(JSON.parse(rawNeeds)) : { ...FULL_NEEDS },
+      needsAt: Date.now(),
+      wallet,
+      pendingCoins: 0,
+      activeMs: 0,
+      shopTimes: [],
+      shopBusy: false,
+      order: null,
+      lifeSaved: false,
     };
     room.conns.set(auth.userId, conn);
     await this.writePresence(conn);
@@ -239,6 +293,7 @@ export class RealtimeHub {
       tv: await this.readTv(room),
       serverNow: Date.now(),
     });
+    this.sendLife(room, conn);
     await publishToRoom(auth.groupId, { msg: { t: "join", peer: presence } });
     const startZone = privateZoneAt(room.map, presence.x, presence.y);
     if (startZone) await this.enterZone(room, conn, startZone);
@@ -318,10 +373,13 @@ export class RealtimeHub {
 
   private scheduleLeave(room: Room, conn: Conn) {
     room.conns.delete(conn.userId);
+    room.leaving.set(conn.userId, conn);
     setTimeout(() => void this.finalizeLeave(room, conn), LEAVE_GRACE_MS);
   }
 
   private async finalizeLeave(room: Room, conn: Conn) {
+    if (room.leaving.get(conn.userId) === conn) room.leaving.delete(conn.userId);
+    await this.persistLife(room, conn).catch((e) => console.error("[realtime] gagal menyimpan dompet", e));
     const kv = await this.kv();
     await kv.set(
       keys.lastPosition(conn.groupId, conn.userId),
@@ -374,6 +432,7 @@ export class RealtimeHub {
         return;
 
       case "move": {
+        this.tickLife(room, conn);
         if (!this.isWalkable(room, m.x, m.y))
           return send(conn.ws, { t: "moveRejected", x: p.x, y: p.y, reason: "privateZone" });
         const zone = privateZoneAt(room.map, m.x, m.y);
@@ -390,7 +449,9 @@ export class RealtimeHub {
         p.y = m.y;
         p.dir = m.dir;
         p.moving = m.moving;
+        const stoodUp = m.moving && p.sitting;
         if (m.moving) p.sitting = false;
+        if (stoodUp) this.sendLife(room, conn);
         this.autoMeetingStatus(room, conn);
         await this.broadcastUpdate(conn);
         if (prevZone && prevZone.id !== zone?.id) await this.leaveZone(room, conn.userId, prevZone);
@@ -408,7 +469,9 @@ export class RealtimeHub {
       }
 
       case "sit":
+        this.tickLife(room, conn);
         p.sitting = m.sitting;
+        this.sendLife(room, conn);
         return this.broadcastUpdate(conn);
 
       case "status":
@@ -471,7 +534,11 @@ export class RealtimeHub {
         return this.onMusic(room, conn, m);
 
       case "teleport":
+        this.tickLife(room, conn);
         return this.onTeleport(room, conn, m.toUserId);
+
+      case "consume":
+        return this.onConsume(room, conn, m);
 
       case "tv":
         return this.onTv(room, conn, m);
@@ -879,6 +946,13 @@ export class RealtimeHub {
       for (const c of room.conns.values()) send(c.ws, { t: "locks", locks: {} });
       return;
     }
+    if (ctl.kind === "life") {
+      // Hitung sampai sekarang dengan pengaturan lama, lalu pakai yang baru.
+      for (const c of room.conns.values()) this.tickLife(room, c);
+      room.life = ctl.life;
+      for (const c of room.conns.values()) this.sendLife(room, c);
+      return;
+    }
     if (ctl.kind === "groupDeleted") {
       for (const c of [...room.conns.values()]) this.closeConn(room, c, "groupDeleted");
       return;
@@ -887,8 +961,10 @@ export class RealtimeHub {
     if (!conn) return;
     switch (ctl.kind) {
       case "replaced":
-        if (conn.presence.conn !== ctl.conn) this.closeConn(room, conn, "replaced", false);
-        return;
+        if (conn.presence.conn === ctl.conn) return;
+        this.closeConn(room, conn, "replaced", false);
+        // Koneksi baru ada di instance lain: simpan gaji & bar koneksi lama (kredit koin bersifat relatif).
+        return this.persistLife(room, conn).catch(() => {});
       case "membership":
         if (!ctl.role) return this.closeConn(room, conn, "removed");
         conn.role = ctl.role;
@@ -909,11 +985,143 @@ export class RealtimeHub {
     }
   }
 
+  // ------------------------------------------------------------ karakter hidup & koin (Fase 2)
+
+  private lifeState(room: Room, conn: Conn): LifeState {
+    const p = conn.presence;
+    return {
+      needs: conn.needs,
+      coins: conn.wallet.coins,
+      earnedToday: conn.wallet.earnedDay === dayKey(Date.now()) ? conn.wallet.earnedToday : 0,
+      rest: restKindAt(room.map, p.x, p.y, p.sitting),
+      settings: room.life,
+    };
+  }
+
+  private sendLife(room: Room, conn: Conn) {
+    send(conn.ws, { t: "life", life: this.lifeState(room, conn) });
+  }
+
+  /** Hitung bar kebutuhan dan gaji sampai sekarang (murah: hanya aritmetika, tanpa I/O). */
+  private tickLife(room: Room, conn: Conn, now = Date.now()) {
+    const dt = now - conn.needsAt;
+    conn.needsAt = now;
+    if (dt <= 0) return;
+    const p = conn.presence;
+    conn.needs = tickNeeds(conn.needs, dt, room.life, restKindAt(room.map, p.x, p.y, p.sitting));
+
+    // FR-53: gaji hanya untuk waktu aktif (ada aktivitas dalam aplikasi), tidak saat jauh dari layar.
+    const s = room.life;
+    if (!s.enabled || !s.salary || p.status === "away" || now - p.lastActive > AWAY_AFTER_MS) return;
+    conn.activeMs += dt;
+    const per = msPerCoin(s);
+    const earned = Math.floor(conn.activeMs / per);
+    if (earned <= 0) return;
+    conn.activeMs -= earned * per;
+    const day = dayKey(now);
+    if (conn.wallet.earnedDay !== day) conn.wallet = { ...conn.wallet, earnedDay: day, earnedToday: 0 };
+    const add = Math.min(earned, Math.max(0, s.dailyCap - conn.wallet.earnedToday));
+    if (add <= 0) return;
+    conn.wallet.earnedToday += add;
+    conn.wallet.coins += add;
+    conn.pendingCoins += add;
+  }
+
+  private async saveNeeds(conn: Conn) {
+    const kv = await this.kv();
+    await kv.set(keys.needs(conn.groupId, conn.userId), JSON.stringify(conn.needs), NEEDS_TTL);
+  }
+
+  private async flushWallet(conn: Conn) {
+    const amount = conn.pendingCoins;
+    if (amount <= 0) return;
+    conn.pendingCoins = 0;
+    try {
+      const w = await repo.creditWallet(conn.userId, conn.groupId, amount, dayKey(Date.now()));
+      if (w) conn.wallet = { ...w, coins: w.coins + conn.pendingCoins };
+    } catch (e) {
+      conn.pendingCoins += amount;
+      throw e;
+    }
+  }
+
+  /** Simpan semuanya sebelum koneksi dilepas: pesanan yang sudah dibayar langsung disajikan. */
+  private async persistLife(room: Room, conn: Conn) {
+    if (conn.lifeSaved) return;
+    conn.lifeSaved = true;
+    if (conn.order) {
+      clearTimeout(conn.order.timer);
+      await conn.order.serve();
+    }
+    this.tickLife(room, conn);
+    await this.saveNeeds(conn);
+    await this.flushWallet(conn);
+  }
+
+  /** Makan/minum dari mesin penjual, mesin kopi, dispenser, kulkas, atau dapur (FR-51, FR-54, FR-55). */
+  private async onConsume(room: Room, conn: Conn, m: Extract<ClientMessage, { t: "consume" }>) {
+    const p = conn.presence;
+    const reject = (reason: "coins" | "tooFar" | "disabled" | "busy") =>
+      send(conn.ws, { t: "shopRejected", reason });
+    if (!room.life.enabled) return reject("disabled");
+    const obj = room.map.objects.find((o) => o.id === m.objectId);
+    const venue = obj ? venueOf(obj) : null;
+    const entry = venue ? menuEntry(venue, m.item) : null;
+    if (!obj || !entry) return;
+    if (distanceToObject(obj, p.x, p.y) > SHOP_RANGE) return reject("tooFar");
+    const now = Date.now();
+    conn.shopTimes = conn.shopTimes.filter((t) => now - t < 10_000);
+    if (conn.order || conn.shopBusy || conn.shopTimes.length >= 6) return reject("busy");
+    conn.shopTimes.push(now);
+    conn.shopBusy = true;
+    try {
+      this.tickLife(room, conn);
+      if (entry.price > 0) {
+        await this.flushWallet(conn);
+        const coins = await repo.spendWallet(conn.userId, conn.groupId, entry.price);
+        if (coins === null) {
+          this.sendLife(room, conn);
+          return reject("coins");
+        }
+        conn.wallet = { ...conn.wallet, coins: coins + conn.pendingCoins };
+      }
+      const item = ITEMS[entry.item];
+      const serve = async () => {
+        conn.order = null;
+        this.tickLife(room, conn);
+        conn.needs = applyItem(conn.needs, item);
+        send(conn.ws, { t: "consumed", item: item.id, price: entry.price });
+        this.sendLife(room, conn);
+        await this.saveNeeds(conn);
+        await publishToRoom(conn.groupId, { msg: { t: "emote", id: conn.userId, emoji: item.emoji } });
+      };
+      if (entry.waitMs > 0) {
+        // Kantin & mesin kopi: dibayar sekarang, siap setelah menunggu sebentar.
+        send(conn.ws, { t: "order", item: item.id, waitMs: entry.waitMs });
+        this.sendLife(room, conn);
+        conn.order = {
+          serve,
+          timer: setTimeout(
+            () => void serve().catch((e) => console.error("[realtime] pesanan gagal", e)),
+            entry.waitMs,
+          ),
+        };
+      } else await serve();
+    } finally {
+      conn.shopBusy = false;
+    }
+  }
+
   private async heartbeat() {
     const now = Date.now();
     for (const room of this.rooms.values()) {
       for (const conn of room.conns.values()) {
         const p = conn.presence;
+        this.tickLife(room, conn, now);
+        await this.saveNeeds(conn);
+        if (conn.pendingCoins >= WALLET_FLUSH_COINS)
+          await this.flushWallet(conn).catch((e) => console.error("[realtime] gagal mencairkan gaji", e));
+        this.sendLife(room, conn);
         // Status kustom yang sudah lewat waktunya dihapus dari tampilan.
         if (conn.statusExpiresAt && now >= conn.statusExpiresAt) {
           conn.statusExpiresAt = null;

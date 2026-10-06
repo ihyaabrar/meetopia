@@ -13,6 +13,7 @@ import type {
 import type { MapData } from "@/shared/map";
 import type { MusicState } from "@/shared/music";
 import type { TvState } from "@/shared/tv";
+import type { LifeState } from "@/shared/life";
 
 export type ConnState = "connecting" | "open" | "reconnecting" | "closed";
 
@@ -30,6 +31,9 @@ export interface RoomSnapshot {
   locks: Record<string, ZoneLock>;
   /** Selisih jam server dan jam lokal (ms), untuk menyinkronkan posisi lagu. */
   clockOffset: number;
+  /** Bar kebutuhan & koin milik sendiri (Fase 2), dan kapan (jam lokal) diterima dari server. */
+  life: LifeState | null;
+  lifeAt: number;
   /** Kode galat konfigurasi server (mis. env Vercel belum diisi); bila ada, tidak dicoba ulang. */
   configError?: string;
   version: number;
@@ -52,6 +56,9 @@ type EventMap = {
   teleported: Extract<ServerMessage, { t: "teleported" }>;
   teleportRejected: Extract<ServerMessage, { t: "teleportRejected" }>;
   pinResult: Extract<ServerMessage, { t: "pinResult" }>;
+  order: Extract<ServerMessage, { t: "order" }>;
+  consumed: Extract<ServerMessage, { t: "consumed" }>;
+  shopRejected: Extract<ServerMessage, { t: "shopRejected" }>;
 };
 
 type Listener<K extends keyof EventMap> = (e: EventMap[K]) => void;
@@ -91,6 +98,8 @@ export class RoomClient {
     tv: {},
     locks: {},
     clockOffset: 0,
+    life: null,
+    lifeAt: 0,
     version: 0,
   };
 
@@ -347,6 +356,14 @@ export class RoomClient {
         else delete music[m.objectId];
         return this.commit({ music });
       }
+      case "life":
+        return this.commit({ life: m.life, lifeAt: Date.now() });
+      case "order":
+        return this.emit("order", m);
+      case "consumed":
+        return this.emit("consumed", m);
+      case "shopRejected":
+        return this.emit("shopRejected", m);
       case "kicked":
         this.closedByUser = true;
         this.commit({ conn: "closed" });
