@@ -395,7 +395,9 @@ export function RoomStage({
           }
         }
         const walking =
-          (p.id === s.selfId ? st.path.length > 0 : p.moving) || Math.hypot(p.x - d.x, p.y - d.y) > 0.05;
+          // Self walks along a clicked path OR with WASD/arrow keys (keyboard movement has no path).
+          (p.id === s.selfId ? st.path.length > 0 || st.keyMoving : p.moving) ||
+          Math.hypot(p.x - d.x, p.y - d.y) > 0.05;
         d.phase = walking ? d.phase + dt * 13 : 0;
         if (walking && time - d.lastPuff > 0.22) {
           d.lastPuff = time;
@@ -627,8 +629,27 @@ export function RoomStage({
     setHint(null);
     if (action === "sit") {
       walkTo({ x: obj.x + Math.floor(obj.w / 2), y: obj.y }, () => {
+        // Sit facing the way the seat faces (desk chairs toward the desk, sofas toward the room),
+        // not whichever way the last step of the walk happened to point.
+        const me = room.self;
+        const deskAbove = map.objects.find(
+          (o) =>
+            ["desk", "gamingDesk", "table", "counter"].includes(o.kind) &&
+            o.y + o.h === obj.y &&
+            o.x <= obj.x &&
+            o.x + o.w > obj.x,
+        );
+        const dir = obj.facing ?? (obj.kind === "chair" && deskAbove ? "up" : "down");
+        // The illustrated maps paint desk chairs centered under their desk (the chair tile is half a
+        // tile to the left), so sit there; the native renderer draws the chair on its own tile.
+        const illustrated = canvasRef.current?.dataset.renderer === "illustrated";
+        const seat =
+          me && illustrated && deskAbove && obj.kind === "chair" && !obj.facing
+            ? { x: deskAbove.x + deskAbove.w / 2, y: obj.y + 0.6 }
+            : me && { x: me.x, y: me.y };
+        if (seat) room.send({ t: "move", x: seat.x, y: seat.y, dir, moving: false });
         room.send({ t: "sit", sitting: true });
-        room.updateSelf({ sitting: true });
+        room.updateSelf({ sitting: true, dir, ...seat });
         toast({ text: t("action.satDown") });
       });
       return;

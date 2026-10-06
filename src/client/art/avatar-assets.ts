@@ -372,8 +372,8 @@ export function unifiedBodySprite(
     !["idle", "walk", "run"].includes(action)
   )
     return null;
-  // Non-front movement keeps the articulated rig; this atlas only authors front walking frames.
-  if (action !== "idle" && dir !== "down") return null;
+  // Only the front view has authored walking frames; other views reuse their idle body and the
+  // renderer steps the legs procedurally (see drawSteppingBody), keeping one consistent body.
   const atlas = atlases.get(AVATAR_ASSET_URLS[6]);
   if (!atlas) return null;
   let row = dir.startsWith("up") ? 3 : dir === "left" || dir === "right" ? 2 : dir.includes("-") ? 1 : 0;

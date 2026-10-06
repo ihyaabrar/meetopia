@@ -453,6 +453,54 @@ function prop(ctx: CanvasRenderingContext2D, rig: RigPose, a: AvatarConfig) {
     ctx.fillRect(-4, -12.7, 8, 1.5);
   }
 }
+/**
+ * Walking step for a whole painted body seen from the side, at an angle, or from behind. The upper body
+ * stays as painted; below the hip, a profile view swings the legs forward/back (shear pivoting on the hip)
+ * and other views lift the left and right legs alternately. `s` is the stride phase, -1..1.
+ */
+function drawSteppingBody(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLCanvasElement,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  hipFrac: number,
+  s: number,
+  profile: boolean,
+) {
+  const sw = img.width,
+    sh = img.height,
+    cut = Math.round(sh * hipFrac),
+    hipY = y + h * hipFrac,
+    legH = h - h * hipFrac;
+  if (profile) {
+    ctx.save();
+    ctx.translate(0, hipY);
+    ctx.transform(1, 0, s * 0.3, 1, 0, 0);
+    ctx.drawImage(img, 0, cut, sw, sh - cut, x, 0, w, legH);
+    ctx.restore();
+  } else {
+    const half = sw / 2;
+    const lift = [Math.max(0, s), Math.max(0, -s)];
+    for (const i of [0, 1])
+      ctx.drawImage(
+        img,
+        i * half,
+        cut,
+        half,
+        sh - cut,
+        x + (i * w) / 2,
+        hipY - lift[i] * h * 0.05,
+        w / 2,
+        legH,
+      );
+  }
+  // Upper body last, overlapping the seam slightly so the moving legs never show a gap at the waist.
+  const overlap = 0.02;
+  ctx.drawImage(img, 0, 0, sw, cut + sh * overlap, x, y, w, h * (hipFrac + overlap));
+}
+
 /** Painted modular head/garment sprites + deterministic articulated limbs, not whole-sheet screenshots. */
 export function drawPaintedAvatar(
   ctx: CanvasRenderingContext2D,
@@ -507,6 +555,30 @@ export function drawPaintedAvatar(
   const offset = rig.seated ? 3 : 0,
     left: [number, number] = [rig.left[0], rig.left[1] + offset],
     right: [number, number] = [rig.right[0], rig.right[1] + offset];
+  // Rig poses are authored for the front view (hands beside the body). Seen from the side or at an
+  // angle, the near arm sits in front of the torso and the far arm behind it, and both reach toward the
+  // facing direction; otherwise a sideways avatar shows a front-facing pair of arms.
+  const view = back ? "back" : side === 0 ? "front" : diagonal ? "quarter" : "profile";
+  const sideways = view === "quarter" || view === "profile";
+  const reach = (p: readonly [number, number]) => Math.max(0, Math.abs(p[0]) - 8);
+  const nearShoulder: [number, number] = sideways
+    ? [side * bodyW * (view === "profile" ? 0.08 : 0.3), top + 2]
+    : [bodyW * 0.43, top + 2];
+  const farShoulder: [number, number] = sideways
+    ? [-side * bodyW * (view === "profile" ? 0.06 : 0.26), top + 2]
+    : [-bodyW * 0.43, top + 2];
+  // A hand raised above the shoulders goes further forward so the arm does not cover the face.
+  const raisedReach = right[1] < top - 4 ? (view === "profile" ? 4 : 2.5) : 0;
+  const nearHand: [number, number] = sideways
+    ? [
+        nearShoulder[0] + side * (1.4 + raisedReach + reach(right) * (view === "profile" ? 0.85 : 0.8)),
+        right[1],
+      ]
+    : right;
+  const farHand: [number, number] = sideways
+    ? [farShoulder[0] + side * (0.6 + reach(left) * 0.5), left[1]]
+    : left;
+  const seatedSideways = rig.seated && side !== 0 && !back;
   const unified =
     !rig.seated && !pose.part && rig.prop === "none"
       ? unifiedBodySprite(a, pose.dir, action, rig.frame)
@@ -531,13 +603,33 @@ export function drawPaintedAvatar(
     if (pose.dir.includes("left")) ctx.scale(-1, 1);
     const height = d.torso + d.leg + 6;
     const width = (height * unified.canvas.width) / unified.canvas.height;
-    ctx.drawImage(unified.canvas, -width / 2, top - 3, width, height);
+    // Only the front view has authored step frames; other views step procedurally on the same
+    // painted body, so starting or stopping a walk never swaps to a different-looking rig.
+    if ((action === "walk" || action === "run") && pose.dir !== "down")
+      drawSteppingBody(
+        ctx,
+        unified.canvas,
+        -width / 2,
+        top - 3,
+        width,
+        height,
+        (d.torso + 3) / height,
+        rig.stride / (action === "run" ? 5 : 3),
+        view === "profile",
+      );
+    else ctx.drawImage(unified.canvas, -width / 2, top - 3, width, height);
     ctx.restore();
   } else {
     for (const sd of [-1, 1]) {
       const stride = rig.stride * sd,
-        footX = action === "sit-floor" ? -sd * 4.5 : sd * (side ? 2 : 3.3) + (side ? stride : 0),
-        footY = -2 - Math.max(0, stride);
+        // Seated and facing sideways: thighs point forward instead of hanging straight down.
+        footX =
+          action === "sit-floor"
+            ? -sd * 4.5
+            : seatedSideways
+              ? side * (diagonal ? 3.2 : 5.2) + sd * (diagonal ? 2.2 : 0.7)
+              : sd * (side ? 2 : 3.3) + (side ? stride : 0),
+        footY = seatedSideways ? -2.6 : -2 - Math.max(0, stride);
       if (drawPaintedLeg(ctx, a, sd * 3.2, hip, footX, footY, sd > 0)) continue;
       const shorts = a.bottom === "shorts" || a.bottom === "skirt";
       path(
@@ -598,8 +690,8 @@ export function drawPaintedAvatar(
       ctx.restore();
       return true;
     }
-    arm(ctx, a, [-bodyW * 0.43, top + 2], left, action, pose.dir);
-    arm(ctx, a, [bodyW * 0.43, top + 2], right, action, pose.dir);
+    arm(ctx, a, farShoulder, farHand, action, pose.dir);
+    if (!sideways) arm(ctx, a, nearShoulder, nearHand, action, pose.dir);
     const cloth = avatarSprite(a, pose.dir, "cloth")!;
     ctx.save();
     if (avatarSpriteMirror(a, pose.dir, "cloth")) ctx.scale(-1, 1);
@@ -622,6 +714,8 @@ export function drawPaintedAvatar(
       ctx.drawImage(cloth.canvas, -bodyW * 0.65, top, bodyW * 1.3, d.torso + 1.5);
     }
     ctx.restore();
+    // Seen from the side, the near arm lies over the torso (raised arms are drawn later, over the head).
+    if (sideways && nearHand[1] >= top + 2) arm(ctx, a, nearShoulder, nearHand, action, pose.dir);
   }
   if (a.accessory === "backpack") {
     ctx.fillStyle = a.accessoryColor;
@@ -641,7 +735,7 @@ export function drawPaintedAvatar(
   }
   if (rig.prop === "board") {
     ctx.save();
-    ctx.translate(17, top - 11);
+    ctx.translate(side < 0 ? -34 : 17, top - 11);
     path(ctx, [0, 0, 17, 0, 17, 14, 0, 14], "#f4edda");
     ctx.strokeStyle = "#71a992";
     ctx.lineWidth = 0.6;
@@ -698,10 +792,18 @@ export function drawPaintedAvatar(
   accessory(ctx, accessoryA, 0, headY, 12, 1, diagonal ? side * 0.4 : side, back);
   if (a.headphones && a.accessory !== "headphones")
     accessory(ctx, { ...a, accessory: "headphones" }, 0, headY, 12, 1, side * 0.4, back);
-  if (!back) prop(ctx, rig, a);
+  if (!back) {
+    // Held items follow the near hand; laptops/books shift toward the facing side.
+    ctx.save();
+    const shift = sideways ? side * (view === "profile" ? 4 : 2.5) : 0;
+    ctx.translate(shift, 0);
+    prop(ctx, { ...rig, right: [nearHand[0] - shift, nearHand[1]] }, a);
+    ctx.restore();
+  }
   // Raised hands draw in front of the head/props; ordinary arms stay behind the garment.
-  if (right[1] < top + 2) arm(ctx, a, [bodyW * 0.43, top + 2], right, action, pose.dir);
-  if (left[1] < top + 2) arm(ctx, a, [-bodyW * 0.43, top + 2], left, action, pose.dir);
+  if (nearHand[1] < top + 2) arm(ctx, a, nearShoulder, nearHand, action, pose.dir);
+  // Seen from the side, a raised far arm stays behind the head (it was drawn before the torso).
+  if (!sideways && farHand[1] < top + 2) arm(ctx, a, farShoulder, farHand, action, pose.dir);
   if (rig.bubble) {
     ctx.save();
     ctx.translate(17, headY - 12 - Math.max(0, Math.sin((pose.time ?? 0) * 3)) * 0.8);

@@ -243,6 +243,9 @@ export class Scene {
       ctx.fill();
     }
 
+    // Label area menempel di lantai: digambar sebelum avatar supaya tidak menutupi orang yang berdiri di atasnya.
+    ctx.drawImage(this.layers.labels, 0, 0);
+
     // Sprite tinggi + avatar, diurutkan dari atas ke bawah
     type Item = { y: number; draw: () => void };
     const items: Item[] = this.layers.sprites.map((s) => ({
@@ -302,7 +305,6 @@ export class Scene {
     }
 
     // Label nama, emote, balon chat (selalu di atas). Label yang bertabrakan digeser ke atas.
-    ctx.drawImage(this.layers.labels, 0, 0);
     ctx.font = "600 11px Outfit, system-ui, sans-serif";
     const placed: Array<{ x0: number; x1: number; y: number }> = [];
     const ordered = [...f.people].sort((a, b) => b.y - a.y);

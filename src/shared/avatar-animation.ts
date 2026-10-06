@@ -199,9 +199,10 @@ export function sampleAvatarAction(action: AvatarAction, seconds: number, static
       r.right = [10, -10 - k * 2];
       break;
     case "jump":
+      // Arms up in a V rather than straight out sideways.
       r.bob = -p * 9;
-      r.left = [-13, -17 - p * 6];
-      r.right = [13, -17 - p * 6];
+      r.left = [-12, -30 - p * 4];
+      r.right = [12, -30 - p * 4];
       break;
     case "sit":
     case "sit-floor":
