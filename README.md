@@ -1,47 +1,122 @@
-# Meetopia
+<div align="center">
 
-**Work • Talk • Together**: kantor virtual 2D berbasis browser. Tampilannya seperti Discord (daftar grup di kiri, kanal, panel anggota), tetapi setiap grup punya ruangan 2D sendiri tempat anggotanya hadir sebagai avatar kartun. Suara mengikuti jarak, bisa berbagi layar, dan ada catatan pribadi maupun bersama.
+<img src="docs/assets/banner.png" alt="Meetopia: kantor virtual 2D di browser. Work, Talk, Together." width="100%">
 
-Spesifikasi lengkap: [`docs/PRD.md`](docs/PRD.md) (dengan status centang per milestone).
+<h1>
+  <img src="docs/assets/logo.svg" alt="" width="40" align="top">
+  Meetopia
+</h1>
 
-## Menjalankan secara lokal
+**Kantor virtual 2D di browser, dengan karakter kartun yang "hidup".**<br>
+Tampilan ala Discord, tapi setiap workspace punya ruangan 2D sendiri: jalan-jalan, ngobrol dengan suara berdasarkan jarak, berbagi layar, dan menulis catatan bareng.
 
-Butuh Node.js 20+. Tidak perlu database atau Redis untuk mencoba.
+[**Coba demo →**](https://meetopia-two.vercel.app) &nbsp;·&nbsp; [Spesifikasi (PRD)](docs/PRD.md) &nbsp;·&nbsp; [Arah desain](DESIGN.md)
+
+![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
+![React](https://img.shields.io/badge/React-19-149eca?logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript&logoColor=white)
+![WebRTC](https://img.shields.io/badge/WebRTC-mesh-333333?logo=webrtc&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon%20%7C%20PGlite-4169e1?logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-pub%2Fsub-dc382d?logo=redis&logoColor=white)
+![Node](https://img.shields.io/badge/Node.js-%E2%89%A520-5fa04e?logo=nodedotjs&logoColor=white)
+![Bahasa](https://img.shields.io/badge/UI-Indonesia%20%7C%20English-3f9a55)
+
+<img src="docs/assets/demo.gif" alt="Halaman awal Meetopia: karakter berjalan di peta kantor, lengkap dengan emote dan balon chat" width="90%">
+
+<sub>Halaman awal aplikasi: pratinjau hidup peta kantor. Versi video: <a href="docs/assets/demo.mp4">demo.mp4</a>.</sub>
+
+</div>
+
+---
+
+## Daftar isi
+
+- [Fitur](#fitur)
+- [Tangkapan layar](#tangkapan-layar)
+- [Mulai cepat](#mulai-cepat)
+- [Perintah](#perintah)
+- [Struktur proyek](#struktur-proyek)
+- [Keputusan teknis](#keputusan-teknis-dan-alasannya)
+- [Deploy](#deploy)
+- [Identitas visual](#identitas-visual)
+- [Peta jalan](#peta-jalan)
+
+## Fitur
+
+|                                |                                                                                                                                                                                                         |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🚪 **Workspace & ruangan 2D**  | Buat workspace (Kantor, Rumah, atau Gaming house), undang lewat tautan atau kode 6 huruf. Peran pemilik, admin, anggota, tamu ditegakkan di server.                                                     |
+| 🎧 **Suara berdasarkan jarak** | Volume mengikuti jarak antar-avatar dan hilang di luar radius. Ruang privat kedap suara, bisa dikunci PIN oleh "pemegang ruangan"; orang luar harus mengetuk.                                           |
+| 🖥️ **Berbagi layar & video**   | Satu penyaji per percakapan, berhenti dengan satu klik. Video otomatis untuk orang terdekat (maks. 8 video, 16 audio).                                                                                  |
+| 📝 **Catatan**                 | Catatan pribadi dan catatan bersama per ruangan, editor berbasis blok ala Notion (judul, ceklis, daftar, kutipan, kode, pintasan markdown, menu `/`).                                                   |
+| 💬 **Chat**                    | Kanal teks, percakapan sekitar (balon di atas kepala), dan pesan langsung. Mention, notifikasi, bunyi, dan notifikasi browser.                                                                          |
+| 🟢 **Kehadiran**               | Status aktif/sibuk/rapat/jauh (otomatis setelah 5 menit tanpa aktivitas di aplikasi, tanpa pelacakan layar), status kustom, ketuk sebelum mendekati orang sibuk, lompat ke rekan.                       |
+| ☕ **Karakter hidup**          | Bar energi, makan, minum; duduk di sofa atau kasur untuk istirahat. Mesin penjual, mesin kopi, dispenser, kulkas, dan dapur dengan item berbeda. Gaji koin virtual per menit aktif dengan batas harian. |
+| 🎵 **Hiburan**                 | Speaker dengan stasiun musik sintesis atau YouTube (suara mengecil saat menjauh), TV untuk nonton YouTube bareng, mesin arcade, emote.                                                                  |
+| 🧑‍🎨 **Avatar chibi**            | Tubuh, wajah, rambut, dan warna dipilih saat daftar; animasi jalan, napas, dan kedip. Semua grafis digambar prosedural, tanpa aset pihak lain.                                                          |
+| 🌗 **Nyaman dipakai**          | Tema gelap/terang/sistem, kontras tinggi, kurangi gerakan, jalan dengan ketuk/klik atau WASD, UI Indonesia & Inggris.                                                                                   |
+
+## Tangkapan layar
+
+<table>
+  <tr>
+    <td colspan="2"><img src="docs/assets/room.png" alt="Ruangan kantor dengan lima orang di lounge: label nama, status mic, balon chat, dan panel anggota"><br><sub><b>Ruangan.</b> Lima orang di lounge: garis putus-putus menunjukkan siapa yang bisa saling mendengar.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/assets/vending.png" alt="Panel mesin penjual otomatis dengan daftar minuman, efek, dan harga koin"><br><sub><b>Mesin penjual.</b> Tiap item punya efek berbeda; saldo dicek di server.</sub></td>
+    <td width="50%"><img src="docs/assets/avatar-builder.png" alt="Pembuat avatar saat mendaftar: tubuh, warna baju, kulit, wajah, rambut"><br><sub><b>Pembuat avatar.</b> Langsung bisa masuk tanpa membeli apa pun.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/assets/needs.png" alt="Popover kondisi karakter: bar energi, makan, minum, gaji hari ini"><br><sub><b>Kondisi karakter.</b> Bar kebutuhan, gaji hari ini, dan sakelar efek.</sub></td>
+    <td width="50%"><img src="docs/assets/settings-life.png" alt="Pengaturan workspace bagian Dunia hidup"><br><sub><b>Pengaturan admin.</b> Semua mekanik bisa dimatikan atau diatur per workspace.</sub></td>
+  </tr>
+</table>
+
+## Mulai cepat
+
+Butuh **Node.js 20+**. Tidak perlu database, Redis, atau akun pihak ketiga untuk mencoba.
 
 ```bash
+git clone https://github.com/ihyaabrar/meetopia.git
+cd meetopia
 npm install
 npm run dev          # http://localhost:3000
 ```
 
-Tanpa `DATABASE_URL`, data disimpan di PostgreSQL lokal dalam proses (PGlite) di folder `.data/`. Tanpa `REDIS_URL`, kehadiran dan pub/sub memakai memori. Tanpa `SMTP_URL`, email verifikasi/reset dicetak ke konsol dan tautannya juga muncul di UI (mode pengembangan saja).
+Tanpa `DATABASE_URL`, data disimpan di PostgreSQL dalam proses (PGlite) di folder `.data/`. Tanpa `REDIS_URL`, kehadiran dan pub/sub memakai memori. Tanpa `SMTP_URL`, email verifikasi/reset dicetak ke konsol dan tautannya juga muncul di UI (mode pengembangan saja).
 
-Coba dengan dua jendela (misalnya satu jendela biasa dan satu jendela penyamaran): daftar, buat grup, buat tautan undangan, buka di jendela kedua, lalu jalan-jalan dan nyalakan mikrofon.
-
-| Perintah                             | Kegunaan                                                                                                                                                         |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run dev`                        | Server pengembangan (Next.js + WebSocket di satu port)                                                                                                           |
-| `npm run build` / `npm start`        | Build dan jalankan mode produksi (self-host)                                                                                                                     |
-| `npm run start:realtime`             | Server real-time saja (untuk deploy terpisah dari Vercel)                                                                                                        |
-| `npm run lint` / `npm run typecheck` | ESLint dan TypeScript                                                                                                                                            |
-| `npm test`                           | Unit test (Vitest): peta, pencarian jalur, aturan audio, peran, terjemahan, kebutuhan karakter & koin                                                            |
-| `npm run test:e2e`                   | Tes end-to-end (Playwright, dua browser): grup, undangan, sinkron posisi, chat, catatan, mic + WebRTC, sambung ulang, ruang privat + ketuk, mesin penjual & kopi |
+Coba dengan dua jendela (misalnya satu jendela biasa dan satu jendela penyamaran): daftar, buat workspace, buat tautan undangan, buka di jendela kedua, lalu jalan-jalan dan nyalakan mikrofon.
 
 Variabel lingkungan ada di [`.env.example`](.env.example). Jangan commit `.env`.
 
-## Struktur
+## Perintah
+
+| Perintah                             | Kegunaan                                                                                                                                                                  |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`                        | Server pengembangan (Next.js + WebSocket di satu port)                                                                                                                    |
+| `npm run build` / `npm start`        | Build dan jalankan mode produksi (self-host)                                                                                                                              |
+| `npm run start:realtime`             | Server real-time saja (untuk deploy terpisah dari Vercel)                                                                                                                 |
+| `npm run lint` / `npm run typecheck` | ESLint dan TypeScript                                                                                                                                                     |
+| `npm test`                           | Unit test (Vitest): peta, jalur, aturan audio, peran, terjemahan, kebutuhan karakter & koin                                                                               |
+| `npm run test:e2e`                   | Tes end-to-end (Playwright, dua browser): grup, undangan, sinkron posisi, chat, catatan, mic + WebRTC, sambung ulang, ruang privat, speaker, berbagi layar, mesin penjual |
+
+Playwright memakai Chromium di `/opt/pw-browsers` secara bawaan; di mesin lain isi `CHROMIUM_PATH` dengan path Chromium/Chrome.
+
+## Struktur proyek
 
 ```
 server.ts                 Next.js + WebSocket di satu proses (lokal / self-host)
 src/
   app/                    Halaman (landing, auth, undangan, /app) dan route API
   components/             UI: logo, avatar, kerangka ala Discord, panel, modal
-    app/                  AppShell, RoomStage (peta), Chat, Anggota, Catatan, Pengaturan
-  client/                 Kode browser: koneksi ruangan, WebRTC, gambar peta & avatar
+    app/                  AppShell, RoomStage (peta), Chat, Anggota, Catatan, Toko, Pengaturan
+  client/                 Kode browser: koneksi ruangan, WebRTC, musik, gambar peta & avatar
   realtime/               Server real-time (hub WebSocket, pub/sub, server mandiri)
   server/                 Database, Redis/memori, auth, email, kueri
-  shared/                 Tipe & logika bersama klien-server: peta, jalur, jarak, peran, protokol
+  shared/                 Logika bersama klien-server: peta, jalur, jarak, peran, protokol, kebutuhan
   i18n/                   Sistem terjemahan + messages/id.json & en.json
 tests/unit, tests/e2e     Vitest dan Playwright
+docs/                     PRD dan aset README
 ```
 
 ## Keputusan teknis (dan alasannya)
@@ -51,7 +126,7 @@ PRD meminta solusi paling sederhana untuk pengembang tunggal yang baru mengenal 
 | Bagian     | Pilihan                                               | Alasan                                                                                                                                                                                                                                     |
 | ---------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Framework  | Next.js 16 (App Router) + TypeScript + React 19       | Satu repo untuk UI dan API; cocok untuk Vercel                                                                                                                                                                                             |
-| Kanvas 2D  | Canvas 2D bawaan browser + tilemap & A* sendiri       | Peta kecil (44×28 tile) dan aset prosedural; tidak perlu Phaser/PixiJS. Logika peta ada di `src/shared` sehingga server juga bisa memvalidasi gerak                                                                                        |
+| Kanvas 2D  | Canvas 2D bawaan browser + tilemap & A\* sendiri      | Peta kecil (44×28 tile) dan aset prosedural; tidak perlu Phaser/PixiJS. Logika peta ada di `src/shared` sehingga server juga bisa memvalidasi gerak                                                                                        |
 | Real-time  | WebSocket (`ws`) + pub/sub                            | Status ruang di Redis, bukan di memori fungsi (aturan 3). Klien menyambung ulang otomatis dan memulihkan posisi (aturan 2)                                                                                                                 |
 | Database   | PostgreSQL (Neon) lewat `pg`; PGlite untuk lokal      | SQL biasa, skema di `src/server/schema.ts` dibuat otomatis                                                                                                                                                                                 |
 | Redis      | `ioredis` bila `REDIS_URL` ada; memori bila tidak     | Penyedia bisa apa saja yang mendukung protokol Redis (Upstash, Redis Cloud, dll.)                                                                                                                                                          |
@@ -79,6 +154,11 @@ Logika ada di `src/shared/life.ts` (murni, dipakai server dan klien); server men
 - **Gaji koin**: 1 koin per menit aktif (bawaan 60/jam, batas 480/hari, keduanya bisa diatur admin). Tidak dihitung saat status "jauh dari layar". Koin terkumpul di memori dan dicairkan ke tabel `wallets` setiap ~10 koin, saat membeli, dan saat keluar, agar Neon tetap bisa tidur. Koin hanya virtual (aturan 5).
 - Pengaturan per grup di **Pengaturan workspace → Dunia hidup** (kolom `groups.life`), berlaku langsung ke semua orang di ruangan lewat pub/sub.
 
+### Speaker dan TV
+
+- **Speaker** (`src/shared/music.ts`, `src/client/music.ts`): empat stasiun bawaan yang disintesis dengan Web Audio (Lo-fi santai, Ambient fokus, Piano sore, Kafe 8-bit), tautan audio langsung (https, mis. `.mp3`), atau video YouTube (hanya suaranya). Volume dihitung di tiap browser dari jarak ke speaker: penuh sampai 2,5 tile, hilang di 12 tile, teredam dinding dari area lain. Posisi lagu dihitung dari jam server, jadi semua orang mendengar bagian yang sama.
+- **TV**: anggota di dekat TV bisa memutar video YouTube untuk ditonton bersama di popup yang bisa diperbesar.
+
 ## Deploy
 
 ### Vercel (disarankan)
@@ -101,7 +181,7 @@ Vercel tidak menyimpan file dan tiap koneksi bisa jatuh ke instance berbeda, jad
 5. **Deployments → Redeploy** (env baru hanya terbaca setelah deploy ulang).
 6. Buka `https://alamatmu/api/health`. Semua harus `true`/`"ok"`; kalau ada yang `false`, itulah env yang belum benar.
 
-Integrasi Marketplace Vercel (Neon, Upstash) mengisi env secara otomatis; nama `POSTGRES_URL` dan `KV_URL` juga diterima sebagai pengganti `DATABASE_URL` dan `REDIS_URL`. Pilih region Singapore untuk Neon, Upstash, dan **Settings → Functions → Function Region** agar latensi dari Indonesia rendah. Tabel database dibuat otomatis saat permintaan pertama. Server real-time berjalan di endpoint `/api/ws` memakai `experimental_upgradeWebSocket()` dari `@vercel/functions` (fitur beta Vercel). Koneksi ditutup Vercel setiap 300 detik (batas paket Hobby); klien menyambung ulang otomatis dan posisi dipulihkan dari Redis. Endpoint ini belum bisa diuji di luar Vercel; kalau ternyata bermasalah, pakai cadangan di bawah.
+Integrasi Marketplace Vercel (Neon, Upstash) mengisi env secara otomatis; nama `POSTGRES_URL` dan `KV_URL` juga diterima sebagai pengganti `DATABASE_URL` dan `REDIS_URL`. Pilih region Singapore untuk Neon, Upstash, dan **Settings → Functions → Function Region** agar latensi dari Indonesia rendah. Tabel database dibuat otomatis saat permintaan pertama. Server real-time berjalan di endpoint `/api/ws` memakai `experimental_upgradeWebSocket()` dari `@vercel/functions` (fitur beta Vercel). Koneksi ditutup Vercel setiap 300 detik (batas paket Hobby); klien menyambung ulang otomatis dan posisi dipulihkan dari Redis.
 
 **Cadangan: server real-time terpisah.** Jalankan `npm run start:realtime` di host Node (Railway, Fly.io, Render) dengan `DATABASE_URL`, `REDIS_URL`, `AUTH_SECRET` yang sama, lalu isi `NEXT_PUBLIC_REALTIME_URL` di Vercel dengan alamatnya (mis. `wss://meetopia-rt.fly.dev`).
 
@@ -111,36 +191,28 @@ Railway, Render, Fly.io, atau VPS: `npm run build && npm start` dengan `DATABASE
 
 ## Identitas visual
 
-Logo memakai **konsep 7 (Minimalist)**: dua daun pintu (satu hijau terbuka, satu gelap tertutup dengan gagang) sebagai "pintu" ke ruang kerja virtual, dengan tagline _Work • Talk • Together_. Komponennya di `src/components/Logo.tsx`, favicon di `src/app/icon.svg`.
+<img src="docs/assets/logo.svg" alt="Logo Meetopia: dua daun pintu" width="64" align="right">
 
-Arah tampilan ada di [`DESIGN.md`](DESIGN.md) (diisi dari jawaban pemilik proyek): gelap-hangat ala Discord sebagai bawaan, hijau logo hanya sebagai aksen (tombol utama, status aktif, mic menyala, item terpilih), tema terang dan "ikuti sistem" bisa dipilih di Pengaturan, Tampilan, plus pilihan kontras tinggi. UI diperiksa dengan aturan [antislop](https://github.com/miqdadbadjuber/anti-slop): tanpa gradien/glow/blur dekoratif, tanpa emoji sebagai ikon, tanpa em dash, kontras teks lolos WCAG AA, target sentuh 44px.
+Logo memakai **konsep 7 (Minimalist)**: dua daun pintu (satu hijau terbuka, satu gelap tertutup dengan gagang) sebagai "pintu" ke ruang kerja virtual, dengan tagline _Work • Talk • Together_. Komponennya di `src/components/Logo.tsx`, favicon di `src/app/icon.svg`, versi berkas di [`docs/assets/logo.svg`](docs/assets/logo.svg).
 
-### Grafis in-game
+Arah tampilan ada di [`DESIGN.md`](DESIGN.md): gelap-hangat ala Discord sebagai bawaan, hijau logo hanya sebagai aksen (tombol utama, status aktif, mic menyala, item terpilih), tema terang dan "ikuti sistem" bisa dipilih di Pengaturan, plus pilihan kontras tinggi. Huruf: Outfit.
 
-Semua aset digambar prosedural (tanpa gambar pihak lain), di `src/client/art/` dan `src/client/scene.ts`:
+Semua grafis in-game digambar prosedural di `src/client/art/` dan `src/client/scene.ts`: lantai bertekstur per area, dinding 3/4 dengan jendela, perabot (meja, sofa, rak, papan tulis, mesin penjual, speaker, TV, arcade, kasur, dapur), avatar chibi dengan animasi, cincin hijau saat seseorang berbicara, garis ke orang yang bisa kamu dengar, emote, dan balon chat.
 
-- **Dunia:** lantai bertekstur per area (papan kayu, karpet ruang rapat, ubin batu lobi), dinding 3/4 dengan jendela dan cahaya matahari, bayangan di kaki dinding, lukisan dinding, label area.
-- **Perabot:** meja dengan monitor, kursi kantor, sofa, bean bag, rak buku, papan tulis, mesin penjual, mesin kopi, dispenser, TV, lampu, tanaman (3 jenis), meja resepsionis berlogo, speaker kayu (lampu menyala dan not musik melayang saat diputar). Perabot tinggi diurutkan kedalamannya bersama avatar, jadi avatar bisa berjalan di belakangnya.
-- **Avatar:** gaya chibi dengan hoodie, animasi jalan, napas dan kedip, tampak depan/samping/belakang.
-- **Efek:** cincin hijau saat seseorang berbicara (dari level suara WebRTC), garis putus-putus ke orang yang bisa kamu dengar, lingkaran radius suara saat berjalan, riak klik, debu langkah, cahaya lampu/layar, sorotan saat berada di ruang privat (area lain diredupkan), emote 👋🎉 dan balon chat "Sekitar" di atas kepala, label nama yang tidak saling bertumpuk.
-- **HUD:** chip area saat ini dan jumlah orang di dekatmu, peta mini (klik untuk berjalan), dock kontrol, popup petunjuk objek.
+## Peta jalan
 
-### Speaker musik
+Status rinci ada di [`docs/PRD.md`](docs/PRD.md).
 
-Di lounge ada speaker (`src/shared/music.ts`, `src/client/music.ts`). Anggota yang berdiri di dekatnya bisa memutar salah satu dari empat stasiun bawaan (Lo-fi santai, Ambient fokus, Piano sore, Kafe 8-bit) atau tautan audio langsung (https, mis. `.mp3`). Tautan YouTube dan Spotify tidak bisa diputar.
+- [x] **MVP (M0–M8):** akun, workspace, peta 2D, sinkron posisi, chat, kehadiran, catatan, suara berdasarkan jarak, berbagi layar, ruang privat & ketuk
+- [x] **Fase 2, langkah 1–3:** bar kebutuhan, kantin & mesin penjual, gaji koin
+- [ ] **Fase 2, langkah 4:** toko pakaian & aksesori, lemari, toko perabot
+- [ ] **Fase 2, langkah 5–7:** dekorasi tarik-letakkan, editor peta, minigame saham, login Google/Lark, rekaman sesi
+- [ ] **Fase 3:** absensi, analitik tim, banyak peta per workspace, API & webhook
 
-- **Makin jauh makin pelan:** volume dihitung di tiap browser dari jarak ke speaker. Penuh sampai 2,5 tile, lalu turun dan hilang di 12 tile. Dari area lain, suara teredam dinding (35%), dan ruang privat tidak mendengar speaker di luar.
-- **Sinkron:** status speaker disimpan di Redis (`music:<groupId>`). Posisi lagu dihitung dari jam server, jadi semua orang mendengar bagian yang sama.
-- **Tanpa berkas dan lisensi pihak ketiga:** stasiun bawaan disintesis dengan Web Audio (`src/client/musicSynth.ts`). Speaker yang tidak terdengar dihentikan setelah 4 detik agar hemat CPU.
-- Setiap orang bisa mengatur atau membisukan volume musik untuk dirinya sendiri (chip musik di layar ruangan, atau Pengaturan, Suara & video).
+Keputusan yang masih menunggu pemilik proyek ada di bagian 14 PRD. Pilihan sementara: workspace bebas dibuat siapa saja; satu workspace satu ruangan 2D; WebRTC mesh sendiri; penyedia Redis bebas.
 
-## Pengaturan
+---
 
-- **Pengguna** (ikon roda di bilah bawah): Akun saya (nama, ganti kata sandi, ekspor data, hapus akun), Avatar, Tampilan (tema, bahasa, kontras tinggi, kurangi gerakan), Suara & video (perangkat, volume orang lain dan musik, peredam bising, mic saat masuk), Notifikasi (bunyi ketuk/DM, notifikasi browser). Preferensi perangkat disimpan di browser.
-- **Grup** (roda di samping nama grup, atau klik kanan ikon grup): Ringkasan (ikon warna + simbol, nama, deskripsi), Ruangan (audio jarak), Kanal (buat, ganti nama, hapus), Anggota & peran, Undangan, Zona bahaya (serahkan kepemilikan, hapus grup, atau keluar).
-
-Grup lama ikut mendapat dekorasi baru otomatis (`templateRev` di data peta), pengaturan audionya tetap.
-
-## Belum diputuskan (perlu jawaban pemilik proyek)
-
-Lihat bagian 14 PRD. Pilihan sementara: grup bebas dibuat siapa saja; satu grup satu ruangan 2D; "notif objek" = petunjuk di dekat objek + notifikasi singkat setelah aksi; WebRTC mesh sendiri; Redis penyedia bebas.
+<div align="center">
+<sub>Proyek pribadi, gratis, untuk kantor, kelompok, dan komunitas kecil. Koin di dalam aplikasi hanya virtual.</sub>
+</div>
