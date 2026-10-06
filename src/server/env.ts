@@ -12,13 +12,35 @@ export const onVercel = !!process.env.VERCEL;
 /** Verifikasi email dimatikan dulu (keputusan pemilik). Nyalakan dengan EMAIL_VERIFICATION=on. */
 export const emailVerificationEnabled = () => process.env.EMAIL_VERIFICATION === "on";
 
+/** APP_URL kosong atau mengarah ke mesin sendiri (localhost, 127.0.0.1, *.localhost). */
+function appIsLocal(): boolean {
+  const u = process.env.APP_URL;
+  if (!u) return true;
+  try {
+    const h = new URL(u).hostname;
+    return h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h.endsWith(".localhost");
+  } catch {
+    return false;
+  }
+}
+
+let devSecretWarned = false;
+
+/**
+ * Rahasia penanda tangan sesi. Rahasia bawaan pengembangan ada di repo publik, jadi hanya boleh dipakai
+ * saat benar-benar pengembangan lokal: bukan produksi, bukan Vercel, dan APP_URL (bila ada) localhost.
+ * Selain itu server menolak jalan sampai AUTH_SECRET diisi, agar sesi tidak bisa dipalsukan.
+ */
 export function authSecret(): Uint8Array {
   const s = process.env.AUTH_SECRET;
-  if (!s) {
-    if (process.env.NODE_ENV === "production") throw new ConfigError("authSecretMissing");
-    return new TextEncoder().encode(DEV_SECRET);
+  if (s) return new TextEncoder().encode(s);
+  if (process.env.NODE_ENV === "production" || onVercel || !appIsLocal())
+    throw new ConfigError("authSecretMissing");
+  if (!devSecretWarned) {
+    devSecretWarned = true;
+    console.warn("[auth] AUTH_SECRET kosong: memakai rahasia pengembangan (hanya untuk localhost).");
   }
-  return new TextEncoder().encode(s);
+  return new TextEncoder().encode(DEV_SECRET);
 }
 
 /** URL publik aplikasi. Tanpa APP_URL, dipakai origin permintaan (bila ada) atau localhost:3000. */

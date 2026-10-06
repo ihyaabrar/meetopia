@@ -11,6 +11,7 @@ const env = {
   DATABASE_URL: process.env.DATABASE_URL ?? "",
   REDIS_URL: process.env.REDIS_URL ?? "",
   APP_URL: "http://localhost:3100",
+  REGISTER_PER_HOUR: "1000",
 };
 
 process.env.E2E_RT_URL_B = "ws://localhost:3101";

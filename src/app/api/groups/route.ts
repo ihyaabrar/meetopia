@@ -26,7 +26,7 @@ export const GET = route(async () => {
 
 export const POST = route(async (req) => {
   const user = await requireUser();
-  rateLimit(`createGroup:${user.id}`, 10, 3600_000);
+  await rateLimit(`createGroup:${user.id}`, 10, 3600_000);
   const body = await parseBody(
     req,
     z.object({

@@ -228,6 +228,14 @@ PRD meminta solusi paling sederhana untuk pengembang tunggal yang baru mengenal 
 5. **Tidak ada pelacakan layar atau keystroke.** "Jauh dari layar" hanya dari aktivitas di dalam aplikasi (sinyal "masih di sini" paling sering tiap 30 detik, tanpa isi).
 6. **Mikrofon dan kamera mati saat masuk.**
 
+### Keamanan
+
+- **Pembatas laju di Redis** (`src/server/api.ts`), jadi berlaku di semua instance Vercel. Login hanya menghitung percobaan yang gagal, per email dan per IP; email yang tidak terdaftar tetap melewati bcrypt agar waktunya sama.
+- **Rahasia sesi**: tanpa `AUTH_SECRET`, server hanya mau jalan sebagai pengembangan di localhost.
+- **Header keamanan** (`next.config.ts`): aplikasi tidak bisa dimuat di iframe situs lain, kamera dan mikrofon hanya untuk aplikasi ini.
+- **Transaksi database** untuk langkah yang harus utuh: membuat workspace, menyerahkan kepemilikan, dan memakai undangan (batas pemakaian tidak bisa terlewati walau banyak orang bergabung bersamaan).
+- **Hemat Redis**: kehadiran yang tidak berubah disegarkan tiap 45 detik, posisi saat berjalan ditulis ke hash paling sering tiap 1 detik (pub/sub tetap langsung), bar kebutuhan disimpan tiap 5 menit dan saat ada kejadian.
+
 ### Karakter hidup dan koin
 
 Logika ada di `src/shared/life.ts` (murni, dipakai server dan klien); server menghitungnya di `src/realtime/hub.ts`.
@@ -260,7 +268,7 @@ Vercel tidak menyimpan file dan tiap koneksi bisa jatuh ke instance berbeda, jad
    | `EMAIL_VERIFICATION`      | Opsional: isi `on` untuk mewajibkan verifikasi email saat daftar         |
 
 5. Buka **Deployments → Redeploy** (env baru hanya terbaca setelah deploy ulang).
-6. Buka `https://alamatmu/api/health`. Semua harus `true` atau `"ok"`; yang `false` menunjukkan env yang belum benar.
+6. Buka `https://alamatmu/api/health`. Semua harus `true` atau `"ok"`; yang `false` menunjukkan env yang belum benar. Untuk rincian (kode galat, nama env yang terbaca), isi `HEALTH_TOKEN` lalu buka `/api/health?token=...`.
 
 Integrasi Marketplace Vercel (Neon, Upstash) mengisi env secara otomatis; nama `POSTGRES_URL` dan `KV_URL` juga diterima. Pilih region Singapore untuk Neon, Upstash, dan **Settings → Functions → Function Region** agar latensi dari Indonesia rendah. Tabel database dibuat otomatis saat permintaan pertama.
 

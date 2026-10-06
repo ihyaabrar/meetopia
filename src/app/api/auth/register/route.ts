@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { authSecret } from "@/server/env";
 import { one, sql } from "@/server/db";
-import { ApiError, ok, parseBody, rateLimit, route } from "@/server/api";
+import { ApiError, clientIp, ok, parseBody, rateLimit, route } from "@/server/api";
 import { hashPassword, setSessionCookie } from "@/server/auth";
 import { newId } from "@/server/ids";
 import { sendVerificationEmail } from "@/server/emailTokens";
@@ -19,7 +19,8 @@ const schema = z.object({
 
 export const POST = route(async (req) => {
   authSecret(); // gagal lebih awal bila AUTH_SECRET belum diisi, sebelum ada data yang disimpan
-  rateLimit(`register:${req.headers.get("x-forwarded-for") ?? "local"}`, 10, 3600_000);
+  // Bawaan 10 akun per IP per jam; tes e2e menaikkannya karena semua akun tes datang dari satu IP.
+  await rateLimit(`register:${clientIp(req)}`, Number(process.env.REGISTER_PER_HOUR) || 10, 3600_000);
   const body = await parseBody(req, schema);
   const email = body.email.toLowerCase();
   if (await one("SELECT 1 FROM users WHERE email = $1", [email])) throw new ApiError(409, "emailTaken");

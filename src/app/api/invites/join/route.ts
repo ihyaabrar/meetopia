@@ -6,7 +6,7 @@ import { acceptInviteCode } from "@/server/repo";
 export const POST = route(async (req) => {
   const user = await requireUser();
   // Batasi tebakan kode.
-  rateLimit(`joinCode:${user.id}`, 10, 10 * 60_000);
+  await rateLimit(`joinCode:${user.id}`, 10, 10 * 60_000);
   const { code } = await parseBody(req, z.object({ code: z.string().min(4).max(20) }));
   const r = await acceptInviteCode(code, user.id);
   if (!r.ok)

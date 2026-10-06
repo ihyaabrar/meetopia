@@ -25,6 +25,7 @@ export default defineConfig({
       PGLITE_DIR: "memory://",
       NODE_ENV: "development",
       APP_URL: `http://localhost:${PORT}`,
+      REGISTER_PER_HOUR: "1000",
     },
   },
 });

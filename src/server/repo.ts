@@ -1,5 +1,5 @@
 /** Kueri database untuk grup, kanal, keanggotaan, peta, undangan, pesan, dan catatan. */
-import { one, sql } from "./db";
+import { one, sql, transaction } from "./db";
 import { newId, newToken, hashToken } from "./ids";
 import type { MapData } from "@/shared/map";
 import {
@@ -48,21 +48,24 @@ export async function createGroup(
   template: TemplateId = "office",
 ): Promise<string> {
   const groupId = newId();
-  await sql("INSERT INTO groups (id, name, owner_id, icon_color, icon_symbol) VALUES ($1, $2, $3, $4, $5)", [
-    groupId,
-    name,
-    ownerId,
-    icon?.color ?? defaultGroupColor(groupId),
-    icon?.symbol ?? "initials",
-  ]);
-  await sql("INSERT INTO memberships (user_id, group_id, role) VALUES ($1, $2, 'owner')", [ownerId, groupId]);
-  // FR-72 & FR-73: ruangan 2D dan kanal "umum" dibuat otomatis.
-  await sql("INSERT INTO channels (id, group_id, name) VALUES ($1, $2, 'umum')", [newId(), groupId]);
-  await sql("INSERT INTO maps (id, group_id, version, data) VALUES ($1, $2, 1, $3)", [
-    newId(),
-    groupId,
-    JSON.stringify(buildTemplate(template)),
-  ]);
+  // Satu transaksi: tidak ada grup setengah jadi (tanpa pemilik, kanal, atau peta) bila ada yang gagal.
+  await transaction(async (q) => {
+    await q.query(
+      "INSERT INTO groups (id, name, owner_id, icon_color, icon_symbol) VALUES ($1, $2, $3, $4, $5)",
+      [groupId, name, ownerId, icon?.color ?? defaultGroupColor(groupId), icon?.symbol ?? "initials"],
+    );
+    await q.query("INSERT INTO memberships (user_id, group_id, role) VALUES ($1, $2, 'owner')", [
+      ownerId,
+      groupId,
+    ]);
+    // FR-72 & FR-73: ruangan 2D dan kanal "umum" dibuat otomatis.
+    await q.query("INSERT INTO channels (id, group_id, name) VALUES ($1, $2, 'umum')", [newId(), groupId]);
+    await q.query("INSERT INTO maps (id, group_id, version, data) VALUES ($1, $2, 1, $3)", [
+      newId(),
+      groupId,
+      JSON.stringify(buildTemplate(template)),
+    ]);
+  });
   return groupId;
 }
 
@@ -358,16 +361,31 @@ export async function acceptInviteCode(code: string, userId: string): Promise<In
   return joinWithInvite(await checkInviteCode(code), userId);
 }
 
+class InviteUsedUp extends Error {}
+
 async function joinWithInvite(check: InviteCheck, userId: string): Promise<InviteCheck> {
   if (!check.ok) return check;
-  const existing = await getRole(userId, check.groupId);
-  if (!existing) {
-    await sql("INSERT INTO memberships (user_id, group_id, role) VALUES ($1, $2, $3)", [
-      userId,
-      check.groupId,
-      check.role,
-    ]);
-    await sql("UPDATE invites SET uses = uses + 1 WHERE id = $1", [check.inviteId]);
+  if (await getRole(userId, check.groupId)) return check;
+  try {
+    // Atomik: jatah pakai hanya bertambah bila masih tersedia, jadi batas tidak terlewati walau
+    // beberapa orang bergabung bersamaan; anggota tidak dobel bila tombol diklik dua kali.
+    await transaction(async (q) => {
+      const joined = await q.query(
+        "INSERT INTO memberships (user_id, group_id, role) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING user_id",
+        [userId, check.groupId, check.role],
+      );
+      if (!joined.length) return;
+      const used = await q.query(
+        `UPDATE invites SET uses = uses + 1
+         WHERE id = $1 AND revoked_at IS NULL AND expires_at > now() AND (max_uses IS NULL OR uses < max_uses)
+         RETURNING id`,
+        [check.inviteId],
+      );
+      if (!used.length) throw new InviteUsedUp();
+    });
+  } catch (e) {
+    if (e instanceof InviteUsedUp) return { ok: false, reason: "used" };
+    throw e;
   }
   return check;
 }

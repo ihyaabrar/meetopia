@@ -44,7 +44,8 @@ async function enterRoom(page: Page) {
   if (await tips.isVisible().catch(() => false)) await tips.click();
   // Saat dialog perangkat dirender ulang, tombol bisa sesaat terhitung dua kali.
   await page.getByRole("button", { name: "Masuk ruangan" }).first().click();
-  await expect(page.locator("canvas.map")).toBeVisible();
+  // Masuk pertama kali bisa menunggu kompilasi route di server dev (bisa > 5 detik saat dingin).
+  await expect(page.locator("canvas.map")).toBeVisible({ timeout: 30_000 });
   await page.waitForFunction(
     () => (window as unknown as { __meetopia?: Debug }).__meetopia?.room.snapshot.conn === "open",
   );

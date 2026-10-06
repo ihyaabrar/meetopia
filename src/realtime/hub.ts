@@ -67,6 +67,16 @@ import { publishToRoom, type Envelope } from "./bus";
 const AWAY_AFTER_MS = 5 * 60_000;
 const PRESENCE_STALE_MS = 90_000;
 const HEARTBEAT_MS = 20_000;
+/**
+ * Hemat perintah Redis (paket gratis dibatasi per bulan): kehadiran yang tidak berubah cukup
+ * disegarkan tiap 45 detik (masih jauh di bawah batas basi 90 detik), posisi saat berjalan ditulis
+ * ke hash paling sering tiap 1 detik (pub/sub tetap tiap pesan), dan bar kebutuhan tiap 5 menit.
+ */
+const PRESENCE_REFRESH_MS = 45_000;
+const MOVING_WRITE_MS = 1_000;
+const NEEDS_SAVE_MS = 5 * 60_000;
+/** Daftar kehadiran untuk meneruskan sinyal WebRTC boleh berumur sebentar (banyak sinyal per detik). */
+const PRESENCE_CACHE_MS = 1_000;
 const LEAVE_GRACE_MS = 3_000;
 const LAST_POSITION_TTL = 24 * 3600;
 const CHAT_WINDOW_MS = 5_000;
@@ -86,6 +96,9 @@ interface Conn {
   emoteTimes: number[];
   musicTimes: number[];
   lastPosSave: number;
+  /** Kapan kehadiran terakhir ditulis ke Redis. */
+  presenceWrittenAt: number;
+  needsSavedAt: number;
   statusExpiresAt: number | null;
   pinTimes: number[];
   /** Status "rapat" dipasang otomatis karena masuk ruang privat (dicabut saat keluar). */
@@ -265,6 +278,8 @@ export class RealtimeHub {
       emoteTimes: [],
       musicTimes: [],
       lastPosSave: 0,
+      presenceWrittenAt: 0,
+      needsSavedAt: Date.now(),
       statusExpiresAt: status.statusExpiresAt ? Date.parse(status.statusExpiresAt) : null,
       autoMeeting: false,
       pinTimes: [],
@@ -359,6 +374,7 @@ export class RealtimeHub {
 
   private async writePresence(conn: Conn) {
     const kv = await this.kv();
+    conn.presenceWrittenAt = Date.now();
     await kv.hset(
       keys.presence(conn.groupId),
       conn.userId,
@@ -366,9 +382,25 @@ export class RealtimeHub {
     );
   }
 
-  private async broadcastUpdate(conn: Conn) {
-    await this.writePresence(conn);
+  /**
+   * `motionOnly`: hanya posisi yang berubah di tengah jalan. Semua orang tetap menerima lewat pub/sub,
+   * tetapi hash kehadiran di Redis cukup ditulis paling sering tiap MOVING_WRITE_MS.
+   */
+  private async broadcastUpdate(conn: Conn, motionOnly = false) {
+    if (!motionOnly || Date.now() - conn.presenceWrittenAt >= MOVING_WRITE_MS) await this.writePresence(conn);
     await publishToRoom(conn.groupId, { msg: { t: "update", peer: conn.presence } });
+  }
+
+  private presenceCache = new Map<string, { at: number; list: Promise<Presence[]> }>();
+
+  /** Kehadiran yang boleh sedikit basi; dipakai untuk pesan yang sangat sering (sinyal WebRTC). */
+  private readPresenceCached(room: Room): Promise<Presence[]> {
+    const hit = this.presenceCache.get(room.groupId);
+    if (hit && Date.now() - hit.at < PRESENCE_CACHE_MS) return hit.list;
+    const list = this.readPresence(room);
+    this.presenceCache.set(room.groupId, { at: Date.now(), list });
+    list.catch(() => this.presenceCache.delete(room.groupId));
+    return list;
   }
 
   private scheduleLeave(room: Room, conn: Conn) {
@@ -452,8 +484,10 @@ export class RealtimeHub {
         const stoodUp = m.moving && p.sitting;
         if (m.moving) p.sitting = false;
         if (stoodUp) this.sendLife(room, conn);
+        const statusBefore = p.status;
         this.autoMeetingStatus(room, conn);
-        await this.broadcastUpdate(conn);
+        const zoneChanged = (prevZone?.id ?? null) !== (zone?.id ?? null);
+        await this.broadcastUpdate(conn, m.moving && !zoneChanged && !stoodUp && p.status === statusBefore);
         if (prevZone && prevZone.id !== zone?.id) await this.leaveZone(room, conn.userId, prevZone);
         if (zone && zone.id !== prevZone?.id) await this.enterZone(room, conn, zone);
         if (!m.moving || Date.now() - conn.lastPosSave > 10_000) {
@@ -513,13 +547,18 @@ export class RealtimeHub {
       }
 
       case "signal": {
-        const others = await this.readPresence(room);
-        const target = others.find((o) => o.id === m.to);
-        if (!target) return;
         const isBye =
           typeof m.data === "object" && m.data !== null && (m.data as { type?: string }).type === "bye";
         // Server hanya meneruskan sinyal WebRTC antara orang yang memang boleh saling mendengar.
-        if (!isBye && !this.canSignal(room, p, target)) return;
+        // Cache dipakai dulu; bila tujuan belum ada (baru masuk) atau belum lolos, baca ulang dari Redis.
+        const allowed = (list: Presence[]) => {
+          const target = list.find((o) => o.id === m.to);
+          return !!target && (isBye || this.canSignal(room, p, target));
+        };
+        if (!allowed(await this.readPresenceCached(room))) {
+          this.presenceCache.delete(room.groupId);
+          if (!allowed(await this.readPresenceCached(room))) return;
+        }
         await publishToRoom(conn.groupId, {
           to: [m.to],
           msg: { t: "signal", from: conn.userId, data: m.data },
@@ -1028,6 +1067,7 @@ export class RealtimeHub {
   }
 
   private async saveNeeds(conn: Conn) {
+    conn.needsSavedAt = Date.now();
     const kv = await this.kv();
     await kv.set(keys.needs(conn.groupId, conn.userId), JSON.stringify(conn.needs), NEEDS_TTL);
   }
@@ -1118,7 +1158,7 @@ export class RealtimeHub {
       for (const conn of room.conns.values()) {
         const p = conn.presence;
         this.tickLife(room, conn, now);
-        await this.saveNeeds(conn);
+        if (now - conn.needsSavedAt >= NEEDS_SAVE_MS) await this.saveNeeds(conn);
         if (conn.pendingCoins >= WALLET_FLUSH_COINS)
           await this.flushWallet(conn).catch((e) => console.error("[realtime] gagal mencairkan gaji", e));
         this.sendLife(room, conn);
@@ -1134,7 +1174,7 @@ export class RealtimeHub {
           p.status = "away";
           conn.autoAway = true;
           await this.broadcastUpdate(conn);
-        } else {
+        } else if (now - conn.presenceWrittenAt >= PRESENCE_REFRESH_MS) {
           await this.writePresence(conn);
         }
       }

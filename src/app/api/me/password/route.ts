@@ -8,7 +8,7 @@ const schema = z.object({ current: z.string().max(200), next: z.string().min(8).
 /** Ganti kata sandi dari dalam aplikasi. Sesi di perangkat lain ikut keluar; sesi ini tetap masuk. */
 export const POST = route(async (req) => {
   const user = await requireUser();
-  rateLimit(`password:${user.id}`, 10, 3600_000);
+  await rateLimit(`password:${user.id}`, 10, 3600_000);
   const body = await parseBody(req, schema);
   const row = await one<{ password_hash: string }>("SELECT password_hash FROM users WHERE id = $1", [
     user.id,

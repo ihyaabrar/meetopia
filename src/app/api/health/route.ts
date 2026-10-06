@@ -6,7 +6,7 @@ import { onVercel, redisEnvNames, redisUrl } from "@/server/env";
  * Cek konfigurasi server tanpa membuka rahasia apa pun. Buka /api/health setelah deploy
  * untuk melihat env mana yang belum diisi.
  */
-export async function GET() {
+export async function GET(req: Request) {
   let database: "ok" | "notConfigured" | "error" = "ok";
   let databaseError: string | undefined;
   try {
@@ -33,27 +33,39 @@ export async function GET() {
       r.disconnect();
     }
   }
-  const checks = {
-    vercel: onVercel,
+  const ok =
+    database === "ok" &&
+    (!!process.env.AUTH_SECRET || process.env.NODE_ENV !== "production") &&
+    (!onVercel || redisPing === "ok");
+  // Ringkasan publik: cukup untuk tahu env mana yang belum benar, tanpa membuka detail server.
+  const summary = {
+    ok,
     database,
-    databaseError,
     authSecret: !!process.env.AUTH_SECRET,
-    redis: !!rurl,
-    redisPing,
-    redisError,
+    redis: redisPing,
     appUrl: !!process.env.APP_URL,
     realtime: process.env.NEXT_PUBLIC_REALTIME_URL ? "external" : "builtin",
     // Commit yang sedang aktif (disediakan Vercel), untuk memastikan redeploy sudah terjadi.
     commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
-    // Hanya NAMA variabel yang mirip database/Redis, tanpa nilainya, untuk melacak awalan dari integrasi.
-    envNames: Object.keys(process.env)
-      .filter((k) => /(DATABASE|POSTGRES|NEON|PGHOST|REDIS|KV_|UPSTASH|AUTH_SECRET|APP_URL)/.test(k))
-      .sort(),
-    redisEnvNames: redisEnvNames(),
   };
-  const ok =
-    database === "ok" &&
-    (checks.authSecret || process.env.NODE_ENV !== "production") &&
-    (!onVercel || redisPing === "ok");
-  return NextResponse.json({ ok, ...checks }, { status: ok ? 200 : 503 });
+  // Rincian diagnostik (kode galat, NAMA env tanpa nilai) hanya saat pengembangan atau dengan
+  // ?token= yang cocok dengan HEALTH_TOKEN.
+  const token = new URL(req.url).searchParams.get("token");
+  const detailed =
+    process.env.NODE_ENV !== "production" ||
+    (!!process.env.HEALTH_TOKEN && token === process.env.HEALTH_TOKEN);
+  const body = detailed
+    ? {
+        ...summary,
+        vercel: onVercel,
+        databaseError,
+        redisConfigured: !!rurl,
+        redisError,
+        envNames: Object.keys(process.env)
+          .filter((k) => /(DATABASE|POSTGRES|NEON|PGHOST|REDIS|KV_|UPSTASH|AUTH_SECRET|APP_URL)/.test(k))
+          .sort(),
+        redisEnvNames: redisEnvNames(),
+      }
+    : summary;
+  return NextResponse.json(body, { status: ok ? 200 : 503, headers: { "cache-control": "no-store" } });
 }

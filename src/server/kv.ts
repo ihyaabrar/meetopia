@@ -14,6 +14,8 @@ export interface Kv {
   set(key: string, value: string, ttlSeconds: number): Promise<void>;
   get(key: string): Promise<string | null>;
   del(key: string): Promise<void>;
+  /** Menambah penghitung; masa berlaku dipasang saat penghitung baru dibuat. */
+  incr(key: string, ttlSeconds: number): Promise<number>;
   publish(channel: string, message: string): Promise<void>;
   /** Mengembalikan fungsi untuk berhenti berlangganan. */
   subscribe(channel: string, handler: (message: string) => void): Promise<() => Promise<void>>;
@@ -52,6 +54,16 @@ class MemoryKv implements Kv {
   async del(key: string) {
     this.values.delete(key);
   }
+  async incr(key: string, ttl: number) {
+    const now = Date.now();
+    const e = this.values.get(key);
+    if (!e || e.exp < now) {
+      this.values.set(key, { v: "1", exp: now + ttl * 1000 });
+      return 1;
+    }
+    e.v = String(Number(e.v) + 1);
+    return Number(e.v);
+  }
   async publish(channel: string, message: string) {
     // Asinkron seperti Redis sungguhan.
     queueMicrotask(() => this.bus.emit(channel, message));
@@ -85,6 +97,11 @@ async function createRedisKv(url: string): Promise<Kv> {
     get: (k) => cmd.get(k),
     async del(k) {
       await cmd.del(k);
+    },
+    async incr(k, ttl) {
+      const n = await cmd.incr(k);
+      if (n === 1) await cmd.expire(k, ttl);
+      return n;
     },
     async publish(ch, m) {
       await cmd.publish(ch, m);

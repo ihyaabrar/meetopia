@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { one, sql } from "@/server/db";
+import { one, transaction } from "@/server/db";
 import { ApiError, ok, parseBody, requirePermission, route } from "@/server/api";
 import { verifyPassword } from "@/server/auth";
 import { getRole } from "@/server/repo";
@@ -21,12 +21,18 @@ export const POST = route<Ctx>(async (req, { params }) => {
   const target = await getRole(body.userId, groupId);
   if (!target) throw new ApiError(404, "notFound");
   if (target === "guest") throw new ApiError(409, "guestCannotOwn");
-  await sql("UPDATE groups SET owner_id = $2 WHERE id = $1", [groupId, body.userId]);
-  await sql("UPDATE memberships SET role = 'owner' WHERE user_id = $1 AND group_id = $2", [
-    body.userId,
-    groupId,
-  ]);
-  await sql("UPDATE memberships SET role = 'admin' WHERE user_id = $1 AND group_id = $2", [user.id, groupId]);
+  // Satu transaksi: grup tidak pernah punya dua pemilik atau tanpa pemilik.
+  await transaction(async (q) => {
+    await q.query("UPDATE groups SET owner_id = $2 WHERE id = $1", [groupId, body.userId]);
+    await q.query("UPDATE memberships SET role = 'owner' WHERE user_id = $1 AND group_id = $2", [
+      body.userId,
+      groupId,
+    ]);
+    await q.query("UPDATE memberships SET role = 'admin' WHERE user_id = $1 AND group_id = $2", [
+      user.id,
+      groupId,
+    ]);
+  });
   await publishToRoom(groupId, { control: { kind: "membership", userId: body.userId, role: "owner" } });
   await publishToRoom(groupId, { control: { kind: "membership", userId: user.id, role: "admin" } });
   await notifyGroupChanged(groupId);
