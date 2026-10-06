@@ -16,6 +16,8 @@ export type FloorKind =
   | "bedroom"
   | "garden"
   | "gaming"
+  | "studio"
+  | "rooftop"
   | "wall"
   | "door";
 
@@ -44,7 +46,18 @@ export type ObjectKind =
   | "arcade"
   | "gamingDesk"
   | "cabinet"
-  | "printer";
+  | "printer"
+  | "palm"
+  | "parasol"
+  | "pergola"
+  | "camera"
+  | "softbox"
+  | "greenscreen"
+  | "bbq"
+  | "firepit"
+  | "foosball"
+  | "bath"
+  | "sink";
 
 export type ObjectAction =
   | "sit"
@@ -131,6 +144,8 @@ export const FLOOR_CHARS: Record<string, FloorKind> = {
   b: "bedroom",
   g: "garden",
   x: "gaming",
+  s: "studio",
+  r: "rooftop",
   d: "door",
 };
 

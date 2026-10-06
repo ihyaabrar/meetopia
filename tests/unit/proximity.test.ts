@@ -42,7 +42,14 @@ describe("ruang privat (FR-23)", () => {
   });
 
   it("orang di ruang privat yang sama mendengar dengan volume penuh", () => {
-    expect(pairVolume(map, p("a", 25.5, 2.5), p("b", 41.5, 9.5))).toBe(1);
+    const meeting = map.zones.find((z) => z.id === "meeting")!;
+    expect(
+      pairVolume(
+        map,
+        p("a", meeting.x + 0.5, meeting.y + 0.5),
+        p("b", meeting.x + meeting.w - 0.5, meeting.y + meeting.h - 0.5),
+      ),
+    ).toBe(1);
   });
 });
 

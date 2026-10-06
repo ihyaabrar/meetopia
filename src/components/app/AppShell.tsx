@@ -10,10 +10,12 @@ import { applyPrefsToDocument, getPrefs } from "@/client/prefs";
 import { desktopNotify, playSound } from "@/client/sounds";
 import { useI18n } from "@/i18n/client";
 import { ToastProvider, useToast } from "@/components/Toasts";
-import { LogoMark } from "@/components/Logo";
+import { Logo, LogoMark } from "@/components/Logo";
 import { Icon, type IconName } from "@/components/Icon";
 import { AvatarCanvas } from "@/components/AvatarCanvas";
-import { zoneAt, type MapObject, type ObjectAction } from "@/shared/map";
+import { buildWalkable, zoneAt, type MapObject, type ObjectAction } from "@/shared/map";
+import { nearestFree } from "@/shared/pathfinding";
+import { templateOf } from "@/shared/templates";
 import type { Point } from "@/shared/pathfinding";
 import type { Presence } from "@/shared/protocol";
 import { can } from "@/shared/roles";
@@ -118,6 +120,8 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
   const [peerCard, setPeerCard] = useState<{ member: MemberInfo; presence?: Presence } | null>(null);
   const [showNav, setShowNav] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [zoneSearch, setZoneSearch] = useState("");
   const [devLink, setDevLink] = useState<string | null>(null);
   const [bannerHidden, setBannerHidden] = useState(false);
   const walkToRef = useRef<((p: Point) => void) | null>(null);
@@ -348,6 +352,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
   }, [media, effects.volume]);
 
   const openDm = (userId: string) => {
+    setShowChat(true);
     setDmTabs((l) => (l.includes(userId) ? l : [...l, userId]));
     setChatTarget({ kind: "dm", userId });
   };
@@ -447,6 +452,47 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
           <Icon name="home" size={22} />
         </button>
         <span className="rail-sep" />
+        {!home && detail && (
+          <div className="rail-actions">
+            <button
+              className="rail-item nav"
+              aria-label={t("nav.toggleChat")}
+              title={t("nav.toggleChat")}
+              aria-pressed={showChat}
+              onClick={() => setShowChat((v) => !v)}
+            >
+              <Icon name="chat" size={22} />
+            </button>
+            {can(role, "manageGroup") && (
+              <button
+                className="rail-item nav"
+                aria-label={t("nav.maps")}
+                title={t("nav.maps")}
+                onClick={() => openGroupSettings("room")}
+              >
+                <Icon name="door" size={22} />
+              </button>
+            )}
+            <button
+              className="rail-item nav"
+              aria-label={t("notes.title")}
+              title={t("notes.title")}
+              aria-pressed={!!notes}
+              onClick={() => setNotes((v) => (v ? null : "shared"))}
+            >
+              <Icon name="notes" size={22} />
+            </button>
+            <button
+              className="rail-item nav"
+              aria-label={t("members.title")}
+              title={t("members.title")}
+              aria-pressed={showMembers}
+              onClick={() => setShowMembers((v) => !v)}
+            >
+              <Icon name="users" size={22} />
+            </button>
+          </div>
+        )}
         {groups.map((g) => (
           <button
             key={g.id}
@@ -499,6 +545,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
                   aria-current={chatTarget.kind === "channel" && chatTarget.id === c.id}
                   onClick={() => {
                     setChatTarget({ kind: "channel", id: c.id });
+                    setShowChat(true);
                     setShowNav(false);
                   }}
                 >
@@ -577,9 +624,13 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
 
       <main className="main">
         <header className="main-head">
+          <div className="app-brand">
+            <Logo size={29} />
+          </div>
           <button
-            className="icon-btn mobile-only"
-            onClick={() => setShowNav(true)}
+            className="icon-btn"
+            onClick={() => setShowNav((v) => !v)}
+            aria-expanded={showNav}
             aria-label={t("nav.open")}
           >
             <Icon name="menu" />
@@ -588,10 +639,64 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
             <h2>{activeGroup ? activeGroup.name : "Meetopia"}</h2>
             {activeGroup && (
               <span className="head-sub">
-                <Icon name="door" size={13} /> {t("nav.office")} · {t("nav.inRoom", { n: onlineCount })}
+                <Icon name="door" size={13} /> {snap.map ? t(`tpl.${templateOf(snap.map)}`) : t("nav.office")}{" "}
+                · {t("nav.inRoom", { n: onlineCount })}
               </span>
             )}
           </div>
+          {!home && snap.map && (
+            <div className="room-search">
+              <label>
+                <Icon name="search" size={18} />
+                <input
+                  value={zoneSearch}
+                  onChange={(e) => setZoneSearch(e.target.value)}
+                  placeholder={t("room.search")}
+                  aria-label={t("room.search")}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setZoneSearch("");
+                  }}
+                />
+              </label>
+              {zoneSearch.trim() && (
+                <div className="room-search-results">
+                  {snap.map.zones
+                    .filter((z) =>
+                      t(z.label).toLocaleLowerCase().includes(zoneSearch.trim().toLocaleLowerCase()),
+                    )
+                    .map((z) => (
+                      <button
+                        key={z.id}
+                        onClick={() => {
+                          const target = nearestFree(buildWalkable(snap.map!), {
+                            x: z.x + Math.floor(z.w / 2),
+                            y: z.y + Math.floor(z.h / 2),
+                          });
+                          if (target) walkToRef.current?.(target);
+                          setZoneSearch("");
+                        }}
+                      >
+                        <Icon name={z.private ? "lock" : "pin"} size={14} />
+                        {t(z.label)}
+                      </button>
+                    ))}
+                  {!snap.map.zones.some((z) =>
+                    t(z.label).toLocaleLowerCase().includes(zoneSearch.trim().toLocaleLowerCase()),
+                  ) && <p>{t("room.searchEmpty")}</p>}
+                </div>
+              )}
+            </div>
+          )}
+          {!home && (
+            <button
+              className="icon-btn"
+              onClick={() => setShowChat((v) => !v)}
+              aria-label={t("nav.toggleChat")}
+              aria-pressed={showChat}
+            >
+              <Icon name="chat" />
+            </button>
+          )}
           {detail && (
             <button
               className="icon-btn"
@@ -790,7 +895,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
                 </div>
               </div>
             )}
-            {detail && (
+            {detail && showChat && (
               <ChatPanel
                 key={detail.group.id}
                 room={room}

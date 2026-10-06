@@ -61,6 +61,14 @@ describe.each(TEMPLATE_IDS)("jenis ruangan %s", (id) => {
 });
 
 describe("kelebihan tiap jenis", () => {
+  it("menyediakan minimal lima dunia dengan denah unik", () => {
+    expect(TEMPLATE_IDS).toHaveLength(5);
+    const signatures = TEMPLATE_IDS.map((id) => {
+      const map = buildTemplate(id);
+      return `${map.width}x${map.height}:${map.tiles.join("")}:${map.zones.map((z) => z.id).join(",")}`;
+    });
+    expect(new Set(signatures).size).toBe(TEMPLATE_IDS.length);
+  });
   it("kantor punya ruang rapat yang bisa dikunci", () => {
     const z = buildTemplate("office").zones.find((z) => z.id === "meeting")!;
     expect(z.private && isLockable(z)).toBe(true);
@@ -76,5 +84,15 @@ describe("kelebihan tiap jenis", () => {
     expect(party.private).toBe(true);
     expect(isLockable(party)).toBe(false);
     expect(m.objects.filter((o) => o.kind === "arcade").length).toBeGreaterThan(0);
+  });
+  it("studio punya ruang rekaman privat dan galeri review", () => {
+    const m = buildTemplate("studio");
+    expect(m.zones.find((z) => z.id === "recording")?.private).toBe(true);
+    expect(m.zones.some((z) => z.id === "gallery")).toBe(true);
+  });
+  it("rooftop punya rumah kaca fokus dan kafe", () => {
+    const m = buildTemplate("rooftop");
+    expect(m.zones.find((z) => z.id === "greenhouse")?.private).toBe(true);
+    expect(m.objects.some((o) => o.kind === "counter")).toBe(true);
   });
 });

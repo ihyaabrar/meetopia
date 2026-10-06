@@ -463,6 +463,15 @@ export class RealtimeHub {
         if (statusChanged) await this.broadcastUpdate(conn);
         return;
 
+      case "avatarAction": {
+        const now = Date.now();
+        conn.emoteTimes = conn.emoteTimes.filter((t) => now - t < CHAT_WINDOW_MS);
+        if (conn.emoteTimes.length >= CHAT_MAX_PER_WINDOW) return;
+        conn.emoteTimes.push(now);
+        p.avatarAction = m.action;
+        return this.broadcastUpdate(conn);
+      }
+
       case "move": {
         this.tickLife(room, conn);
         if (!this.isWalkable(room, m.x, m.y))
@@ -481,6 +490,7 @@ export class RealtimeHub {
         p.y = m.y;
         p.dir = m.dir;
         p.moving = m.moving;
+        if (m.moving) p.avatarAction = "idle";
         const stoodUp = m.moving && p.sitting;
         if (m.moving) p.sitting = false;
         if (stoodUp) this.sendLife(room, conn);
@@ -505,6 +515,7 @@ export class RealtimeHub {
       case "sit":
         this.tickLife(room, conn);
         p.sitting = m.sitting;
+        p.avatarAction = "idle";
         this.sendLife(room, conn);
         return this.broadcastUpdate(conn);
 

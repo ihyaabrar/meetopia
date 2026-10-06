@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import "./globals.css";
+import "./reference-ui.css";
 import { I18nProvider } from "@/i18n/client";
 import { DEFAULT_LOCALE, LOCALE_COOKIE, THEME_COOKIE, isLocale, isTheme, translate } from "@/i18n";
 import { getSessionUser } from "@/server/auth";
@@ -11,7 +12,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: "Meetopia", description: translate(locale, "meta.description") };
 }
 
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#141312" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#09151c" };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const jar = await cookies();

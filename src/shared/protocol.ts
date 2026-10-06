@@ -7,8 +7,10 @@ import type { Role } from "./roles";
 import { musicSourceSchema, type MusicState } from "./music";
 import { tvMessageSchema, type TvState } from "./tv";
 import { ITEM_IDS, type ItemId, type LifeState } from "./life";
+import { AVATAR_DIRECTIONS, type AvatarDirection } from "./avatar";
+import { AVATAR_ACTIONS, type AvatarAction } from "./avatar-animation";
 
-export type Direction = "up" | "down" | "left" | "right";
+export type Direction = AvatarDirection;
 
 export interface MediaState {
   mic: boolean;
@@ -37,6 +39,8 @@ export interface Presence {
   allowedZone: string | null;
   allowedPeers: string[];
   lastActive: number;
+  /** Explicit public cosmetic pose. No private LifeState is exposed. */
+  avatarAction?: AvatarAction;
 }
 
 /** Status ruangan yang bisa dikunci: pemegang (orang pertama yang masuk) dan apakah terkunci PIN. */
@@ -76,12 +80,13 @@ export const clientMessageSchema = z.discriminatedUnion("t", [
     t: z.literal("move"),
     x: num,
     y: num,
-    dir: z.enum(["up", "down", "left", "right"]),
+    dir: z.enum(AVATAR_DIRECTIONS),
     moving: z.boolean(),
   }),
   z.object({ t: z.literal("sit"), sitting: z.boolean() }),
   z.object({ t: z.literal("status"), status: z.enum(STATUSES), manual: z.boolean() }),
   z.object({ t: z.literal("activity") }),
+  z.object({ t: z.literal("avatarAction"), action: z.enum(AVATAR_ACTIONS) }),
   z.object({
     t: z.literal("chat"),
     kind: z.enum(["channel", "nearby", "dm"]),

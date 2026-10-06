@@ -211,6 +211,7 @@ const VENUE_OF: Partial<Record<ObjectKind, Venue>> = {
   cooler: "cooler",
   fridge: "fridge",
   counter: "kitchen",
+  bbq: "kitchen",
 };
 
 export function venueOf(obj: Pick<MapObject, "kind">): Venue | null {

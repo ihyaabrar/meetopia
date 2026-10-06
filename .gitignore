@@ -7,3 +7,7 @@ node_modules
 next-env.d.ts
 playwright-report
 test-results
+
+# Catatan sesi alat analisa & konfigurasi lokal editor
+graphify-out/
+.claude/

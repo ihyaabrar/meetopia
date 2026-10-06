@@ -30,7 +30,10 @@ import { speakerVolume } from "@/shared/music";
 import { getPrefs, setPrefs, usePrefs } from "@/client/prefs";
 import type { MusicPlayer } from "@/client/music";
 import type { LifeEffects, LifeState } from "@/shared/life";
+import { avatarCondition } from "@/shared/avatar-state";
 import { LifeHud } from "./LifeHud";
+import { AvatarActions } from "./AvatarActions";
+import { directionFrom, type AvatarAction } from "@/shared/avatar-animation";
 
 const noSub = () => () => {};
 const NO_AUDIBLE: never[] = [];
@@ -70,8 +73,7 @@ interface Display {
 }
 
 function dirFrom(dx: number, dy: number, fallback: Direction): Direction {
-  if (Math.abs(dx) < 1e-3 && Math.abs(dy) < 1e-3) return fallback;
-  return Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
+  return directionFrom(dx, dy, fallback);
 }
 
 export function RoomStage({
@@ -94,6 +96,10 @@ export function RoomStage({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hintRef = useRef<HTMLDivElement>(null);
   const snapRef = useRef(snap);
+  const lifeRef = useRef(life);
+  useEffect(() => {
+    lifeRef.current = life;
+  }, [life]);
   useEffect(() => {
     snapRef.current = snap;
   }, [snap]);
@@ -139,6 +145,31 @@ export function RoomStage({
   }, [hint]);
   const arriveRef = useRef<() => void>(() => {});
   const [emoteOpen, setEmoteOpen] = useState(false);
+  const emoteRef = useRef<HTMLDivElement>(null);
+  const emoteButtonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!emoteOpen) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setEmoteOpen(false);
+        emoteButtonRef.current?.focus();
+      }
+    };
+    const outside = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !emoteRef.current?.contains(event.target) &&
+        !emoteButtonRef.current?.contains(event.target)
+      )
+        setEmoteOpen(false);
+    };
+    document.addEventListener("keydown", close);
+    document.addEventListener("pointerdown", outside);
+    return () => {
+      document.removeEventListener("keydown", close);
+      document.removeEventListener("pointerdown", outside);
+    };
+  }, [emoteOpen]);
   const [nearby, setNearby] = useState(0);
 
   const remote = useSyncExternalStore(media.subscribe, media.getSnapshot, () => [] as RemoteMedia[]);
@@ -226,7 +257,7 @@ export function RoomStage({
     let slowTick = 0;
 
     const frame = (nowMs: number) => {
-      const dt = Math.min(0.05, (nowMs - last) / 1000);
+      const dt = Math.max(0, Math.min(0.05, (nowMs - last) / 1000));
       last = nowMs;
       const time = nowMs / 1000;
       const st = state.current;
@@ -272,7 +303,7 @@ export function RoomStage({
           if (free(nx + (vx / len) * step, ny)) nx += (vx / len) * step;
           if (free(nx, ny + (vy / len) * step)) ny += (vy / len) * step;
           const dir = dirFrom(vx, vy, me.dir);
-          room.updateSelf({ x: nx, y: ny, dir, moving: true, sitting: false });
+          room.updateSelf({ x: nx, y: ny, dir, moving: true, sitting: false, avatarAction: "idle" });
           st.keyMoving = true;
           if (nowMs - st.lastSend > SEND_INTERVAL) {
             st.lastSend = nowMs;
@@ -306,7 +337,7 @@ export function RoomStage({
         }
         const moving = st.path.length > 0;
         const dir = dirFrom(dx, dy, me.dir);
-        room.updateSelf({ x: nx, y: ny, dir, moving, sitting: false });
+        room.updateSelf({ x: nx, y: ny, dir, moving, sitting: false, avatarAction: "idle" });
         if (nowMs - st.lastSend > SEND_INTERVAL || !moving) {
           st.lastSend = nowMs;
           room.send({ t: "move", x: nx, y: ny, dir, moving });
@@ -323,7 +354,10 @@ export function RoomStage({
         canvas.height = Math.round(h * dpr);
       }
       if (!st.zoom)
-        st.zoom = w < 600 ? Math.max(0.8, w / (13 * TILE)) : Math.max(0.8, Math.min(1.7, w / (22 * TILE)));
+        st.zoom =
+          w < 600
+            ? Math.max(0.8, w / (13 * TILE))
+            : Math.min(w / (map.width * TILE), (h - 72) / (map.height * TILE)) * 0.98;
       const z = st.zoom;
       const worldW = map.width * TILE;
       const worldH = map.height * TILE;
@@ -377,6 +411,7 @@ export function RoomStage({
           speaking: d.level,
           isSelf: p.id === s.selfId,
           seed: hashStr(p.id),
+          condition: p.id === s.selfId ? avatarCondition(lifeRef.current, getPrefs().lifeEffects) : undefined,
         };
         people.push(view);
         if (view.isSelf) selfView = view;
@@ -584,7 +619,7 @@ export function RoomStage({
   }, []);
 
   const zoomBy = (f: number) => {
-    state.current.zoom = Math.max(0.5, Math.min(2.6, (state.current.zoom || 1) * f));
+    state.current.zoom = Math.max(0.25, Math.min(2.6, (state.current.zoom || 1) * f));
   };
 
   const runAction = (action: ObjectAction, obj: MapObject) => {
@@ -633,6 +668,17 @@ export function RoomStage({
   const sendEmote = (emoji: (typeof EMOTES)[number]) => {
     room.send({ t: "emote", emoji });
     setEmoteOpen(false);
+  };
+  const selectAvatarAction = (action: AvatarAction) => {
+    const me = room.self;
+    if (!me) return;
+    const st = state.current;
+    st.path = [];
+    st.keys.clear();
+    st.keyMoving = false;
+    room.updateSelf({ moving: false, avatarAction: action });
+    room.send({ t: "move", x: me.x, y: me.y, dir: me.dir, moving: false });
+    room.send({ t: "avatarAction", action });
   };
 
   const presenter = remote.find((r) => r.screen && snap.peers.get(r.peerId)?.media.screen);
@@ -782,6 +828,20 @@ export function RoomStage({
           <button onClick={() => zoomBy(1 / 1.2)} aria-label={t("room.zoomOut")}>
             −
           </button>
+          <button
+            className="fit-map"
+            aria-label={t("room.fitMap")}
+            title={t("room.fitMap")}
+            onClick={() => {
+              const c = canvasRef.current;
+              if (c)
+                state.current.zoom =
+                  Math.min(c.clientWidth / (map.width * TILE), (c.clientHeight - 72) / (map.height * TILE)) *
+                  0.98;
+            }}
+          >
+            <Icon name="expand" size={17} />
+          </button>
         </div>
       </div>
 
@@ -897,12 +957,20 @@ export function RoomStage({
       )}
 
       {emoteOpen && (
-        <div className="emote-pop" role="menu" aria-label={t("emote.title")}>
-          {EMOTES.map((e) => (
-            <button key={e} role="menuitem" onClick={() => sendEmote(e)} aria-label={e}>
-              {e}
-            </button>
-          ))}
+        <div
+          ref={emoteRef}
+          className="emote-pop avatar-action-pop"
+          role="dialog"
+          aria-label={t("emote.title")}
+        >
+          <div className="avatar-quick-emotes" role="group" aria-label={t("emote.title")}>
+            {EMOTES.map((e) => (
+              <button key={e} onClick={() => sendEmote(e)} aria-label={e}>
+                {e}
+              </button>
+            ))}
+          </div>
+          <AvatarActions value={self?.avatarAction ?? "idle"} onSelect={selectAvatarAction} />
         </div>
       )}
 
@@ -940,6 +1008,7 @@ export function RoomStage({
         <div className="dock-group">
           <button
             className={`dock-btn ${emoteOpen ? "active" : ""}`}
+            ref={emoteButtonRef}
             onClick={() => setEmoteOpen((v) => !v)}
             aria-expanded={emoteOpen}
             aria-label={t("emote.title")}

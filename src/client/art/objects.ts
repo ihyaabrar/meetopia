@@ -4,6 +4,7 @@
  */
 import { TILE, type MapObject, type ObjectKind } from "@/shared/map";
 import { C, INK, boxShadow, fillStroke, groundShadow, hashStr, rr, shade } from "./common";
+import { drawDetail } from "./details";
 
 const T = TILE;
 export const SPRITE_PAD_TOP = 52;
@@ -28,6 +29,13 @@ const TALL: ObjectKind[] = [
   "gamingDesk",
   "cabinet",
   "printer",
+  "palm",
+  "parasol",
+  "camera",
+  "softbox",
+  "greenscreen",
+  "bbq",
+  "firepit",
 ];
 export const isTall = (k: ObjectKind) => TALL.includes(k);
 
@@ -96,6 +104,7 @@ function leaf(
 }
 
 export function drawObject(ctx: CanvasRenderingContext2D, o: MapObject) {
+  if (drawDetail(ctx, o)) return;
   const x = o.x * T;
   const y = o.y * T;
   const w = o.w * T;

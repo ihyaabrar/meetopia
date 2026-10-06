@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { PublicShell } from "@/components/PublicShell";
+import { AuthExperience } from "@/components/AuthExperience";
 import { useT } from "@/i18n/client";
 import { api, errorKey } from "@/client/api";
 
@@ -30,8 +31,9 @@ function LoginForm() {
   }
 
   return (
-    <div className="auth-wrap">
+    <AuthExperience>
       <form className="card auth-card" onSubmit={submit}>
+        <span className="auth-form-kicker">{t("auth.panelEyebrow")}</span>
         <h1>{t("auth.loginTitle")}</h1>
         <p className="sub">{t("auth.loginSub")}</p>
         {error && (
@@ -67,7 +69,7 @@ function LoginForm() {
           </Link>
         </p>
       </form>
-    </div>
+    </AuthExperience>
   );
 }
 

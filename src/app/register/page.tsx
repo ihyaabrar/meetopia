@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { PublicShell } from "@/components/PublicShell";
 import { AvatarBuilder } from "@/components/AvatarBuilder";
+import { AuthExperience } from "@/components/AuthExperience";
 import { useI18n } from "@/i18n/client";
 import { api, errorKey } from "@/client/api";
 import { DEFAULT_AVATAR, type AvatarConfig } from "@/shared/avatar";
@@ -47,7 +48,7 @@ function RegisterForm() {
   }
 
   return (
-    <div className="auth-wrap">
+    <AuthExperience expanded={step === 2}>
       <form className={`card auth-card ${step === 2 ? "wide" : ""}`} onSubmit={submit}>
         <span className="step">{t("auth.step", { n: step, total: 2 })}</span>
         <h1 style={{ marginTop: 10 }}>{step === 1 ? t("auth.registerTitle") : t("auth.avatarTitle")}</h1>
@@ -115,7 +116,7 @@ function RegisterForm() {
           </>
         )}
       </form>
-    </div>
+    </AuthExperience>
   );
 }
 

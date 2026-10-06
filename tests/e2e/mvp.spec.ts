@@ -49,6 +49,10 @@ async function enterRoom(page: Page) {
   await page.waitForFunction(
     () => (window as unknown as { __meetopia?: Debug }).__meetopia?.room.snapshot.conn === "open",
   );
+  // New spatial-first UI keeps these panels closed by default.
+  await page.getByRole("button", { name: "Buka menu", exact: true }).click();
+  await page.locator(".main-head").getByRole("button", { name: "Anggota", exact: true }).click();
+  await page.locator(".main-head").getByRole("button", { name: "Buka / tutup chat", exact: true }).click();
 }
 
 const dbg = <T>(page: Page, fn: (d: Debug) => T) =>
@@ -251,12 +255,12 @@ test("Ruang privat: pemegang mengunci dengan PIN, peran pindah saat keluar (FR-2
   await expect(b.locator(".hud-tl")).toContainText("dikunci PIN oleh Ayu", { timeout: 20_000 });
 
   // A keluar: peran pemegang (dan kuncinya) pindah ke B
-  await goTo(a, "Lobi");
+  await goTo(a, "Resepsionis");
   await expect(b.locator(".hud-tl")).toContainText("dikunci PIN oleh Bima", { timeout: 20_000 });
   await expect(b.locator(".hud-tl").getByRole("button", { name: "Buka kunci" })).toBeVisible();
 
   // B keluar juga: ruangan kosong, kunci direset
-  await goTo(b, "Lobi");
+  await goTo(b, "Resepsionis");
   await a.waitForFunction(
     () =>
       !(window as unknown as { __meetopia: { room: { snapshot: { locks: Record<string, unknown> } } } })
@@ -324,7 +328,7 @@ test("Speaker: musik makin pelan saat menjauh, hilang di luar jangkauan", async 
   await enterRoom(b);
 
   // A mendekati speaker di lounge dan memutar stasiun bawaan
-  await walk(a, 38.5, 23.5);
+  await walk(a, 44.5, 21.5);
   // Popup aksi tidak muncul sendiri: objek harus diketuk (atau tekan E di peta).
   await expect(a.locator(".hint-pop")).toHaveCount(0);
   await a.keyboard.press("e");
@@ -344,13 +348,13 @@ test("Speaker: musik makin pelan saat menjauh, hilang di luar jangkauan", async 
   expect(await musicVolume(b)).toBe(0);
 
   // Dekat speaker: terdengar keras
-  await walk(b, 36.5, 23.5);
+  await walk(b, 42.5, 21.5);
   await expect.poll(() => musicVolume(b)).toBeGreaterThan(0.75);
   await expect(b.locator(".hud-chip.music")).toContainText("Lo-fi santai");
   const near = await musicVolume(b);
 
   // Menjauh ke ujung lounge: lebih pelan tapi masih terdengar
-  await walk(b, 28.5, 24.5);
+  await walk(b, 36.5, 23.5);
   await expect.poll(() => musicVolume(b)).toBeLessThan(near);
   const far = await musicVolume(b);
   expect(far).toBeGreaterThan(0);
@@ -408,7 +412,7 @@ test("Jenis ruangan: buat Rumah, lalu ganti ke Gaming house", async ({ browser }
   await expect(a.locator(".hud-tl")).toContainText("Ruang keluarga");
 
   // TV ruang keluarga: nonton YouTube bareng di popup yang bisa diperbesar
-  await walk(a, 8.5, 2.5);
+  await walk(a, 34.5, 13.5);
   await a.keyboard.press("e");
   await a.locator(".hint-pop").getByRole("button", { name: "Nonton bareng" }).click();
   await a.getByLabel("Tautan YouTube").fill("https://youtu.be/dQw4w9WgXcQ");
@@ -419,8 +423,8 @@ test("Jenis ruangan: buat Rumah, lalu ganti ke Gaming house", async ({ browser }
   await a.keyboard.press("Escape");
 
   // Kamar bisa dikunci dari dalam
-  await goTo(a, "Kamar 1");
-  await expect(a.locator(".hud-tl")).toContainText("Kamar 1", { timeout: 20_000 });
+  await goTo(a, "Kamar Tidur");
+  await expect(a.locator(".hud-tl")).toContainText("Kamar Tidur", { timeout: 20_000 });
   await a.locator(".hud-tl").getByRole("button", { name: "Kunci" }).click();
   await a.getByLabel("PIN (4 sampai 6 angka)").fill("1234");
   await a.getByRole("button", { name: "Kunci ruangan" }).click();
@@ -433,7 +437,7 @@ test("Jenis ruangan: buat Rumah, lalu ganti ke Gaming house", async ({ browser }
   await a.getByRole("button", { name: "Ganti jenis ruangan" }).click();
   await a.keyboard.press("Escape");
   await expect.poll(template, { timeout: 15_000 }).toBe("gaming");
-  await expect(a.locator(".hud-tl")).toContainText("Lobi");
+  await expect(a.locator(".hud-tl")).toContainText("Lounge Komunitas");
   await expect(a.getByText("dikunci PIN oleh Rani")).toHaveCount(0);
 });
 
@@ -512,7 +516,7 @@ test("Dunia hidup: beli dari mesin penjual dan kopi, saldo tidak bisa negatif (F
       },
       [x, y],
     );
-  await standAt(40.5, 14.5);
+  await standAt(39, 4.5);
   await a.locator("canvas.map").focus();
   await a.keyboard.press("Enter");
   await expect(a.locator(".hint-pop")).toContainText("Mesin penjual otomatis");
@@ -532,7 +536,11 @@ test("Dunia hidup: beli dari mesin penjual dan kopi, saldo tidak bisa negatif (F
   await a.evaluate(() =>
     (window as unknown as { __meetopia: { room: { send: (m: object) => void } } }).__meetopia.room.send({
       t: "consume",
-      objectId: "vending-75",
+      objectId: (
+        window as unknown as {
+          __meetopia: { room: { snapshot: { map: { objects: Array<{ id: string; kind: string }> } } } };
+        }
+      ).__meetopia.room.snapshot.map.objects.find((o) => o.kind === "vending")!.id,
       item: "energyDrink",
     }),
   );
@@ -541,7 +549,7 @@ test("Dunia hidup: beli dari mesin penjual dan kopi, saldo tidak bisa negatif (F
   await a.keyboard.press("Escape");
 
   // Mesin kopi: dibayar lalu menunggu sebentar sampai siap.
-  await standAt(37.5, 14.5);
+  await standAt(45, 2.5);
   await a.locator("canvas.map").focus();
   await a.keyboard.press("Enter");
   await a.locator(".hint-pop").getByRole("button", { name: "Seduh kopi" }).click();

@@ -30,9 +30,9 @@ describe("speaker musik", () => {
 
   it("teredam dari area lain dan terisolasi dari ruang privat", () => {
     // Speaker dekat pintu lounge-lobi: jarak sama, tetapi di lobi suaranya teredam dinding.
-    const nearDoor = { ...speaker, x: 25, y: 21 };
-    const inLounge = speakerVolume(map, nearDoor, 29.5, 21.5);
-    const inLobby = speakerVolume(map, nearDoor, 21.5, 21.5);
+    const nearDoor = { ...speaker, x: 26, y: 21 };
+    const inLounge = speakerVolume(map, nearDoor, 30.5, 21.5);
+    const inLobby = speakerVolume(map, nearDoor, 22.5, 21.5);
     expect(inLounge.volume).toBeGreaterThan(0);
     expect(inLobby.volume).toBeCloseTo(inLounge.volume * WALL_DAMPING, 5);
     expect(Math.sign(inLobby.pan)).toBe(1);

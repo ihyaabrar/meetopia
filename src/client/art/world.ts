@@ -6,6 +6,9 @@
 import { TILE, tileAt, type FloorKind, type MapData, type MapObject } from "@/shared/map";
 import { C, hash } from "./common";
 import { drawObject, isTall, SPRITE_PAD_TOP, SPRITE_PAD_X } from "./objects";
+import { illustrationFor, loadIllustration } from "./illustrated";
+import { ICON_PATHS } from "@/shared/icons";
+import { zoneIcon } from "@/shared/zone-icons";
 
 export interface Sprite {
   canvas: HTMLCanvasElement;
@@ -25,8 +28,12 @@ export interface Light {
 
 export interface WorldLayers {
   floor: HTMLCanvasElement;
+  labels: HTMLCanvasElement;
   sprites: Sprite[];
   lights: Light[];
+  illustrated: boolean;
+  /** Resolves when final local environment art has replaced the native fallback. */
+  ready: Promise<void>;
 }
 
 const T = TILE;
@@ -98,7 +105,7 @@ function drawFloorTile(ctx: CanvasRenderingContext2D, kind: FloorKind, tx: numbe
       // ubin catur kecil
       for (let i = 0; i < 2; i++)
         for (let j = 0; j < 2; j++) {
-          ctx.fillStyle = (tx * 2 + i + ty * 2 + j) % 2 === 0 ? "#f1ede4" : "#c9d3d6";
+          ctx.fillStyle = (tx * 2 + i + ty * 2 + j) % 2 === 0 ? "#f3ede1" : "#e6dece";
           ctx.fillRect(x + i * 16, y + j * 16, 16, 16);
         }
       ctx.fillStyle = "rgba(255,255,255,0.25)";
@@ -152,6 +159,26 @@ function drawFloorTile(ctx: CanvasRenderingContext2D, kind: FloorKind, tx: numbe
       }
       break;
     }
+    case "studio": {
+      // Epoxy terang dengan tanda potong halus: terasa seperti creative lab, bukan kantor kayu.
+      ctx.fillStyle = "#d9d7d1";
+      ctx.fillRect(x, y, T, T);
+      ctx.fillStyle = "rgba(65,72,78,0.08)";
+      ctx.fillRect(x, y + T - 1, T, 1);
+      if ((tx + ty) % 4 === 0) {
+        ctx.fillStyle = "rgba(24,134,74,0.18)";
+        ctx.fillRect(x + 4, y + T - 5, 10, 2);
+      }
+      for (let i = 0; i < 4; i++) {
+        ctx.fillStyle = hash(tx, ty, i) > 0.5 ? "rgba(255,255,255,0.16)" : "rgba(30,35,40,0.04)";
+        ctx.fillRect(x + hash(i, tx, ty) * T, y + hash(ty, i, tx) * T, 2, 2);
+      }
+      break;
+    }
+    case "rooftop": {
+      drawPlanks(ctx, x, y, [28, 42, 62], "rgba(92,58,39,.25)", tx, ty);
+      break;
+    }
     case "meeting": {
       ctx.fillStyle = "#c8ccd0";
       ctx.fillRect(x, y, T, T);
@@ -183,6 +210,16 @@ function drawWalls(ctx: CanvasRenderingContext2D, map: MapData) {
       if (tileAt(map, tx, ty) !== "wall") continue;
       const x = tx * T;
       const y = ty * T;
+      if (map.template === "rooftop" && (tx >= 48 || ty >= 26)) continue;
+      if (map.template === "rooftop" && (tx === 0 || ty === 0 || tx === 47 || ty === 25)) {
+        ctx.fillStyle = "#293b36";
+        ctx.fillRect(x, y, T, T);
+        ctx.fillStyle = "#b29a6d";
+        ctx.fillRect(x + 2, y + 2, T - 4, 4);
+        ctx.fillStyle = "rgba(226,220,183,.28)";
+        ctx.fillRect(x + 5, y + 9, 3, T - 12);
+        continue;
+      }
       const faceBelow = ty + 1 < map.height && isFloor(tileAt(map, tx, ty + 1));
       // Tutup dinding
       ctx.fillStyle = C.wallCap;
@@ -207,7 +244,7 @@ function drawWalls(ctx: CanvasRenderingContext2D, map: MapData) {
     }
   }
   // Jendela di dinding luar bagian atas
-  for (let tx = 2; tx < map.width - 2; tx += 4) {
+  for (let tx = 2; map.template !== "rooftop" && tx < map.width - 2; tx += 4) {
     if (tileAt(map, tx, 0) !== "wall" || !isFloor(tileAt(map, tx, 1)) || !isFloor(tileAt(map, tx + 1, 1)))
       continue;
     const x = tx * T + 6;
@@ -290,6 +327,7 @@ function drawWallShadows(ctx: CanvasRenderingContext2D, map: MapData) {
   }
 }
 
+const zonePaths = new Map<string, Path2D>();
 function drawZoneDecor(ctx: CanvasRenderingContext2D, map: MapData, zoneLabel: (k: string) => string) {
   // Garis tepi karpet ruang rapat dan label area sebagai "stiker lantai"
   for (const z of map.zones) {
@@ -300,20 +338,35 @@ function drawZoneDecor(ctx: CanvasRenderingContext2D, map: MapData, zoneLabel: (
       ctx.strokeRect(z.x * T + 6, z.y * T + 6, z.w * T - 12, z.h * T - 12);
       ctx.restore();
     }
-    const label = zoneLabel(z.label).toUpperCase();
+    const label = zoneLabel(z.label);
     ctx.save();
-    ctx.font = "700 12px Outfit, system-ui, sans-serif";
+    ctx.font = "600 14px Outfit, system-ui, sans-serif";
     ctx.textBaseline = "middle";
     const tw = ctx.measureText(label).width;
-    const px = z.x * T + 12;
-    const py = (z.y + z.h) * T - 18;
-    const dark = floorKindAt(map, z.x, z.y + z.h - 1) === "gaming";
-    ctx.fillStyle = dark ? "rgba(255,255,255,0.08)" : "rgba(42,38,34,0.08)";
+    const px = (z.x + z.w / 2) * T - (tw + 34) / 2;
+    const py = (z.y + z.h) * T - 27;
+    ctx.fillStyle = "rgba(13,26,32,.90)";
     ctx.beginPath();
-    ctx.roundRect(px - 6, py - 10, tw + 16, 20, 10);
+    ctx.roundRect(px - 10, py - 16, tw + 54, 32, 9);
     ctx.fill();
-    ctx.fillStyle = dark ? "rgba(237,232,225,0.7)" : "rgba(42,38,34,0.6)";
-    ctx.fillText(label, px + 2, py + 1);
+    ctx.strokeStyle = "rgba(255,255,255,.13)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = "#f2f7f5";
+    // Same vector icon system as the frontend, with a meaningful symbol for each area.
+    ctx.strokeStyle = z.private ? "#63e9bd" : "#d2e4e0";
+    ctx.lineWidth = 1.6;
+    const icon = zoneIcon(z.label);
+    if (!zonePaths.has(icon)) zonePaths.set(icon, new Path2D(ICON_PATHS[icon]));
+    ctx.save();
+    ctx.translate(px + 1, py - 7);
+    ctx.scale(14 / 24, 14 / 24);
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.stroke(zonePaths.get(icon)!);
+    ctx.restore();
+    ctx.fillText(label, px + 23, py + 1);
     ctx.restore();
   }
 }
@@ -334,11 +387,16 @@ export function makeSprite(o: MapObject): Sprite {
   };
 }
 
-export function renderWorld(map: MapData, zoneLabel: (key: string) => string): WorldLayers {
+export function renderWorld(
+  map: MapData,
+  zoneLabel: (key: string) => string,
+  options: { illustration?: boolean } = {},
+): WorldLayers {
   const c = document.createElement("canvas");
   c.width = map.width * T;
   c.height = map.height * T;
   const ctx = c.getContext("2d")!;
+  if (map.template === "rooftop") drawRooftopSky(ctx, c.width, c.height);
   for (let ty = 0; ty < map.height; ty++)
     for (let tx = 0; tx < map.width; tx++) {
       const k = tileAt(map, tx, ty);
@@ -350,7 +408,6 @@ export function renderWorld(map: MapData, zoneLabel: (key: string) => string): W
       }
     }
   drawWindowLight(ctx, map);
-  drawZoneDecor(ctx, map, zoneLabel);
   drawWallShadows(ctx, map);
   drawWalls(ctx, map);
 
@@ -371,13 +428,86 @@ export function renderWorld(map: MapData, zoneLabel: (key: string) => string): W
     if (o.kind === "vending")
       lights.push({ x: (o.x + o.w / 2) * T, y: o.y * T, r: 60, color: "255,170,150" });
   }
-  return { floor: c, sprites, lights };
+  const labels = document.createElement("canvas");
+  labels.width = c.width;
+  labels.height = c.height;
+  drawZoneDecor(labels.getContext("2d")!, map, zoneLabel);
+  const layers: WorldLayers = {
+    floor: c,
+    labels,
+    sprites,
+    lights,
+    illustrated: false,
+    ready: Promise.resolve(),
+  };
+  const asset = options.illustration === false ? null : illustrationFor(map);
+  if (asset) {
+    layers.ready = loadIllustration(asset).then((image) => {
+      if (!image) return;
+      ctx.clearRect(0, 0, c.width, c.height);
+      ctx.drawImage(image, 0, 0, c.width, c.height);
+      // Furniture and warm lighting already exist in the illustration; no double rendering.
+      layers.sprites = [];
+      layers.lights = [];
+      layers.illustrated = true;
+    });
+  }
+  return layers;
+}
+
+/** Sunset and distant buildings sit outside the deck, never inside the collision grid. */
+function drawRooftopSky(ctx: CanvasRenderingContext2D, width: number, height: number) {
+  const g = ctx.createLinearGradient(0, 0, 0, height);
+  g.addColorStop(0, "#aa86a9");
+  g.addColorStop(0.24, "#edaf8b");
+  g.addColorStop(0.62, "#ba8d8e");
+  g.addColorStop(1, "#4d596d");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, width, height);
+  const sunX = width - 91,
+    sunY = 70;
+  const glow = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, 120);
+  glow.addColorStop(0, "rgba(255,222,165,.7)");
+  glow.addColorStop(1, "rgba(255,222,165,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(sunX - 120, sunY - 120, 240, 240);
+  ctx.fillStyle = "#ffe0a3";
+  ctx.beginPath();
+  ctx.arc(sunX, sunY, 24, 0, Math.PI * 2);
+  ctx.fill();
+  for (let layer = 0; layer < 3; layer++) {
+    for (let i = 0; i < 9; i++) {
+      const x = 47 * T + i * 28 + layer * 9;
+      const top = 170 + layer * 95 + hash(i, layer) * 210;
+      const w = 25 + hash(layer, i) * 26;
+      ctx.fillStyle = ["#b491a1", "#887b91", "#5f657d"][layer];
+      ctx.fillRect(x, top, w, height - top);
+      ctx.fillRect(x + 7, top - 7, w - 14, 8);
+      ctx.fillStyle = "rgba(255,217,161,.55)";
+      for (let yy = top + 14; yy < height; yy += 18)
+        for (let xx = x + 5; xx < x + w - 4; xx += 9) if (hash(xx, yy) > 0.4) ctx.fillRect(xx, yy, 3, 6);
+    }
+  }
 }
 
 /** Kompatibilitas: hanya lapisan lantai + semua objek (untuk pratinjau statis). */
 export function renderStaticMap(map: MapData, zoneLabel: (key: string) => string): HTMLCanvasElement {
-  const w = renderWorld(map, zoneLabel);
+  const w = renderWorld(map, zoneLabel, { illustration: false });
   const ctx = w.floor.getContext("2d")!;
   for (const s of w.sprites) ctx.drawImage(s.canvas, s.x, s.y);
+  ctx.drawImage(w.labels, 0, 0);
   return w.floor;
+}
+
+/** Auth, gallery and the live room consume identical illustration assets. */
+export async function renderIllustratedPreview(
+  map: MapData,
+  zoneLabel: (key: string) => string,
+): Promise<{ canvas: HTMLCanvasElement; illustrated: boolean }> {
+  const layers = renderWorld(map, zoneLabel);
+  await layers.ready;
+  const ctx = layers.floor.getContext("2d")!;
+  for (const sprite of layers.sprites) ctx.drawImage(sprite.canvas, sprite.x, sprite.y);
+  ctx.drawImage(layers.labels, 0, 0);
+  return { canvas: layers.floor, illustrated: layers.illustrated };
 }

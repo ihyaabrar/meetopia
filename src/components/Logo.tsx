@@ -1,5 +1,5 @@
 /**
- * Logo Meetopia, konsep 7 "Minimalist": dua daun pintu (satu terbuka, hijau; satu tertutup, hijau tua)
+ * Logo Meetopia, konsep 7: dua daun pintu, mint dan kontras netral yang mengikuti tema.
  * melambangkan pintu ke ruang kerja virtual. Tagline: Work • Talk • Together.
  */
 export function LogoMark({ size = 32, title }: { size?: number; title?: string }) {
@@ -14,10 +14,10 @@ export function LogoMark({ size = 32, title }: { size?: number; title?: string }
     >
       <path
         d="M5 13.5c0-2.6 1.7-4.2 4-4.9L23.4 4.3C26 3.5 28 5 28 7.7v48.6c0 2.7-2 4.2-4.6 3.4L9 55.4c-2.3-.7-4-2.3-4-4.9z"
-        fill="var(--logo-green, #3f9a55)"
+        fill="var(--logo-green, #00cf92)"
       />
-      <rect x="32" y="6" width="27" height="52" rx="5.5" fill="var(--logo-ink, #1b3a2a)" />
-      <circle cx="38.5" cy="33" r="2.8" fill="var(--logo-knob, #f7f5ec)" />
+      <rect x="32" y="6" width="27" height="52" rx="5.5" fill="var(--logo-ink, #f2f7f5)" />
+      <circle cx="38.5" cy="33" r="2.8" fill="var(--logo-knob, #09151c)" />
     </svg>
   );
 }

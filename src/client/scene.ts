@@ -5,7 +5,8 @@
  */
 import { TILE, isLockable, tileAt, type MapData, type MapObject, type Zone } from "@/shared/map";
 import type { Presence } from "@/shared/protocol";
-import { drawAvatar } from "./art/avatar";
+import type { AvatarCondition } from "@/shared/avatar";
+import { drawAvatar, avatarNameOffset } from "./art/avatar";
 import { renderWorld, type WorldLayers } from "./art/world";
 import { INK } from "./art/common";
 
@@ -18,6 +19,8 @@ export interface PersonView {
   speaking: number;
   isSelf: boolean;
   seed: number;
+  /** Owner-only cosmetic needs; never written to Presence or sent to peers. */
+  condition?: AvatarCondition;
 }
 
 export interface SceneFrame {
@@ -46,7 +49,7 @@ export interface SceneFrame {
 }
 
 const T = TILE;
-const STATUS_COLOR = { active: "#4fae63", busy: "#d9584c", meeting: "#8f6fd1", away: "#d99a2b" } as const;
+const STATUS_COLOR = { active: "#00d69b", busy: "#d9584c", meeting: "#8f6fd1", away: "#d99a2b" } as const;
 const FOOT = 8; // offset kaki avatar dari pusat tile (px)
 
 interface Timed {
@@ -146,13 +149,15 @@ export class Scene {
   }
 
   draw(ctx: CanvasRenderingContext2D, f: SceneFrame) {
+    if (f.w <= 0 || f.h <= 0) return;
     const { dpr, cam, time } = f;
     const scale = cam.zoom * dpr;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = "#191715";
+    ctx.fillStyle = "#09151c";
     ctx.fillRect(0, 0, f.w * dpr, f.h * dpr);
     ctx.setTransform(scale, 0, 0, scale, -cam.x * scale, -cam.y * scale);
     ctx.imageSmoothingQuality = "high";
+    ctx.canvas.dataset.renderer = this.layers.illustrated ? "illustrated" : "native";
     ctx.drawImage(this.layers.floor, 0, 0);
 
     // Sorot tile di bawah kursor
@@ -219,7 +224,8 @@ export class Scene {
     }
     this.ripples = this.ripples.filter((r) => time - r.t0 < 0.6);
     for (const r of this.ripples) {
-      const k = (time - r.t0) / 0.6;
+      // A click can arrive after the timestamp of this queued animation frame.
+      const k = Math.max(0, time - r.t0) / 0.6;
       ctx.strokeStyle = `rgba(255,255,255,${0.9 * (1 - k)})`;
       ctx.lineWidth = 3 * (1 - k) + 1;
       ctx.beginPath();
@@ -230,7 +236,7 @@ export class Scene {
     // Debu langkah
     this.puffs = this.puffs.filter((p) => time - p.t0 < 0.5);
     for (const p of this.puffs) {
-      const k = (time - p.t0) / 0.5;
+      const k = Math.max(0, time - p.t0) / 0.5;
       ctx.fillStyle = `rgba(255,255,255,${0.55 * (1 - k)})`;
       ctx.beginPath();
       ctx.arc(p.x * T, p.y * T + FOOT - 2 - k * 4, 2 + k * 4, 0, Math.PI * 2);
@@ -243,7 +249,8 @@ export class Scene {
       y: s.sortY,
       draw: () => ctx.drawImage(s.canvas, s.x, s.y),
     }));
-    for (const v of f.people) items.push({ y: v.y * T + FOOT, draw: () => this.drawPerson(ctx, v, time) });
+    for (const v of f.people)
+      items.push({ y: v.y * T + FOOT, draw: () => this.drawPerson(ctx, v, f.reducedMotion ? 0 : time) });
     items.sort((a, b) => a.y - b.y);
     for (const it of items) it.draw();
 
@@ -295,6 +302,7 @@ export class Scene {
     }
 
     // Label nama, emote, balon chat (selalu di atas). Label yang bertabrakan digeser ke atas.
+    ctx.drawImage(this.layers.labels, 0, 0);
     ctx.font = "600 11px Outfit, system-ui, sans-serif";
     const placed: Array<{ x0: number; x1: number; y: number }> = [];
     const ordered = [...f.people].sort((a, b) => b.y - a.y);
@@ -302,7 +310,7 @@ export class Scene {
       const half = (ctx.measureText(v.p.name).width + 42 + (v.p.media.screen ? 14 : 0)) / 2;
       const x0 = v.x * T - half;
       const x1 = v.x * T + half;
-      let ly = v.y * T + FOOT - (v.p.sitting ? 4 : 0) - 58;
+      let ly = v.y * T + FOOT - avatarNameOffset(v.p.avatar, v.p.dir, v.p.sitting);
       for (let guard = 0; guard < 8; guard++) {
         const hit = placed.find((r) => x0 < r.x1 && x1 > r.x0 && Math.abs(ly - r.y) < 22);
         if (!hit) break;
@@ -475,19 +483,44 @@ export class Scene {
       ctx.ellipse(px, py, 14, 5.5, 0, 0, Math.PI * 2);
       ctx.stroke();
     } else if (v.isSelf) {
-      ctx.strokeStyle = "rgba(255,255,255,0.75)";
+      ctx.strokeStyle = "rgba(38,235,174,0.85)";
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.ellipse(px, py, 14, 5.5, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
     ctx.globalAlpha = p.status === "away" ? 0.55 : 1;
-    drawAvatar(ctx, p.avatar, px, py, 1.08, {
+    drawAvatar(ctx, p.avatar, px, py, 1.24, {
       dir: p.dir,
       walk: v.phase,
       sitting: p.sitting,
       time,
       seed: v.seed,
+      condition: v.condition,
+      staticPose: time === 0,
+      activity: v.phase
+        ? "walk"
+        : p.avatarAction && p.avatarAction !== "idle"
+          ? p.avatarAction
+          : this.emotes.get(p.id)?.emoji === "👋"
+            ? "wave"
+            : this.emotes.get(p.id)?.emoji === "☕"
+              ? "coffee"
+              : this.emotes.get(p.id)?.emoji === "👍"
+                ? "thumbs-up"
+                : this.emotes.get(p.id)?.emoji === "👏"
+                  ? "clap"
+                  : this.emotes.get(p.id)?.emoji === "😂"
+                    ? "laugh"
+                    : this.emotes.get(p.id)?.emoji === "🤔"
+                      ? "think"
+                      : this.emotes.get(p.id)?.emoji === "🎉"
+                        ? "dance"
+                        : v.speaking > 0.08 && p.media.mic
+                          ? "talk"
+                          : p.sitting
+                            ? "sit"
+                            : "idle",
     });
     ctx.globalAlpha = 1;
     if (p.status === "away") {
