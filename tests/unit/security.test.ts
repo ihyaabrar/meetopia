@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { authSecret } from "@/server/env";
+import { authSecret, pgConnectionString } from "@/server/env";
 import { ApiError, clientIp, rateCount, rateHit, rateLimit } from "@/server/api";
 
 describe("rahasia sesi", () => {
@@ -38,5 +38,17 @@ describe("pembatas laju", () => {
     expect(clientIp(req({ "x-forwarded-for": "203.0.113.5, 10.0.0.1" }))).toBe("203.0.113.5");
     expect(clientIp(req({ "x-real-ip": "198.51.100.7" }))).toBe("198.51.100.7");
     expect(clientIp(req({}))).toBe("local");
+  });
+});
+
+describe("koneksi PostgreSQL", () => {
+  it("sslmode=require ditulis eksplisit sebagai verify-full", () => {
+    const neon = "postgresql://u:p@ep-x.neon.tech/db?sslmode=require&channel_binding=require";
+    expect(pgConnectionString(neon)).toBe("postgresql://u:p@ep-x.neon.tech/db?sslmode=verify-full&channel_binding=require");
+    expect(pgConnectionString("postgres://h/db?a=1&sslmode=prefer")).toBe("postgres://h/db?a=1&sslmode=verify-full");
+  });
+  it("URL lain tidak diubah", () => {
+    for (const url of ["postgres://h/db", "postgres://h/db?sslmode=disable", "postgres://h/db?uselibpqcompat=true&sslmode=require"])
+      expect(pgConnectionString(url)).toBe(url);
   });
 });

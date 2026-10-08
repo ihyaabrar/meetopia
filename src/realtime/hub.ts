@@ -221,16 +221,20 @@ export class RealtimeHub {
     const kv = await this.kv();
 
     // Pulihkan posisi terakhir (sambung ulang otomatis, aturan 2).
+    // Muat ulang halaman yang cepat: koneksi lama masih dalam masa tenggang dan posisi terakhirnya
+    // belum ditulis ke lastPosition, jadi ambil dari presence yang masih tercatat (instance mana pun).
     let pos = room.map.spawn ? { x: room.map.spawn.x + 0.5, y: room.map.spawn.y + 0.5 } : { x: 1.5, y: 1.5 };
-    const saved = await kv.get(keys.lastPosition(auth.groupId, auth.userId));
-    if (saved) {
-      const p = JSON.parse(saved) as { x: number; y: number };
-      if (this.isWalkable(room, p.x, p.y)) pos = p;
-    }
-    // Jangan muncul di dalam ruang privat yang sedang dipakai orang lain.
-    const all = (await this.readPresence(room)).filter((p) => p.id !== auth.userId);
+    const present = await this.readPresence(room);
+    const all = present.filter((p) => p.id !== auth.userId);
+    const live = present.find((p) => p.id === auth.userId);
+    const savedRaw = live ? null : await kv.get(keys.lastPosition(auth.groupId, auth.userId));
+    const saved = live ? { x: live.x, y: live.y } : savedRaw ? (JSON.parse(savedRaw) as { x: number; y: number }) : null;
+    const restored = !!saved && this.isWalkable(room, saved.x, saved.y);
+    if (restored) pos = saved;
+    // Jangan muncul di dalam ruang privat yang sedang dipakai orang lain
+    // (kecuali sambung ulang cepat: orangnya memang masih tercatat di dalam).
     const z = privateZoneAt(room.map, pos.x, pos.y);
-    if (!saved || (z && (await this.lockOf(room, z.id)))) {
+    if (!restored || (z && !live && (await this.lockOf(room, z.id)))) {
       pos = this.freeSpawn(room, all);
     }
 
@@ -378,7 +382,9 @@ export class RealtimeHub {
           const x = sx + dx + 0.5;
           const y = sy + dy + 0.5;
           if (!this.isWalkable(room, x, y) || privateZoneAt(room.map, x, y)) continue;
-          if (others.some((o) => Math.hypot(o.x - x, o.y - y) < 1.5)) continue;
+          // Avatar lebih tinggi daripada lebarnya dan bernama di atas kepala: rekan tepat di atas/bawah
+          // (selisih < 3 tile) tetap menutupi, sedangkan di samping cukup berjarak 1,5 tile.
+          if (others.some((o) => Math.abs(o.x - x) < 1.5 && Math.abs(o.y - y) < 3)) continue;
           candidates.push({ x, y });
         }
     return candidates.length

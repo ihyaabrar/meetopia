@@ -131,10 +131,27 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
   useEffect(() => {
     showChatRef.current = showChat;
   }, [showChat]);
+  /** Di layar sempit rail & sidebar adalah laci di atas peta: tutup saat panel lain dibuka agar panel tidak tertutup laci. */
+  const closeDrawer = () => {
+    if (window.matchMedia("(max-width: 760px)").matches) setShowNav(false);
+  };
   const toggleChat = () => {
     setShowChat((v) => !v);
     setChatUnread(false);
+    closeDrawer();
   };
+  // Escape menutup laci seluler (bila tidak ada dialog di atasnya; dialog menangani Escape sendiri).
+  useEffect(() => {
+    if (!showNav && !showMembers) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || document.querySelector('[aria-modal="true"]')) return;
+      if (!window.matchMedia("(max-width: 760px)").matches) return;
+      setShowNav(false);
+      setShowMembers(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showNav, showMembers]);
   const [zoneSearch, setZoneSearch] = useState("");
   const [devLink, setDevLink] = useState<string | null>(null);
   const [bannerHidden, setBannerHidden] = useState(false);
@@ -178,7 +195,17 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
   // Pindah grup tanpa memuat ulang halaman (FR-70, FR-71). Audio ruangan sebelumnya diputus.
   useEffect(() => {
     if (!activeId) {
+      // Tidak ada grup lagi (dikeluarkan/grup dihapus): lepaskan koneksi ruangan yang sudah ditutup
+      // agar header tidak menampilkan pencarian area & chat milik ruangan lama.
       setDetail(null);
+      setRoom(null);
+      setMedia(null);
+      setMusic(null);
+      const url = new URL(location.href);
+      if (url.searchParams.has("g")) {
+        url.searchParams.delete("g");
+        history.replaceState(null, "", url);
+      }
       return;
     }
     const url = new URL(location.href);
@@ -505,7 +532,10 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
                 className="rail-item nav"
                 aria-label={t("nav.maps")}
                 title={t("nav.maps")}
-                onClick={() => openGroupSettings("room")}
+                onClick={() => {
+                  closeDrawer();
+                  openGroupSettings("room");
+                }}
               >
                 <Icon name="door" size={22} />
               </button>
@@ -515,7 +545,10 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
               aria-label={t("notes.title")}
               title={t("notes.title")}
               aria-pressed={!!notes}
-              onClick={() => setNotes((v) => (v ? null : "shared"))}
+              onClick={() => {
+                closeDrawer();
+                setNotes((v) => (v ? null : "shared"));
+              }}
             >
               <Icon name="notes" size={22} />
             </button>
@@ -524,7 +557,10 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
               aria-label={t("members.title")}
               title={t("members.title")}
               aria-pressed={showMembers}
-              onClick={() => setShowMembers((v) => !v)}
+              onClick={() => {
+                closeDrawer();
+                setShowMembers((v) => !v);
+              }}
             >
               <Icon name="users" size={22} />
             </button>
@@ -532,8 +568,8 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
               <button
                 className="rail-item nav"
                 key={v}
-                aria-label={v === "agenda" ? "Agenda" : v === "task" ? "Tugas" : "File"}
-                title={v === "agenda" ? "Agenda" : v === "task" ? "Tugas" : "File"}
+                aria-label={t(`board.${v}`)}
+                title={t(`board.${v}`)}
                 onClick={() => {
                   setBoard(v);
                   setShowNav(false);
@@ -688,7 +724,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
             <Icon name="menu" />
           </button>
           <div className="head-title">
-            <h2>{home ? t("nav.home") : activeGroup ? activeGroup.name : "Meetopia"}</h2>
+            <h2>{home || !activeId ? t("nav.home") : activeGroup ? activeGroup.name : "Meetopia"}</h2>
             {activeGroup && !home && (
               <span className="head-sub">
                 <Icon name="door" size={13} /> {snap.map ? t(`tpl.${templateOf(snap.map)}`) : t("nav.office")}{" "}
@@ -739,7 +775,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
               )}
             </div>
           )}
-          {!home && (
+          {!home && activeId && (
             <button
               className="icon-btn"
               onClick={toggleChat}
@@ -1204,7 +1240,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
               </div>
               {busy && <p className="hint">{t("peer.busyHint")}</p>}
               {presence && room && (
-                <div className="pc-actions" aria-label="Gestur bersama">
+                <div className="pc-actions" aria-label={t("pair.label")}>
                   {PAIRED_ACTIONS.map((action) => (
                     <button
                       className="btn secondary small"

@@ -56,3 +56,14 @@ Entry points: Map → Ruangan for gallery/appearance/size, Map → Editor furnit
 - **Agenda/Tugas/File:** tombol Tambahkan tidak lagi berupa blok setinggi form; tombol pilih file bergaya aplikasi; tombol tutup tetap di kanan atas di ponsel.
 - **Aset:** PNG sumber lingkungan dan torso dipindah ke `.data/asset-originals/` (tidak di-commit); yang dikirim ke browser hanya WebP. `scripts/optimize-environment.mjs` membaca sumber dari sana.
 
+
+## Pemeriksaan mandiri 8 Oktober 2026 (lanjutan)
+
+- **Log produksi (Vercel, 7 hari):** satu-satunya baris berlevel error adalah peringatan `pg` tentang `sslmode=require`. `pgConnectionString()` di `src/server/env.ts` kini menulis `sslmode=verify-full` secara eksplisit (perilaku sama: sertifikat tetap diverifikasi, tidak melemah saat pg v9) sehingga peringatan tidak muncul lagi.
+- **Muat ulang cepat tidak lagi memindahkan avatar ke titik muncul.** Posisi terakhir baru ditulis setelah masa tenggang 3 detik, jadi muat ulang di dalam masa itu dulu berakhir di spawn dan bisa menumpuk di atas rekan. Hub kini memakai presence yang masih tercatat (instance mana pun). Titik muncul baru juga mempertimbangkan tinggi avatar + label nama (rekan tepat di atas/bawah harus berjarak ≥ 3 tile).
+- **Laci navigasi seluler:** tombol Chat/Catatan/Anggota/Map di rail menutup laci (sebelumnya panel terbuka di belakang laci); Escape menutup laci.
+- **Dikeluarkan / grup dihapus saat di dalam ruangan:** koneksi ruangan lama dilepas dan `?g=` dibersihkan; header tidak lagi menampilkan pencarian area dan tombol chat ruangan lama, judul menjadi "Beranda".
+- **Anggota & peran** diurutkan pemilik → admin → anggota → tamu, lalu nama.
+- **Bahasa:** label rail Agenda/Tugas/File dan grup gestur bersama lewat berkas terjemahan.
+- Diperiksa tanpa galat konsol/HTTP: catatan bersama dua arah, catatan pribadi, pengaturan akun & workspace (semua tab), notifikasi, papan, ubah peran (langsung terlihat oleh rekan), keluarkan anggota, keluar grup, hapus grup saat rekan di dalam, halaman publik & ruangan di 390 px tanpa scroll horizontal.
+- `scripts/check-reference-ui.mjs` disesuaikan dengan UI sekarang (pratinjau avatar diputar dengan "Putar ke kanan", tombol "Pose & kondisi", pencarian galeri map di Map → Ruangan karena dialog buat workspace memakai pemilih ringkas). Kedelapan skrip `scripts/check-*.mjs` lulus, juga 217 tes unit, TypeScript, dan lint.

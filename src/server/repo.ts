@@ -165,7 +165,8 @@ export async function listMembers(groupId: string): Promise<Member[]> {
     last_seen_at: string | Date | null;
   }>(
     `SELECT u.id, u.name, u.avatar, m.role, m.created_at, m.last_seen_at FROM memberships m
-     JOIN users u ON u.id = m.user_id WHERE m.group_id = $1 ORDER BY u.name`,
+     JOIN users u ON u.id = m.user_id WHERE m.group_id = $1
+     ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 WHEN 'member' THEN 2 ELSE 3 END, u.name`,
     [groupId],
   );
   return rows.map((r) => ({

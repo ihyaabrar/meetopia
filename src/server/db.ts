@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { SCHEMA_SQL } from "./schema";
-import { ConfigError, databaseUrl, onVercel } from "./env";
+import { ConfigError, databaseUrl, onVercel, pgConnectionString } from "./env";
 
 export interface Queryable {
   query<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]>;
@@ -25,7 +25,7 @@ async function create(): Promise<Db> {
   let exec: (sql: string) => Promise<unknown>;
   if (url) {
     const { Pool } = await import("pg");
-    const pool = new Pool({ connectionString: url, max: 5, idleTimeoutMillis: 10_000 });
+    const pool = new Pool({ connectionString: pgConnectionString(url), max: 5, idleTimeoutMillis: 10_000 });
     db = {
       query: async (sql, params) => (await pool.query(sql, params as unknown[])).rows,
       transaction: async (fn) => {

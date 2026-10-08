@@ -85,27 +85,23 @@ try {
   await page.getByRole("tab", { name: "Aksesori", exact: true }).click();
   await page.getByRole("button", { name: "Buku", exact: true }).click();
   const poseImages = new Set();
-  for (const [name, direction] of [
-    ["Kanan", "right"],
-    ["Belakang", "up"],
-    ["Kiri", "left"],
-    ["Depan", "down"],
-    ["Depan kiri", "down-left"],
-    ["Belakang kiri", "up-left"],
-    ["Belakang kanan", "up-right"],
-    ["Depan kanan", "down-right"],
-  ]) {
-    const button = page.getByRole("button", { name, exact: true });
-    await button.click();
-    await expect(button).toHaveAttribute("aria-pressed", "true");
-    await expect(page.locator(".avatar-pedestal canvas")).toHaveAttribute("data-direction", direction);
+  // Pratinjau diputar dengan tombol "Putar ke kanan" (delapan arah, lalu kembali ke depan).
+  const canvas = page.locator(".avatar-pedestal canvas");
+  const rotateRight = page.getByRole("button", { name: "Putar ke kanan", exact: true });
+  const directions = new Set();
+  for (let i = 0; i < 8; i++) {
+    const before = await canvas.getAttribute("data-direction");
+    await rotateRight.click();
+    await expect(canvas).not.toHaveAttribute("data-direction", before);
+    directions.add(await canvas.getAttribute("data-direction"));
     await page.evaluate(
       () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
     );
-    poseImages.add(await page.locator(".avatar-pedestal canvas").evaluate((canvas) => canvas.toDataURL()));
+    poseImages.add(await canvas.evaluate((c) => c.toDataURL()));
   }
+  if (directions.size !== 8) throw new Error("Rotating must visit all eight viewing angles");
   if (poseImages.size !== 8) throw new Error("Avatar viewing angles must render eight distinct poses");
-  await page.getByRole("button", { name: "Depan", exact: true }).click();
+  await expect(canvas).toHaveAttribute("data-direction", "down");
   const actionImages = new Set();
   await page.getByRole("button", { name: "Tanpa barang", exact: true }).click();
   for (const value of ["idle", "walk", "sit", "wave", "type", "read", "coffee"]) {
@@ -131,12 +127,12 @@ try {
   await page.waitForTimeout(500);
   await shot("avatar-desktop");
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByRole("button", { name: "Sudut & pose avatar", exact: true })).toHaveAttribute(
+  await expect(page.getByRole("button", { name: "Pose & kondisi", exact: true })).toHaveAttribute(
     "aria-expanded",
     "false",
   );
   await shot("avatar-mobile");
-  await page.getByRole("button", { name: "Sudut & pose avatar", exact: true }).click();
+  await page.getByRole("button", { name: "Pose & kondisi", exact: true }).click();
   await expect(page.getByLabel("Pose & aktivitas", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Ringkas pratinjau", exact: true }).click();
   if (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1))
@@ -157,9 +153,6 @@ try {
   await expect(page.locator(".tpl-office")).toHaveAttribute("aria-checked", "true");
   await page.waitForTimeout(600);
   await shot("map-gallery");
-  await page.getByPlaceholder("Cari map atau tema…").fill("not-a-map");
-  await expect(page.getByText("Map tidak ditemukan", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Lihat semua map", exact: true }).click();
   await page.getByRole("button", { name: "Buat", exact: true }).click();
   await page.getByRole("button", { name: "Masuk ruangan", exact: true }).click();
   // DOM contract works in production too, where __meetopia debug hooks are deliberately absent.
@@ -177,6 +170,14 @@ try {
     me.user.avatar.prop !== "book"
   )
     throw new Error("Avatar customization did not persist");
+  // Dialog buat workspace memakai pemilih ringkas; galeri lengkap (cari & saring) ada di Map → Ruangan.
+  await page.getByRole("button", { name: "Map", exact: true }).first().click();
+  await page.getByPlaceholder("Cari map atau tema…").fill("not-a-map");
+  await expect(page.getByText("Map tidak ditemukan", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Lihat semua map", exact: true }).click();
+  await expect(page.locator(".map-gallery .tpl")).toHaveCount(5);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".settings")).toHaveCount(0);
   const groups = await (await context.request.get("/api/groups")).json();
   const groupId = groups.groups.find((g) => g.name === "Kantor Nadia").id;
   for (const id of ["office", "home", "gaming", "studio", "rooftop"]) {

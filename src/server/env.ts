@@ -56,6 +56,17 @@ export const isDev = process.env.NODE_ENV !== "production";
  * (Neon: POSTGRES_URL; Upstash/KV: KV_URL), jadi env yang diisi otomatis langsung terpakai.
  */
 export const databaseUrl = () => process.env.DATABASE_URL || process.env.POSTGRES_URL || "";
+
+/**
+ * URL dari Neon memakai sslmode=require, yang oleh `pg` saat ini diperlakukan sebagai verify-full
+ * sambil mencetak SECURITY WARNING di setiap cold start. Tulis verify-full secara eksplisit:
+ * perilakunya sama (sertifikat tetap diverifikasi) dan tidak melemah saat pg v9 mengikuti libpq.
+ */
+export function pgConnectionString(url: string): string {
+  if (/[?&]uselibpqcompat=/i.test(url)) return url;
+  return url.replace(/([?&]sslmode=)(prefer|require|verify-ca)(?=&|$)/i, "$1verify-full");
+}
+
 export const redisUrl = () =>
   process.env.REDIS_URL || process.env.KV_URL || process.env.UPSTASH_REDIS_URL || anyRedisUrl() || "";
 
