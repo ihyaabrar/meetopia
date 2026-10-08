@@ -9,6 +9,8 @@ import {
   drawSleeve,
   drawPaintedLeg,
   unifiedBodySprite,
+  walkingBodyParts,
+  type WalkingBody,
 } from "./avatar-assets";
 import { groundShadow, INK, rr, shade } from "./common";
 import { drawHeldProp, loadEnvironmentAssets } from "./environment-assets";
@@ -469,51 +471,79 @@ function prop(ctx: CanvasRenderingContext2D, rig: RigPose, a: AvatarConfig, back
   }
 }
 /**
- * Walking step for a whole painted body seen from the side, at an angle, or from behind. The upper body
- * stays as painted; below the hip, a profile view swings the legs forward/back (shear pivoting on the hip)
- * and other views lift the left and right legs alternately. `s` is the stride phase, -1..1.
+ * Walking cycle for the side, quarter and rear views, which have no authored step frames. The body is
+ * pre-split (see walkingBodyParts) into a static upper body and separate legs:
+ * - profile: the near leg is drawn twice (far copy darker) and both swing like scissors from the hip,
+ *   the swinging leg slightly bent;
+ * - quarter/rear: left and right legs alternate; the stepping leg lifts its foot (knee bend) and, on a
+ *   diagonal heading, moves it toward the facing side.
+ * `phase` is the cycle angle (0..2π); `x, y, w, h` place the whole sprite.
  */
-function drawSteppingBody(
+function drawWalkingBody(
   ctx: CanvasRenderingContext2D,
-  img: HTMLCanvasElement,
+  parts: WalkingBody,
   x: number,
   y: number,
   w: number,
   h: number,
-  hipFrac: number,
-  s: number,
-  profile: boolean,
+  phase: number,
+  amount: number,
+  view: "profile" | "quarter" | "back",
+  diagonal: boolean,
 ) {
-  const sw = img.width,
-    sh = img.height,
-    cut = Math.round(sh * hipFrac),
-    hipY = y + h * hipFrac,
-    legH = h - h * hipFrac;
-  if (profile) {
-    ctx.save();
-    ctx.translate(0, hipY);
-    ctx.transform(1, 0, s * 0.3, 1, 0, 0);
-    ctx.drawImage(img, 0, cut, sw, sh - cut, x, 0, w, legH);
-    ctx.restore();
+  const sw = parts.upper.width,
+    sh = parts.upper.height,
+    kx = w / sw,
+    ky = h / sh,
+    top = parts.legTop,
+    legH = sh - top,
+    s = Math.sin(phase) * amount,
+    c = Math.cos(phase) * amount;
+  if (view === "profile") {
+    const [hx, hy] = parts.hips[0];
+    const swing = 0.42;
+    // Positive canvas rotation moves a hanging foot backward (-x); the source faces +x.
+    for (const [sign, far] of [
+      [1, true],
+      [-1, false],
+    ] as const) {
+      const angle = sign * s * swing;
+      // The leg moving forward (angle decreasing) is in its swing phase: bend it a little.
+      const bend = Math.max(0, -sign * c) * 0.16;
+      ctx.save();
+      ctx.translate(x + hx * kx, y + hy * ky);
+      ctx.rotate(angle);
+      ctx.scale(1, 1 - bend);
+      if (far) ctx.filter = "brightness(0.78)";
+      ctx.drawImage(parts.legs[0], -hx * kx, -hy * ky, w, h);
+      ctx.restore();
+    }
   } else {
-    const half = sw / 2;
-    const lift = [Math.max(0, s), Math.max(0, -s)];
-    for (const i of [0, 1])
-      ctx.drawImage(
-        img,
-        i * half,
-        cut,
-        half,
-        sh - cut,
-        x + (i * w) / 2,
-        hipY - lift[i] * h * 0.05,
-        w / 2,
-        legH,
-      );
+    // Seen from behind the knee bend reads only through a higher heel, so lift more.
+    const riseK = view === "back" ? 0.34 : 0.26;
+    const knee = top + legH * 0.5;
+    parts.legs.forEach((leg, i) => {
+      const lift = Math.max(0, i === 0 ? s : -s);
+      const rise = lift * legH * riseK;
+      const forward = diagonal ? lift * legH * 0.22 : 0;
+      const thigh = Math.max(0.5, knee - top - rise),
+        kneeX = forward * 0.45;
+      // Thigh: compressed toward the hip as the knee comes up, leaning toward the step (sheared so the
+      // leg stays one continuous piece from hip to foot).
+      ctx.save();
+      ctx.translate(x, y + top * ky);
+      ctx.transform(1, 0, (kneeX * kx) / (thigh * ky), 1, 0, 0);
+      ctx.drawImage(leg, 0, top, sw, knee - top, 0, 0, w, thigh * ky);
+      ctx.restore();
+      // Shin and foot keep their length and move up (and forward on a diagonal heading).
+      ctx.save();
+      ctx.translate(x + kneeX * kx, y + (knee - rise) * ky);
+      ctx.transform(1, 0, ((forward - kneeX) * kx) / ((sh - knee) * ky), 1, 0, 0);
+      ctx.drawImage(leg, 0, knee, sw, sh - knee, 0, 0, w, (sh - knee) * ky);
+      ctx.restore();
+    });
   }
-  // Upper body last, overlapping the seam slightly so the moving legs never show a gap at the waist.
-  const overlap = 0.02;
-  ctx.drawImage(img, 0, 0, sw, cut + sh * overlap, x, y, w, h * (hipFrac + overlap));
+  ctx.drawImage(parts.upper, x, y, w, h);
 }
 
 /** Painted modular head/garment sprites + deterministic articulated limbs, not whole-sheet screenshots. */
@@ -653,22 +683,28 @@ export function drawPaintedAvatar(
     const width = (height * unified.canvas.width) / unified.canvas.height;
     // Only the front view has authored step frames; other views step procedurally on the same
     // painted body, so starting or stopping a walk never swaps to a different-looking rig.
-    if ((action === "walk" || action === "run") && pose.dir !== "down")
-      drawSteppingBody(
+    const walking = (action === "walk" || action === "run") && pose.dir !== "down";
+    const parts = walking ? walkingBodyParts(a, pose.dir) : null;
+    if (parts)
+      drawWalkingBody(
         ctx,
-        unified.canvas,
+        parts,
         -width / 2,
         top - 3,
         width,
         height,
-        (d.torso + 3) / height,
-        rig.stride / (action === "run" ? 5 : 3),
-        view === "profile",
+        (rig.frame / rig.frames) * Math.PI * 2,
+        action === "run" ? 1.25 : 1,
+        view === "front" ? "back" : view,
+        diagonal,
       );
     else ctx.drawImage(unified.canvas, -width / 2, top - 3, width, height);
     ctx.restore();
   } else if (!pose.layer) {
-    for (const sd of [-1, 1]) {
+    // Seated and seen from behind, the legs point forward away from the viewer: they are hidden by the
+    // body and the seat, not dangling toward the camera below the chair back.
+    const legsHidden = rig.seated && back && action !== "sit-floor";
+    for (const sd of legsHidden ? [] : [-1, 1]) {
       const stride = rig.stride * sd,
         // Seated and facing sideways: thighs point forward instead of hanging straight down.
         footX =

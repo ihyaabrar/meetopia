@@ -7,7 +7,7 @@ import { TILE, isLockable, tileAt, type MapData, type MapObject, type Zone } fro
 import type { Presence } from "@/shared/protocol";
 import type { AvatarCondition } from "@/shared/avatar";
 import { AVATAR_MAP_SCALE, drawAvatar, avatarNameOffset } from "./art/avatar";
-import { renderWorld, type WorldLayers } from "./art/world";
+import { renderWorld, type Sprite, type WorldLayers } from "./art/world";
 import { INK } from "./art/common";
 import { drawFurniture } from "./art/environment-assets";
 import { AVATAR_RENDER_METRICS } from "@/shared/avatar-metrics";
@@ -57,6 +57,18 @@ export interface SceneFrame {
 const T = TILE;
 const STATUS_COLOR = { active: "#00d69b", busy: "#d9584c", meeting: "#8f6fd1", away: "#d99a2b" } as const;
 const FOOT = AVATAR_RENDER_METRICS.footOffset;
+
+/** Alpha piksel sprite statis untuk uji oklusi (dibaca sekali per kanvas). */
+const spriteAlpha = new WeakMap<HTMLCanvasElement, Uint8ClampedArray>();
+function alphaAt(c: HTMLCanvasElement, x: number, y: number): number {
+  if (x < 0 || y < 0 || x >= c.width || y >= c.height) return 0;
+  let a = spriteAlpha.get(c);
+  if (!a) {
+    a = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+    spriteAlpha.set(c, a);
+  }
+  return a[(Math.floor(y) * c.width + Math.floor(x)) * 4 + 3];
+}
 
 interface Timed {
   x: number;
@@ -254,9 +266,50 @@ export class Scene {
 
     // Sprite tinggi + avatar, diurutkan dari atas ke bawah
     type Item = { y: number; draw: () => void };
+    // Kepala & badan atas tiap orang: objek tinggi di depannya (tiang pergola, payung, tanaman rambat,
+    // rak) yang menutupi bagian ini digambar transparan, supaya orang tidak hilang di belakangnya.
+    const bodies = f.people.map((v) => {
+      const foot = v.y * T + FOOT;
+      const top = foot - avatarNameOffset(v.p.avatar, v.p.dir, v.p.sitting) + 14;
+      return {
+        sortY: v.y * T + (v.p.sitting ? 0 : FOOT),
+        x: v.x * T,
+        top,
+        bottom: top + (foot - top) * 0.6,
+        seat: v.p.sitting ? v.p.seatId : undefined,
+      };
+    });
+    const hides = (s: Sprite, y: number) =>
+      bodies.some((b) => {
+        if (b.sortY >= y || b.seat === s.obj.id) return false;
+        const hw = 9 * AVATAR_MAP_SCALE;
+        if (b.x + hw < s.x || b.x - hw > s.x + s.canvas.width || b.bottom < s.y || b.top > s.y + s.canvas.height)
+          return false;
+        let hit = 0;
+        for (let i = 0; i < 3; i++)
+          for (let j = 0; j < 4; j++)
+            if (
+              alphaAt(
+                s.canvas,
+                b.x - hw + (hw * 2 * (i + 0.5)) / 3 - s.x,
+                b.top + ((b.bottom - b.top) * (j + 0.5)) / 4 - s.y,
+              ) > 128
+            )
+              hit++;
+        return hit >= 4;
+      });
     const items: Item[] = this.layers.sprites.map((s) => {
       const seated = f.people.find((v) => v.p.sitting && v.p.seatId === s.obj.id);
-      return { y: seated ? seated.y * T - 12 : s.sortY, draw: () => ctx.drawImage(s.canvas, s.x, s.y) };
+      const y = seated ? seated.y * T - 12 : s.sortY;
+      const faded = hides(s, y);
+      return {
+        y,
+        draw: () => {
+          if (faded) ctx.globalAlpha = 0.42;
+          ctx.drawImage(s.canvas, s.x, s.y);
+          ctx.globalAlpha = 1;
+        },
+      };
     });
     for (const v of f.people) {
       // Sort seated people at the physical seat, before the front edge of their desk/chair.

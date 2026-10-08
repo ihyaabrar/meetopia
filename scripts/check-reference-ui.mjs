@@ -36,7 +36,10 @@ const shot = async (name) => {
 try {
   await page.goto("/");
   await expect(page.locator(".hero-art canvas")).toBeVisible();
-  await expect(page.locator(".hero-art canvas")).toHaveAttribute("data-renderer", "illustrated");
+  // Dev server: atlases are decoded after download, which can take ~10 s on a busy machine.
+  await expect(page.locator(".hero-art canvas")).toHaveAttribute("data-renderer", "illustrated", {
+    timeout: 20000,
+  });
   await shot("landing");
   const staticHero = await page.locator(".hero-art canvas").evaluate((canvas) => canvas.toDataURL());
   await page.waitForTimeout(250);

@@ -471,3 +471,176 @@ export function unifiedBodySprite(
   variants.set(cargoKey, cargo);
   return cargo;
 }
+
+/** A unified body cut for procedural walking: static upper body (garment + hands) and two legs. */
+export interface WalkingBody {
+  upper: HTMLCanvasElement;
+  /** Profile: one near-leg template drawn twice. Other views: the left and right leg as painted. */
+  legs: HTMLCanvasElement[];
+  /** Source-pixel row where the legs start (just below the garment hem). */
+  legTop: number;
+  /** Source-pixel hip pivot of each leg. */
+  hips: Array<[number, number]>;
+}
+const walkingBodies = new WeakMap<HTMLCanvasElement, WalkingBody>();
+
+/**
+ * Only the front view has authored step frames. Other views are split once per body variant using
+ * the source artwork's colors (garment is green, trousers blue, sneakers white before recoloring):
+ * everything above the hem plus the hanging hands stays put; the legs below are cut apart so the
+ * renderer can swing/lift each one. Hand pixels that covered a thigh are filled with trouser color.
+ */
+export function walkingBodyParts(a: AvatarConfig, dir: AvatarDirection): WalkingBody | null {
+  if (dir === "down") return null;
+  const body = unifiedBodySprite(a, dir, "idle", 0);
+  const atlas = atlases.get(AVATAR_ASSET_URLS[6]);
+  if (!body || !atlas) return null;
+  const cached = walkingBodies.get(body.canvas);
+  if (cached) return cached;
+  const row = dir.startsWith("up") ? 3 : dir === "left" || dir === "right" ? 2 : 1;
+  const source = atlas[row * 8 + OUTFITS.indexOf(a.outfit)];
+  const w = body.canvas.width,
+    h = body.canvas.height;
+  if (!source || source.canvas.width !== w || source.canvas.height !== h) return null;
+  const src = source.canvas.getContext("2d")!.getImageData(0, 0, w, h).data;
+  const SKIN = 1,
+    GARMENT = 2,
+    INK = 3,
+    TROUSERS = 5;
+  const kind = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const r = src[i * 4],
+      g = src[i * 4 + 1],
+      b = src[i * 4 + 2];
+    if (src[i * 4 + 3] < 60) continue;
+    kind[i] = skinPixel(r, g, b)
+      ? SKIN
+      : g > r * 1.07 && g > b * 1.05
+        ? GARMENT
+        : b > r * 1.08 && b > g * 1.02 && b > 35
+          ? TROUSERS
+          : r + g + b < 160
+            ? INK
+            : 4;
+  }
+  let hem = Math.floor(h * 0.45);
+  for (let y = hem; y < h * 0.92; y++) {
+    let n = 0;
+    for (let x = 0; x < w; x++) if (kind[y * w + x] === GARMENT) n++;
+    if (n >= 3) hem = y;
+  }
+  // The garment's own bottom outline belongs to the upper body.
+  const legTop = Math.min(h - 6, hem + 2);
+  const profile = row === 2;
+  // Hands (and their outline) hanging below the hem stay with the upper body.
+  const hand = new Uint8Array(w * h);
+  for (let y = legTop; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      if (kind[y * w + x] !== SKIN) continue;
+      for (let dy = -2; dy <= 2; dy++)
+        for (let dx = -2; dx <= 2; dx++) {
+          const yy = y + dy,
+            xx = x + dx;
+          if (yy < legTop || yy >= h || xx < 0 || xx >= w) continue;
+          const k = kind[yy * w + xx];
+          if (k === SKIN || (k === INK && Math.abs(dx) + Math.abs(dy) <= 2)) hand[yy * w + xx] = 1;
+        }
+    }
+  // Per-row split column between the two legs.
+  const split = new Float32Array(h);
+  if (profile) {
+    // The near leg overlaps the far one; its front edge is the darkest ink between them.
+    for (let y = legTop; y < h; y++) {
+      let best = -1,
+        bestLum = 1e9;
+      for (let x = Math.floor(w * 0.45); x < w * 0.72; x++) {
+        const i = y * w + x;
+        if (src[i * 4 + 3] < 60 || hand[i]) continue;
+        const lum = src[i * 4] + src[i * 4 + 1] + src[i * 4 + 2];
+        if (lum < bestLum) {
+          bestLum = lum;
+          best = x;
+        }
+      }
+      split[y] = best < 0 ? (y > legTop ? split[y - 1] : w * 0.58) : best + 1;
+    }
+    const raw = split.slice();
+    for (let y = legTop; y < h; y++) {
+      const win: number[] = [];
+      for (let k = -3; k <= 3; k++) win.push(raw[Math.min(h - 1, Math.max(legTop, y + k))]);
+      split[y] = win.sort((p, q) => p - q)[3];
+    }
+  } else {
+    let best = Math.floor(w / 2),
+      bestCount = 1e9;
+    const y0 = legTop + Math.floor((h - legTop) * 0.4);
+    for (let x = Math.floor(w * 0.3); x < w * 0.7; x++) {
+      let n = 0;
+      for (let y = y0; y < h; y++) if (kind[y * w + x]) n++;
+      if (n < bestCount) {
+        bestCount = n;
+        best = x;
+      }
+    }
+    split.fill(best + 0.5);
+  }
+  const bodyPx = body.canvas.getContext("2d")!.getImageData(0, 0, w, h);
+  const make = () => {
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    return c;
+  };
+  const upper = make();
+  const upperPx = new ImageData(w, h);
+  const legPx = profile ? [new ImageData(w, h)] : [new ImageData(w, h), new ImageData(w, h)];
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x,
+        j = i * 4;
+      if (bodyPx.data[j + 3] === 0) continue;
+      const toUpper = y < legTop || hand[i];
+      if (toUpper) upperPx.data.set(bodyPx.data.subarray(j, j + 4), j);
+      if (y < legTop) continue;
+      const side = x < split[y] ? 0 : 1;
+      if (profile && side === 1) continue;
+      const target = legPx[profile ? 0 : side];
+      if (!hand[i]) {
+        target.data.set(bodyPx.data.subarray(j, j + 4), j);
+        continue;
+      }
+      // Fill the thigh behind a hand with the nearest trouser pixel in the same row.
+      for (let d = 1; d < w; d++) {
+        for (const xx of [x - d, x + d]) {
+          if (xx < 0 || xx >= w || (xx < split[y] ? 0 : 1) !== side) continue;
+          const k = (y * w + xx) * 4;
+          if (!hand[y * w + xx] && bodyPx.data[k + 3] > 200 && kind[y * w + xx] === TROUSERS) {
+            target.data.set(bodyPx.data.subarray(k, k + 4), j);
+            d = w;
+            break;
+          }
+        }
+      }
+    }
+  upper.getContext("2d")!.putImageData(upperPx, 0, 0);
+  const legs = legPx.map((px) => {
+    const c = make();
+    c.getContext("2d")!.putImageData(px, 0, 0);
+    return c;
+  });
+  // Hip pivot: horizontal center of each leg's top rows, a little above the hem (hidden under it).
+  const hips = legPx.map((px): [number, number] => {
+    let sum = 0,
+      n = 0;
+    for (let y = legTop; y < Math.min(h, legTop + 6); y++)
+      for (let x = 0; x < w; x++)
+        if (px.data[(y * w + x) * 4 + 3] > 0) {
+          sum += x;
+          n++;
+        }
+    return [n ? sum / n : w / 2, legTop - h * (profile ? 0.06 : 0.02)];
+  });
+  const parts = { upper, legs, legTop, hips };
+  walkingBodies.set(body.canvas, parts);
+  return parts;
+}

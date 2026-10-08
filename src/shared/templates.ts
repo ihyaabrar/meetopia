@@ -10,7 +10,7 @@ export const TEMPLATE_REVS: Record<TemplateId, number> = {
   home: 2,
   gaming: 2,
   studio: 2,
-  rooftop: 2,
+  rooftop: 3,
 };
 export const TEMPLATE_PERKS: Record<TemplateId, string[]> = Object.fromEntries(
   TEMPLATE_IDS.map((id) => [id, [1, 2, 3].map((n) => `tpl.${id}.p${n}`)]),
@@ -368,7 +368,8 @@ function rooftop() {
   b.add("coffee", 20, 1, 2);
   b.add("fridge", 29, 1);
   b.add("pergola", 18, 1, 14, 7);
-  for (const x of [20, 23, 26, 29]) b.add("chair", x, 5);
+  // Bar stools touch the counter, so seated people face the bar (not away from it).
+  for (const x of [21, 23, 25, 27]) b.add("chair", x, 4);
   b.table(36, 5, 8, 2);
   b.add("parasol", 35, 2, 10, 5);
   b.add("rug", 3, 15, 12, 8);

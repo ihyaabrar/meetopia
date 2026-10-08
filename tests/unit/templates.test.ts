@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildWalkable, isLockable, privateZoneAt, tileAt, zoneAt } from "@/shared/map";
 import { findPath, nearestFree } from "@/shared/pathfinding";
 import { TEMPLATE_IDS, TEMPLATE_REVS, buildTemplate } from "@/shared/templates";
+import { seatPose } from "@/shared/seats";
 
 describe.each(TEMPLATE_IDS)("jenis ruangan %s", (id) => {
   const map = buildTemplate(id);
@@ -57,6 +58,15 @@ describe.each(TEMPLATE_IDS)("jenis ruangan %s", (id) => {
     const a = buildTemplate(id);
     a.objects.pop();
     expect(buildTemplate(id).objects.length).toBe(map.objects.length);
+  });
+});
+
+describe("arah duduk", () => {
+  it("kursi bar rooftop menghadap meja bar", () => {
+    const map = buildTemplate("rooftop");
+    const stools = map.objects.filter((o) => o.kind === "chair" && o.y < 9 && o.x >= 18 && o.x <= 31);
+    expect(stools.length).toBe(4);
+    expect(stools.map((o) => `${o.id}:${seatPose(map, o).dir}`)).toEqual(stools.map((o) => `${o.id}:up`));
   });
 });
 
