@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { safeNext } from "@/shared/redirect";
 import { Suspense, useState } from "react";
 import { PublicShell } from "@/components/PublicShell";
 import { AvatarBuilder } from "@/components/AvatarBuilder";
@@ -38,7 +39,7 @@ function RegisterForm() {
         body: { email, password, name, avatar, locale },
       });
       if (r.devVerifyLink) sessionStorage.setItem("mt_dev_verify", r.devVerifyLink);
-      router.replace(next.startsWith("/") ? next : "/app");
+      router.replace(safeNext(next));
       router.refresh();
     } catch (err) {
       setError(t(errorKey(err)));

@@ -5,6 +5,7 @@ import type { AvatarConfig, AvatarDirection, AvatarActivity, AvatarCondition } f
 import { drawAvatar } from "@/client/draw";
 import { avatarHeadY, avatarPartY } from "@/client/art/avatar";
 import { loadAvatarAssets, paintedAvatarReady } from "@/client/art/avatar-assets";
+import { loadEnvironmentAssets } from "@/client/art/environment-assets";
 
 /** Pratinjau avatar statis. `face` = hanya kepala untuk daftar anggota/chat. */
 export function AvatarCanvas({
@@ -78,7 +79,7 @@ export function AvatarCanvas({
       if (animated) raf = requestAnimationFrame(render);
     };
     render(0);
-    void loadAvatarAssets().then(() => {
+    void Promise.all([loadAvatarAssets(), loadEnvironmentAssets("props")]).then(() => {
       if (!animated) render(0);
     });
     return () => {

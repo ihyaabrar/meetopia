@@ -18,6 +18,8 @@ import { nearestFree } from "@/shared/pathfinding";
 import { templateOf } from "@/shared/templates";
 import type { Point } from "@/shared/pathfinding";
 import type { Presence } from "@/shared/protocol";
+import { PAIRED_ACTIONS } from "@/shared/protocol";
+import { actionLabel } from "@/shared/avatar-animation";
 import { can } from "@/shared/roles";
 import { RoomStage } from "./RoomStage";
 import { ChatPanel } from "./ChatPanel";
@@ -38,6 +40,7 @@ import { StatusEditor } from "./StatusEditor";
 import { InviteModal } from "./InviteModal";
 import { WorkspacePicker } from "./WorkspacePicker";
 import { JoinWorkspace } from "./JoinWorkspace";
+import { WorkspaceBoard } from "./WorkspaceBoard";
 import { Popover } from "@/components/Popover";
 import { timeAgo } from "@/i18n/relative";
 import {
@@ -92,6 +95,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
   const [chatTarget, setChatTarget] = useState<ChatTarget>({ kind: "nearby" });
   const [dmTabs, setDmTabs] = useState<string[]>([]);
   const [notes, setNotes] = useState<null | "private" | "shared">(null);
+  const [board, setBoard] = useState<null | "agenda" | "task" | "resource">(null);
   const [modal, setModal] = useState<
     null | "create" | "profile" | "settings" | "invites" | "devices" | "tips" | "status" | "join"
   >(null);
@@ -121,6 +125,16 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
   const [showNav, setShowNav] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  // Chat tersembunyi secara bawaan: pesan kanal/DM yang masuk saat itu ditandai di tombol chat.
+  const [chatUnread, setChatUnread] = useState(false);
+  const showChatRef = useRef(showChat);
+  useEffect(() => {
+    showChatRef.current = showChat;
+  }, [showChat]);
+  const toggleChat = () => {
+    setShowChat((v) => !v);
+    setChatUnread(false);
+  };
   const [zoneSearch, setZoneSearch] = useState("");
   const [devLink, setDevLink] = useState<string | null>(null);
   const [bannerHidden, setBannerHidden] = useState(false);
@@ -173,6 +187,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
     setDetail(null);
     setDmTabs([]);
     setNotes(null);
+    setBoard(null);
     void loadDetail(activeId).then((d) => {
       if (d?.channels[0]) setChatTarget({ kind: "channel", id: d.channels[0].id });
     });
@@ -266,6 +281,25 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
         });
       }),
       room.on("screenRejected", () => media.screenRejected()),
+      room.on("pairInvite", (r) =>
+        toast({
+          text: t("pair.invite", { name: r.fromName, action: actionLabel(r.action, locale).toLowerCase() }),
+          sticky: true,
+          action: {
+            label: t("pair.accept"),
+            run: () => room.send({ t: "pairReply", requestId: r.requestId, accept: true }),
+          },
+          secondary: {
+            label: t("pair.decline"),
+            run: () => room.send({ t: "pairReply", requestId: r.requestId, accept: false }),
+          },
+        }),
+      ),
+      room.on("pairResult", (r) =>
+        toast({
+          text: t(r.accepted ? "pair.started" : `pair.result.${r.reason ?? "declined"}`),
+        }),
+      ),
       room.on("teleported", (m) => m.toName && toast({ text: t("peer.teleported", { name: m.toName }) })),
       room.on("teleportRejected", (m) =>
         toast({ text: t(`peer.teleportRejected.${m.reason}`), kind: "error" }),
@@ -276,6 +310,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
       }),
       room.on("chat", (m) => {
         if (m.senderId === me.id) return;
+        if (m.kind !== "nearby" && !showChatRef.current) setChatUnread(true);
         const prefs = getPrefs();
         const base = { name: m.senderName, userId: m.senderId, groupId: room.groupId, groupName: gname() };
         if (m.kind === "dm") {
@@ -294,6 +329,8 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
       ),
       room.on("shopRejected", (m) => toast({ text: t(`shop.rejected.${m.reason}`), kind: "error" })),
       room.on("error", (code) => {
+        if (code === "seatOccupied" || code === "seatTooFar")
+          return toast({ text: t(`seat.${code === "seatOccupied" ? "occupied" : "tooFar"}`), kind: "error" });
         if (["rateLimited", "tooFar", "notRoomMaster", "badPin", "badVideo"].includes(code))
           toast({ text: t(`error.${code}`), kind: "error" });
       }),
@@ -311,7 +348,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
       }),
     ];
     return () => offs.forEach((o) => o());
-  }, [room, media, t, toast, refreshGroups, loadDetail, me.id, me.name]);
+  }, [room, media, t, locale, toast, refreshGroups, loadDetail, me.id, me.name]);
 
   // Aktivitas dalam aplikasi (bukan pelacakan layar/keystroke): cukup tanda "masih di sini" tiap 30 detik.
   useEffect(() => {
@@ -353,6 +390,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
 
   const openDm = (userId: string) => {
     setShowChat(true);
+    setChatUnread(false);
     setDmTabs((l) => (l.includes(userId) ? l : [...l, userId]));
     setChatTarget({ kind: "dm", userId });
   };
@@ -377,14 +415,15 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
         if (action === "cook") return toast({ text: t("action.cookResult") });
         return toast({ text: t("life.disabled") });
       case "read":
-        return toast({ text: t("action.readResult") });
+        room?.send({ t: "avatarAction", action: "read" });
+        return toast({
+          text: t("action.readingActive"),
+        });
       case "watch":
         return obj.kind === "tv" ? setTv(obj) : toast({ text: t("action.watchResult") });
       case "play":
         return toast({
-          text: t(obj.kind === "arcade" ? "action.arcadeResult" : "action.playResult", {
-            n: (Math.floor(Math.random() * 90) + 10) * 100,
-          }),
+          text: t("action.minigameSoon"),
         });
     }
   };
@@ -453,12 +492,13 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
           <div className="rail-actions">
             <button
               className="rail-item nav"
-              aria-label={t("nav.toggleChat")}
+              aria-label={chatUnread ? `${t("nav.toggleChat")} · ${t("chat.unread")}` : t("nav.toggleChat")}
               title={t("nav.toggleChat")}
               aria-pressed={showChat}
-              onClick={() => setShowChat((v) => !v)}
+              onClick={toggleChat}
             >
               <Icon name="chat" size={22} />
+              {chatUnread && <span className="count-badge dot" aria-hidden="true" />}
             </button>
             {can(role, "manageGroup") && (
               <button
@@ -488,6 +528,20 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
             >
               <Icon name="users" size={22} />
             </button>
+            {(["agenda", "task", "resource"] as const).map((v) => (
+              <button
+                className="rail-item nav"
+                key={v}
+                aria-label={v === "agenda" ? "Agenda" : v === "task" ? "Tugas" : "File"}
+                title={v === "agenda" ? "Agenda" : v === "task" ? "Tugas" : "File"}
+                onClick={() => {
+                  setBoard(v);
+                  setShowNav(false);
+                }}
+              >
+                <Icon name={v === "agenda" ? "clock" : v === "task" ? "check" : "folder"} size={22} />
+              </button>
+            ))}
           </div>
         )}
         {groups.map((g) => (
@@ -543,6 +597,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
                   onClick={() => {
                     setChatTarget({ kind: "channel", id: c.id });
                     setShowChat(true);
+                    setChatUnread(false);
                     setShowNav(false);
                   }}
                 >
@@ -687,11 +742,12 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
           {!home && (
             <button
               className="icon-btn"
-              onClick={() => setShowChat((v) => !v)}
-              aria-label={t("nav.toggleChat")}
+              onClick={toggleChat}
+              aria-label={chatUnread ? `${t("nav.toggleChat")} · ${t("chat.unread")}` : t("nav.toggleChat")}
               aria-pressed={showChat}
             >
               <Icon name="chat" />
+              {chatUnread && <span className="count-badge dot" aria-hidden="true" />}
             </button>
           )}
           {detail && (
@@ -1059,6 +1115,16 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
         <SpeakerPanel room={room} snap={snap} obj={speaker} role={role} onClose={() => setSpeaker(null)} />
       )}
       {modal === "status" && <StatusEditor me={me} onClose={() => setModal(null)} onSaved={setMe} />}
+      {board && activeId && (
+        <WorkspaceBoard
+          groupId={activeId}
+          selfId={me.id}
+          role={role}
+          room={room}
+          initial={board}
+          onClose={() => setBoard(null)}
+        />
+      )}
       {peerCard && (
         <ProfileCard
           member={peerCard.member}
@@ -1137,6 +1203,22 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
                 )}
               </div>
               {busy && <p className="hint">{t("peer.busyHint")}</p>}
+              {presence && room && (
+                <div className="pc-actions" aria-label="Gestur bersama">
+                  {PAIRED_ACTIONS.map((action) => (
+                    <button
+                      className="btn secondary small"
+                      key={action}
+                      onClick={() => {
+                        room.send({ t: "pairInvite", toUserId: presence.id, action });
+                        close();
+                      }}
+                    >
+                      {actionLabel(action, locale)}
+                    </button>
+                  ))}
+                </div>
+              )}
               {presence && (
                 <div className="field pc-volume">
                   <label htmlFor="pc-vol">

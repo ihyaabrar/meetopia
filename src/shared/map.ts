@@ -83,7 +83,7 @@ export interface MapObject {
   /** Menghalangi jalan avatar. */
   solid: boolean;
   /** Arah hadap kursi (sandaran di sisi sebaliknya). */
-  facing?: "up" | "down";
+  facing?: "up" | "down" | "left" | "right";
   /** Kunci terjemahan nama objek. Bila ada, objek bisa diinteraksi (FR-74). */
   label?: string;
   actions?: ObjectAction[];
@@ -123,6 +123,8 @@ export interface MapData {
   template?: string;
   /** Revisi template asal; peta yang belum diubah admin ikut diperbarui saat template diperbaiki. */
   templateRev?: number;
+  /** Edited layouts never get overwritten by an automatic template upgrade. */
+  customLayout?: boolean;
   width: number;
   height: number;
   /** Baris-baris tile; satu karakter per tile. Lihat FLOOR_CHARS. */
@@ -131,7 +133,22 @@ export interface MapData {
   objects: MapObject[];
   spawn: { x: number; y: number };
   audio: AudioConfig;
+  appearance?: MapAppearance;
 }
+
+export const AMBIENCES = ["bright", "normal", "dim", "night"] as const;
+export const FURNITURE_STYLES = ["warm", "modern", "industrial", "tropical"] as const;
+export const ROOM_SIZES = ["small", "medium", "large"] as const;
+export interface MapAppearance {
+  ambience: (typeof AMBIENCES)[number];
+  furnitureStyle: (typeof FURNITURE_STYLES)[number];
+  roomSize: (typeof ROOM_SIZES)[number];
+}
+export const DEFAULT_APPEARANCE: MapAppearance = {
+  ambience: "normal",
+  furnitureStyle: "warm",
+  roomSize: "medium",
+};
 
 export const FLOOR_CHARS: Record<string, FloorKind> = {
   "#": "wall",

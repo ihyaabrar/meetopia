@@ -2,6 +2,7 @@
 import { one, sql, transaction } from "./db";
 import { newId, newToken, hashToken } from "./ids";
 import type { MapData } from "@/shared/map";
+import { resizeMap } from "@/shared/map-edit";
 import {
   OFFICE_TEMPLATE,
   TEMPLATE_REVS,
@@ -189,17 +190,18 @@ export async function getMap(groupId: string): Promise<MapData> {
   if (!r) return OFFICE_TEMPLATE;
   // Peta dari template lama (belum ada editor peta) ikut diperbarui; pengaturan audio dipertahankan.
   const template = templateOf(r.data);
-  if ((r.data.templateRev ?? 1) < TEMPLATE_REVS[template]) {
+  if (!r.data.customLayout && (r.data.templateRev ?? 1) < TEMPLATE_REVS[template]) {
     const upgraded: MapData = {
-      ...buildTemplate(template),
+      ...resizeMap(buildTemplate(template), r.data.appearance?.roomSize ?? "medium"),
       audio: r.data.audio ?? OFFICE_TEMPLATE.audio,
+      appearance: r.data.appearance,
       version: r.data.version + 1,
     };
-    await sql("UPDATE maps SET data = $2, version = $3, updated_at = now() WHERE group_id = $1", [
-      groupId,
-      JSON.stringify(upgraded),
-      upgraded.version,
-    ]);
+    const updated = await sql(
+      "UPDATE maps SET data = $2, version = $3, updated_at = now() WHERE group_id = $1 AND version = $4 RETURNING id",
+      [groupId, JSON.stringify(upgraded), upgraded.version, r.data.version],
+    );
+    if (!updated.length) return getMap(groupId);
     return upgraded;
   }
   return r.data;
@@ -207,25 +209,40 @@ export async function getMap(groupId: string): Promise<MapData> {
 
 /** Ganti jenis ruangan (tata ruang baru); pengaturan audio dipertahankan. */
 export async function replaceMapTemplate(groupId: string, template: TemplateId): Promise<MapData> {
-  const map = await getMap(groupId);
-  const next: MapData = { ...buildTemplate(template), audio: map.audio, version: map.version + 1 };
-  await sql("UPDATE maps SET data = $2, version = $3, updated_at = now() WHERE group_id = $1", [
-    groupId,
-    JSON.stringify(next),
-    next.version,
-  ]);
-  return next;
+  return transaction(async (q) => {
+    const rows = await q.query<{ data: MapData }>("SELECT data FROM maps WHERE group_id = $1 FOR UPDATE", [
+      groupId,
+    ]);
+    const map = rows[0]?.data ?? OFFICE_TEMPLATE;
+    const next: MapData = {
+      ...resizeMap(buildTemplate(template), map.appearance?.roomSize ?? "medium"),
+      audio: map.audio,
+      appearance: map.appearance,
+      version: map.version + 1,
+    };
+    await q.query("UPDATE maps SET data = $2, version = $3, updated_at = now() WHERE group_id = $1", [
+      groupId,
+      JSON.stringify(next),
+      next.version,
+    ]);
+    return next;
+  });
 }
 
 export async function updateMapAudio(groupId: string, audio: MapData["audio"]): Promise<MapData> {
-  const map = await getMap(groupId);
-  const next: MapData = { ...map, audio, version: map.version + 1 };
-  await sql("UPDATE maps SET data = $2, version = $3, updated_at = now() WHERE group_id = $1", [
-    groupId,
-    JSON.stringify(next),
-    next.version,
-  ]);
-  return next;
+  return transaction(async (q) => {
+    const rows = await q.query<{ data: MapData }>("SELECT data FROM maps WHERE group_id = $1 FOR UPDATE", [
+      groupId,
+    ]);
+    const map = rows[0]?.data ?? OFFICE_TEMPLATE;
+    const next: MapData = { ...map, audio, version: map.version + 1 };
+    await q.query("UPDATE maps SET data = $2, version = $3, updated_at = now() WHERE group_id = $1", [
+      groupId,
+      JSON.stringify(next),
+      next.version,
+    ]);
+    return next;
+  });
 }
 
 // ---------- Undangan (FR-02) ----------

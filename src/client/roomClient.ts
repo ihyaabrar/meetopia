@@ -47,10 +47,13 @@ type EventMap = {
   knockResult: Extract<ServerMessage, { t: "knockResult" }>;
   moveRejected: Extract<ServerMessage, { t: "moveRejected" }>;
   screenRejected: Extract<ServerMessage, { t: "screenRejected" }>;
+  pairInvite: Extract<ServerMessage, { t: "pairInvite" }>;
+  pairResult: Extract<ServerMessage, { t: "pairResult" }>;
   kicked: string;
   error: string;
   welcome: void;
   groupChanged: void;
+  workspaceChanged: void;
   /** Seseorang baru masuk ruangan (bukan sambung ulang singkat). */
   peerJoined: Presence;
   teleported: Extract<ServerMessage, { t: "teleported" }>;
@@ -294,10 +297,10 @@ export class RoomClient {
           // Posisi diri dikendalikan lokal; ambil bagian lain dari server.
           peers.set(m.peer.id, {
             ...m.peer,
-            x: existing.x,
-            y: existing.y,
-            dir: existing.dir,
-            moving: existing.moving,
+            x: m.peer.sitting && m.peer.seatId ? m.peer.x : existing.x,
+            y: m.peer.sitting && m.peer.seatId ? m.peer.y : existing.y,
+            dir: (m.peer.sitting && m.peer.seatId) || m.peer.pairedAction ? m.peer.dir : existing.dir,
+            moving: (m.peer.sitting && m.peer.seatId) || m.peer.pairedAction ? false : existing.moving,
           });
         } else {
           peers.set(m.peer.id, m.peer);
@@ -328,12 +331,21 @@ export class RoomClient {
         return this.emit("moveRejected", m);
       case "screenRejected":
         return this.emit("screenRejected", m);
+      case "seatRejected":
+        this.updateSelf({ sitting: false, seatId: undefined, seatIndex: undefined });
+        return this.emit("error", m.reason === "occupied" ? "seatOccupied" : "seatTooFar");
+      case "pairInvite":
+        return this.emit("pairInvite", m);
+      case "pairResult":
+        return this.emit("pairResult", m);
       case "sharedNote":
         return this.commit({ sharedNote: m.note });
       case "map":
         return this.commit({ map: m.map });
       case "groupChanged":
         return this.emit("groupChanged", undefined);
+      case "workspaceChanged":
+        return this.emit("workspaceChanged", undefined);
       case "teleported":
         this.updateSelf({ x: m.x, y: m.y, moving: false, sitting: false });
         return this.emit("teleported", m);

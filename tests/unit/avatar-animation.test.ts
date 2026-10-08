@@ -6,15 +6,16 @@ import {
   sampleAvatarAction,
   directionFrom,
 } from "@/shared/avatar-animation";
-import { AVATAR_DIRECTIONS, DEFAULT_AVATAR } from "@/shared/avatar";
+import { AVATAR_DIRECTIONS, DEFAULT_AVATAR, OUTFITS } from "@/shared/avatar";
 import { clientMessageSchema } from "@/shared/protocol";
 import {
   avatarSpriteMirror,
   spriteView,
   AVATAR_ASSET_URLS,
   removeCellDebris,
+  directionalTorsoCell,
 } from "@/client/art/avatar-assets";
-import { avatarNameOffset } from "@/client/art/avatar";
+import { avatarNameOffset, AVATAR_MAP_SCALE } from "@/client/art/avatar";
 import { paintedTopY, fitHeadScale } from "@/client/art/avatar-painted";
 import { readFileSync } from "node:fs";
 
@@ -66,7 +67,7 @@ describe("eight live directions and safe public poses", () => {
   });
   it.each(AVATAR_DIRECTIONS)("keeps the name pill above the full hair silhouette facing %s", (dir) => {
     expect(avatarNameOffset(DEFAULT_AVATAR, dir)).toBeGreaterThanOrEqual(
-      paintedTopY(DEFAULT_AVATAR, dir) * 1.24 + 20,
+      paintedTopY(DEFAULT_AVATAR, dir) * AVATAR_MAP_SCALE + 20,
     );
   });
   it("removes tiny isolated neighboring-cell debris without erasing meaningful detached pieces", () => {
@@ -99,6 +100,17 @@ describe("eight live directions and safe public poses", () => {
     expect(avatarSpriteMirror(DEFAULT_AVATAR, "right", "head")).toBe(true);
     expect(avatarSpriteMirror(DEFAULT_AVATAR, "right", "cloth")).toBe(false);
     expect(avatarSpriteMirror({ ...DEFAULT_AVATAR, accessory: "hijab" }, "right", "head")).toBe(false);
+  });
+  it.each(OUTFITS)("never reuses the front %s torso for a turned articulated avatar", (outfit) => {
+    const a = { ...DEFAULT_AVATAR, outfit },
+      column = OUTFITS.indexOf(outfit);
+    expect(directionalTorsoCell(a, "down")).toBe(column);
+    expect(directionalTorsoCell(a, "down-right")).toBe(8 + column);
+    expect(directionalTorsoCell(a, "down-left")).toBe(8 + column);
+    expect(directionalTorsoCell(a, "right")).toBe(16 + column);
+    expect(directionalTorsoCell(a, "left")).toBe(16 + column);
+    for (const dir of ["up", "up-left", "up-right"] as const)
+      expect(directionalTorsoCell(a, dir)).toBe(24 + column);
   });
   it("whitelists public cosmetic actions and does not replace the activity heartbeat", () => {
     expect(clientMessageSchema.safeParse({ t: "activity" }).success).toBe(true);

@@ -34,6 +34,8 @@ import { avatarCondition } from "@/shared/avatar-state";
 import { LifeHud } from "./LifeHud";
 import { AvatarActions } from "./AvatarActions";
 import { directionFrom, type AvatarAction } from "@/shared/avatar-animation";
+import { seatPose } from "@/shared/seats";
+import { furnitureAt } from "@/client/art/environment-assets";
 
 const noSub = () => () => {};
 const NO_AUDIBLE: never[] = [];
@@ -154,6 +156,14 @@ export function RoomStage({
     lastLockedHint: 0,
   });
   const [hint, setHint] = useState<{ obj: MapObject; pinned: boolean } | null>(null);
+  useEffect(() => {
+    if (!self?.pairedAction) return;
+    state.current.path = [];
+    state.current.keys.clear();
+    state.current.keyMoving = false;
+    state.current.target = null;
+    state.current.onArrive = null;
+  }, [self?.pairedAction]);
   const hintObjRef = useRef<MapObject | null>(null);
   useEffect(() => {
     hintObjRef.current = hint?.obj ?? null;
@@ -463,6 +473,7 @@ export function RoomStage({
         dpr,
         cam: st.camera,
         time,
+        serverTime: Date.now() + s.clockOffset,
         people,
         self: selfView,
         target: st.target,
@@ -526,11 +537,7 @@ export function RoomStage({
     }
     return null;
   };
-  const objectAt = (wx: number, wy: number) =>
-    map.objects.find(
-      (o) =>
-        o.label && wx >= o.x && wx < o.x + o.w && wy >= o.y - (o.kind === "desk" ? 0.6 : 0) && wy < o.y + o.h,
-    );
+  const objectAt = (wx: number, wy: number) => furnitureAt(map, wx * TILE, wy * TILE);
 
   const onTap = (wx: number, wy: number) => {
     setEmoteOpen(false);
@@ -656,25 +663,21 @@ export function RoomStage({
       walkTo({ x: obj.x + Math.floor(obj.w / 2), y: obj.y }, () => {
         // Sit facing the way the seat faces (desk chairs toward the desk, sofas toward the room),
         // not whichever way the last step of the walk happened to point.
-        const me = room.self;
-        const deskAbove = map.objects.find(
-          (o) =>
-            ["desk", "gamingDesk", "table", "counter"].includes(o.kind) &&
-            o.y + o.h === obj.y &&
-            o.x <= obj.x &&
-            o.x + o.w > obj.x,
+        const peers = [...room.getSnapshot().peers.values()];
+        const slots = obj.kind === "sofa" ? Math.max(1, Math.floor(obj.w / 1.4)) : 1;
+        const slot = Array.from({ length: slots }, (_, i) => i).find(
+          (i) =>
+            !peers.some(
+              (p) => p.id !== room.self?.id && p.sitting && p.seatId === obj.id && (p.seatIndex ?? 0) === i,
+            ),
         );
-        const dir = obj.facing ?? (obj.kind === "chair" && deskAbove ? "up" : "down");
-        // The illustrated maps paint desk chairs centered under their desk (the chair tile is half a
-        // tile to the left), so sit there; the native renderer draws the chair on its own tile.
-        const illustrated = canvasRef.current?.dataset.renderer === "illustrated";
-        const seat =
-          me && illustrated && deskAbove && obj.kind === "chair" && !obj.facing
-            ? { x: deskAbove.x + deskAbove.w / 2, y: obj.y + 0.6 }
-            : me && { x: me.x, y: me.y };
-        if (seat) room.send({ t: "move", x: seat.x, y: seat.y, dir, moving: false });
-        room.send({ t: "sit", sitting: true });
-        room.updateSelf({ sitting: true, dir, ...seat });
+        if (slot === undefined) {
+          toast({ text: t("seat.occupied"), kind: "error" });
+          return;
+        }
+        const seat = seatPose(map, obj, slot);
+        room.send({ t: "sit", sitting: true, objectId: obj.id, seatIndex: slot });
+        room.updateSelf({ sitting: true, moving: false, ...seat });
         toast({ text: t("action.satDown") });
       });
       return;

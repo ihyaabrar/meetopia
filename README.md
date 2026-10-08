@@ -46,13 +46,18 @@ Spesifikasi lengkap ada di [`docs/PRD.md`](docs/PRD.md), lengkap dengan centang 
 
 ### Ruangan
 
-- **Tiga jenis ruangan**, dipilih saat membuat workspace dan bisa diganti kapan saja di pengaturan workspace:
+- **Lima jenis ruangan**, dipilih saat membuat workspace dan bisa diganti kapan saja di pengaturan workspace:
 
-  | Jenis            | Cocok untuk                    | Kelebihan                                                                                     |
-  | ---------------- | ------------------------------ | --------------------------------------------------------------------------------------------- |
-  | **Kantor**       | Tim kerja                      | Area kerja dengan meja dan catatan pribadi, ruang rapat kedap suara yang bisa dikunci, lounge |
-  | **Rumah**        | Keluarga dan teman dekat       | Ruang keluarga dengan TV dan speaker, dua kamar kedap suara, dapur, meja makan, teras kebun   |
-  | **Gaming house** | Main bareng dan komunitas game | Ruang main yang otomatis jadi satu party suara, ruang strategi terkunci, arcade, snack bar    |
+  | Jenis              | Cocok untuk                    | Kelebihan                                                                                     |
+  | ------------------ | ------------------------------ | --------------------------------------------------------------------------------------------- |
+  | **Kantor**         | Tim kerja                      | Area kerja dengan meja dan catatan pribadi, ruang rapat kedap suara yang bisa dikunci, lounge |
+  | **Rumah**          | Keluarga dan teman dekat       | Ruang keluarga dengan TV dan speaker, dua kamar kedap suara, dapur, meja makan, teras kebun   |
+  | **Gaming house**   | Main bareng dan komunitas game | Ruang main yang otomatis jadi satu party suara, ruang strategi terkunci, arcade, snack bar    |
+  | **Studio kreatif** | Tim kreatif dan produksi       | Papan ide, meja kolaborasi, kamera, green screen dan area diskusi                             |
+  | **Rooftop tropis** | Kerja santai dan komunitas     | Pergola, area kerja, diskusi, barbeku dan tanaman tropis                                      |
+
+- **Lingkungan berlapis:** lantai/dinding menjadi latar; 36 jenis furnitur dan peralatan memakai sprite mandiri. Avatar duduk menurut arah kursi, tertutup meja/sandaran sesuai kedalaman, dan kursi yang terisi ditolak server.
+- **Editor furnitur untuk admin:** tambah, drag, posisi X/Y, putar, hapus, undo, simpan; pemeriksaan dinding/pintu, penghalang dan akses ruang. Pilihan ambience, palet furnitur, serta ukuran kecil/sedang/besar tersimpan per workspace. Perubahan ukuran/tema mengatur ulang tata ruang setelah konfirmasi.
 
 - **Kunci ruangan dengan PIN.** Orang pertama yang masuk ruang yang bisa dikunci menjadi pemegang ruangan dan boleh memasang PIN. Orang lain harus memasukkan PIN (atau mengetuk) untuk masuk. Saat pemegang keluar, perannya pindah ke orang lain yang masih di dalam; kalau ruangan kosong, kunci direset. PIN hanya disimpan sebagai hash di server dan tidak pernah dikirim ke klien.
 - **Speaker musik dengan jarak.** Putar stasiun bawaan (Lo-fi santai, Ambient fokus, Piano sore, Kafe 8-bit), video YouTube, atau tautan audio https. Suara penuh sampai 2,5 tile, makin pelan saat menjauh, hilang di 12 tile, teredam 35% di balik dinding, dan tidak tembus ke ruang kedap suara. Posisi lagu dihitung dari jam server, jadi semua orang mendengar bagian yang sama.
@@ -81,6 +86,8 @@ Spesifikasi lengkap ada di [`docs/PRD.md`](docs/PRD.md), lengkap dengan centang 
 - **Catatan bergaya Notion**: dokumen berbasis blok dengan paragraf, tiga level judul, ceklis, daftar berpoin dan bernomor, kutipan, callout, kode, dan garis pemisah. Pintasan ala markdown di awal baris (`# `, `[] `, `- `, `1. `, `> `, `! `, ` ``` `, `---`). Ceklis menampilkan progres, dan catatan bisa dibuka lebar.
 - Catatan pribadi di meja kerja dan catatan bersama di papan tulis. Catatan lama berupa teks biasa otomatis diubah menjadi blok.
 - **Anggota**: cari anggota, lihat siapa yang sedang online dan kapan terakhir aktif.
+- **Agenda, tugas, file & tautan:** tanggal/waktu lokal, ceklis tugas, pencarian dan sinkronisasi antar pengguna. Berkas maksimal 2 MB, kuota workspace 20 MB, unduhan hanya untuk anggota.
+- **Gestur berpasangan:** jabat tangan, high five dan fist bump memerlukan persetujuan rekan di dekatmu; arah dan waktu animasi disinkronkan server.
 
 ### Workspace dan undangan
 
@@ -93,6 +100,7 @@ Spesifikasi lengkap ada di [`docs/PRD.md`](docs/PRD.md), lengkap dengan centang 
 ### Personalisasi
 
 - **Avatar chibi** yang bisa diatur (warna kulit, bentuk badan, wajah, gaya dan warna rambut, warna baju), dengan animasi jalan, napas, dan kedip dari depan, samping, dan belakang.
+- **44 aksi kosmetik dalam delapan arah** melalui rig avatar yang bisa dikustomisasi, dengan props kerja raster dan preview reduced-motion. Ini bukan paket 44 × 8 arah frame hand-drawn lengkap. Status kebutuhan diri tetap privat.
 - **Status khusus** dengan teks dan waktu kedaluwarsa, plus **kartu profil** saat mengklik seseorang.
 - **Tema** gelap, terang, atau ikuti sistem, dengan pilihan kontras tinggi dan kurangi gerakan.
 - **Dua bahasa**: Indonesia dan Inggris.

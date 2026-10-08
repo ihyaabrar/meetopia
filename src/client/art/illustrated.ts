@@ -1,7 +1,8 @@
 import type { MapData } from "@/shared/map";
 import { buildTemplate, isTemplateId } from "@/shared/templates";
 
-/** Versioned, local assets: UI/avatars are never baked into the environment. */
+/** Archived full-map concept art. Runtime worlds now use environment-assets.ts + world.ts layers.
+ * Retained for reference and legacy exports, never used as an interactive room background. */
 export const ILLUSTRATED_MAPS = {
   office: "/maps/illustrated/office-v2.webp",
   home: "/maps/illustrated/home-v1.webp",

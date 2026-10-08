@@ -10,7 +10,7 @@ const bundle = await build({
     resolveDir: process.cwd(),
     contents: `
       import { Scene } from './src/client/scene';
-      import { drawAvatar, avatarNameOffset } from './src/client/art/avatar';
+      import { drawAvatar, avatarNameOffset, AVATAR_MAP_SCALE } from './src/client/art/avatar';
       import { paintedTopY, paintedHeadMetrics } from './src/client/art/avatar-painted';
       import { loadAvatarAssets, unifiedBodySprite } from './src/client/art/avatar-assets';
       import { DEFAULT_AVATAR, AVATAR_DIRECTIONS, BODY_SHAPES, HAIR_STYLES } from './src/shared/avatar';
@@ -48,7 +48,7 @@ const bundle = await build({
           const canvas=document.createElement('canvas');canvas.width=200;canvas.height=200;
           const ctx=canvas.getContext('2d');
           const time=frame/8;
-          drawAvatar(ctx,{...DEFAULT_AVATAR,body:'tall',hair},100,175,1.24,{dir,activity,walk:0,time,staticPose:false});
+          drawAvatar(ctx,{...DEFAULT_AVATAR,body:'tall',hair},100,175,AVATAR_MAP_SCALE,{dir,activity,walk:0,time,staticPose:false});
           const pixels=ctx.getImageData(0,0,200,200).data;
           let started=false, gap=0;
           for (let y=0;y<161;y++) {
@@ -60,7 +60,7 @@ const bundle = await build({
         }
         for (const body of BODY_SHAPES) for (const dir of AVATAR_DIRECTIONS) {
           const a = {...DEFAULT_AVATAR, body};
-          if (avatarNameOffset(a,dir) < paintedTopY(a,dir)*1.24+18) throw Error('Name overlaps hair: '+body+' '+dir);
+          if (avatarNameOffset(a,dir) < paintedTopY(a,dir)*AVATAR_MAP_SCALE+18) throw Error('Name overlaps hair: '+body+' '+dir);
         }
         for (const bottom of ['trousers', 'cargo']) for (const condition of ['normal','hungry','tired']) {
           const avatar = {...DEFAULT_AVATAR, body:'tall', hair:'spiky', hairColor:'#2c70ac', outfit:'jacket', bodyColor:'#297f7d', accessory:'glasses', bottom, shoes:'boots'};

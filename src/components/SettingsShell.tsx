@@ -38,19 +38,55 @@ export function SettingsShell<K extends string>({
 }) {
   const t = useT();
   const ref = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     ref.current?.querySelector<HTMLElement>(".settings-nav button[aria-current='true']")?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeRef.current();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const nodes = [
+        ...(ref.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex="0"]',
+        ) ?? []),
+      ].filter((el) => el.offsetParent !== null && !el.closest('[data-visible="false"]'));
+      const first = nodes[0],
+        last = nodes.at(-1);
+      if (!first) {
+        e.preventDefault();
+        ref.current?.focus();
+        return;
+      }
+      if (
+        e.shiftKey &&
+        (document.activeElement === first || !ref.current?.contains(document.activeElement))
+      ) {
+        e.preventDefault();
+        last?.focus();
+      } else if (
+        !e.shiftKey &&
+        (document.activeElement === last || !ref.current?.contains(document.activeElement))
+      ) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
       prev?.focus();
     };
-  }, [onClose]);
+  }, []);
   const current = sections.find((s) => s.id === active);
   return (
-    <div className="settings" role="dialog" aria-modal="true" aria-label={title} ref={ref}>
+    <div className="settings" role="dialog" aria-modal="true" aria-label={title} ref={ref} tabIndex={-1}>
       <nav className="settings-nav" aria-label={title}>
         <div className="settings-nav-inner">
           {sections.map((s) => (

@@ -14,6 +14,8 @@ import { TemplatePicker } from "@/components/TemplatePicker";
 import { isTemplateId, type TemplateId } from "@/shared/templates";
 import { DECAY_SPEEDS, type LifeSettings } from "@/shared/life";
 import { Toggle } from "./UserSettings";
+import { DEFAULT_APPEARANCE, type MapData } from "@/shared/map";
+import { FurnitureEditor } from "./FurnitureEditor";
 
 interface Invite {
   id: string;
@@ -24,7 +26,8 @@ interface Invite {
   revoked: boolean;
 }
 
-export type GroupSection = "overview" | "room" | "life" | "channels" | "members" | "invites" | "danger";
+export type GroupSection =
+  "overview" | "room" | "editor" | "life" | "channels" | "members" | "invites" | "danger";
 
 /**
  * Pengaturan grup dengan menu: ringkasan (ikon, nama, deskripsi), ruangan (audio jarak), kanal,
@@ -52,6 +55,7 @@ export function GroupSettings({
     ? [
         { id: "overview", label: t("gs.overview"), icon: "edit", group: detail.group.name },
         { id: "room", label: t("gs.room"), icon: "door" },
+        { id: "editor", label: "Editor furnitur", icon: "edit" },
         { id: "life", label: t("gs.life"), icon: "coffee" },
         { id: "channels", label: t("gs.channels"), icon: "hash" },
         { id: "members", label: t("gs.members"), icon: "users", group: t("gs.people") },
@@ -110,6 +114,12 @@ export function GroupSettings({
       )}
       {section === "overview" && <Overview {...ctx} />}
       {section === "room" && <RoomSection {...ctx} />}
+      {section === "editor" && (
+        <FurnitureEditor
+          groupId={detail.group.id}
+          onSaved={() => void run(async () => {}, t("common.saved"))}
+        />
+      )}
       {section === "life" && <LifeSection {...ctx} />}
       {section === "channels" && <Channels {...ctx} />}
       {section === "members" && <Members {...ctx} />}
@@ -200,13 +210,79 @@ function RoomSection({ detail, run }: Ctx) {
   const changed = JSON.stringify(audio) !== JSON.stringify(detail.audio);
   const current: TemplateId = isTemplateId(detail.template) ? detail.template : "office";
   const [template, setTemplate] = useState<TemplateId>(current);
+  const [map, setMap] = useState<MapData | null>(null);
+  const [appearance, setAppearance] = useState(DEFAULT_APPEARANCE);
+  const [saving, setSaving] = useState(false);
+  const [mapError, setMapError] = useState(false),
+    [retry, setRetry] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setMapError(false);
+    void api<{ map: MapData }>(`/api/groups/${detail.group.id}/map`)
+      .then((r) => {
+        if (active) {
+          setMap(r.map);
+          setAppearance(r.map.appearance ?? DEFAULT_APPEARANCE);
+        }
+      })
+      .catch(() => {
+        if (active) setMapError(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [detail.group.id, detail.template, retry]);
+  const appearanceChanged =
+    map && JSON.stringify(appearance) !== JSON.stringify(map.appearance ?? DEFAULT_APPEARANCE);
   return (
     <>
       <h3 className="settings-h3" style={{ marginTop: 0 }}>
         {t("tpl.choose")}
       </h3>
       <p className="hint">{t("tpl.changeHint")}</p>
-      <TemplatePicker value={template} onChange={setTemplate} current={current} />
+      {mapError && (
+        <p className="error-text" role="alert">
+          Map gagal dimuat.{" "}
+          <button className="btn secondary small" onClick={() => setRetry((v) => v + 1)}>
+            Coba lagi
+          </button>
+        </p>
+      )}
+      <TemplatePicker
+        value={template}
+        onChange={setTemplate}
+        current={current}
+        appearance={appearance}
+        onAppearance={setAppearance}
+      />
+      {appearanceChanged && (
+        <div className="save-bar" data-visible="true">
+          <span className="grow">Suasana, furnitur & ukuran belum disimpan</span>
+          <button
+            className="btn small"
+            disabled={saving || template !== current}
+            onClick={async () => {
+              if (
+                !map ||
+                (appearance.roomSize !== (map.appearance ?? DEFAULT_APPEARANCE).roomSize &&
+                  !confirm("Mengubah ukuran akan mengatur ulang posisi furnitur. Lanjutkan?"))
+              )
+                return;
+              setSaving(true);
+              await run(async () => {
+                const r = await api<{ map: MapData }>(`/api/groups/${detail.group.id}/map`, {
+                  method: "PATCH",
+                  body: { appearance, expectedVersion: map.version },
+                });
+                setMap(r.map);
+              }, t("common.saved"));
+              setSaving(false);
+            }}
+          >
+            Simpan suasana
+          </button>
+        </div>
+      )}
       {template !== current && (
         <div className="row" style={{ marginTop: 10 }}>
           <span className="spacer" />

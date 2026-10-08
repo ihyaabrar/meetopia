@@ -4,6 +4,7 @@ import { useT } from "@/i18n/client";
 import { TEMPLATE_IDS, TEMPLATE_PERKS, buildTemplate, type TemplateId } from "@/shared/templates";
 import { Icon, type IconName } from "./Icon";
 import { MapPreview } from "./MapPreview";
+import { AMBIENCES, FURNITURE_STYLES, ROOM_SIZES, type MapAppearance } from "@/shared/map";
 
 export const WORLD_ICONS: Record<TemplateId, IconName> = {
   office: "briefcase",
@@ -19,12 +20,16 @@ export function TemplatePicker({
   onChange,
   current,
   compact = false,
+  appearance,
+  onAppearance,
 }: {
   value: TemplateId;
   onChange: (id: TemplateId) => void;
   current?: TemplateId;
   /** Ringkas untuk modal buat workspace: hanya kartu dunia + deskripsi pilihan, tanpa galeri lengkap. */
   compact?: boolean;
+  appearance?: MapAppearance;
+  onAppearance?: (v: MapAppearance) => void;
 }) {
   const t = useT();
   const [query, setQuery] = useState("");
@@ -195,7 +200,12 @@ export function TemplatePicker({
               <p>{t(`tpl.${value}.desc`)}</p>
             </div>
           </div>
-          <MapPreview id={value} ambience={ambience} className="gallery-large-preview" />
+          <MapPreview
+            id={value}
+            ambience={ambience}
+            appearance={appearance}
+            className="gallery-large-preview"
+          />
           <span className="gallery-area-count">
             <Icon name="door" size={14} />
             {t("gallery.areas", { n: buildTemplate(value).zones.length })}
@@ -213,19 +223,64 @@ export function TemplatePicker({
           <div className="gallery-ambience">
             <b>{t("gallery.lightPreview")}</b>
             <div>
-              {["bright", "normal", "dim", "night"].map((v) => (
+              {AMBIENCES.map((v) => (
                 <button
                   type="button"
                   className="chip"
                   key={v}
-                  aria-pressed={ambience === v}
-                  onClick={() => setAmbience(v)}
+                  aria-pressed={(appearance?.ambience ?? ambience) === v}
+                  onClick={() =>
+                    appearance && onAppearance ? onAppearance({ ...appearance, ambience: v }) : setAmbience(v)
+                  }
                 >
                   {t(`gallery.ambience.${v}`)}
                 </button>
               ))}
             </div>
-            <small className="hint">{t("gallery.previewOnly")}</small>
+            {appearance && onAppearance ? (
+              <>
+                <b>Palet material furnitur</b>
+                <div>
+                  {FURNITURE_STYLES.map((v) => (
+                    <button
+                      type="button"
+                      className="chip"
+                      key={v}
+                      aria-pressed={appearance.furnitureStyle === v}
+                      onClick={() => onAppearance({ ...appearance, furnitureStyle: v })}
+                    >
+                      {
+                        {
+                          warm: "Kayu hangat",
+                          modern: "Modern",
+                          industrial: "Industrial",
+                          tropical: "Tropis",
+                        }[v]
+                      }
+                    </button>
+                  ))}
+                </div>
+                <b>Ukuran ruang</b>
+                <div>
+                  {ROOM_SIZES.map((v) => (
+                    <button
+                      type="button"
+                      className="chip"
+                      key={v}
+                      aria-pressed={appearance.roomSize === v}
+                      onClick={() => onAppearance({ ...appearance, roomSize: v })}
+                    >
+                      {{ small: "Kecil", medium: "Sedang", large: "Besar" }[v]}
+                    </button>
+                  ))}
+                </div>
+                <small className="hint">
+                  Ukuran mengatur ulang tata letak. Simpan untuk menerapkan ke semua anggota.
+                </small>
+              </>
+            ) : (
+              <small className="hint">{t("gallery.previewOnly")}</small>
+            )}
           </div>
         </aside>
       </div>

@@ -5,8 +5,8 @@
  */
 import { TILE, tileAt, type FloorKind, type MapData, type MapObject } from "@/shared/map";
 import { C, hash } from "./common";
-import { drawObject, isTall, SPRITE_PAD_TOP, SPRITE_PAD_X } from "./objects";
-import { illustrationFor, loadIllustration } from "./illustrated";
+import { drawObject, SPRITE_PAD_TOP, SPRITE_PAD_X } from "./objects";
+import { drawFurniture, drawFloorTexture, loadEnvironmentAssets } from "./environment-assets";
 import { ICON_PATHS } from "@/shared/icons";
 import { zoneIcon } from "@/shared/zone-icons";
 
@@ -89,6 +89,7 @@ function drawPlanks(
 }
 
 function drawFloorTile(ctx: CanvasRenderingContext2D, kind: FloorKind, tx: number, ty: number) {
+  if (drawFloorTexture(ctx, kind, tx, ty)) return;
   const x = tx * T;
   const y = ty * T;
   switch (kind) {
@@ -371,13 +372,13 @@ function drawZoneDecor(ctx: CanvasRenderingContext2D, map: MapData, zoneLabel: (
   }
 }
 
-export function makeSprite(o: MapObject): Sprite {
+export function makeSprite(o: MapObject, map?: MapData): Sprite {
   const c = document.createElement("canvas");
   c.width = o.w * T + SPRITE_PAD_X * 2;
   c.height = o.h * T + SPRITE_PAD_TOP + 8;
   const ctx = c.getContext("2d")!;
   ctx.translate(SPRITE_PAD_X - o.x * T, SPRITE_PAD_TOP - o.y * T);
-  drawObject(ctx, o);
+  if (!drawFurniture(ctx, o, map)) drawObject(ctx, o);
   return {
     canvas: c,
     x: o.x * T - SPRITE_PAD_X,
@@ -396,20 +397,26 @@ export function renderWorld(
   c.width = map.width * T;
   c.height = map.height * T;
   const ctx = c.getContext("2d")!;
-  if (map.template === "rooftop") drawRooftopSky(ctx, c.width, c.height);
-  for (let ty = 0; ty < map.height; ty++)
-    for (let tx = 0; tx < map.width; tx++) {
-      const k = tileAt(map, tx, ty);
-      if (k === "wall") continue;
-      drawFloorTile(ctx, floorKindAt(map, tx, ty), tx, ty);
-      if (k === "door") {
-        ctx.fillStyle = "rgba(169,138,99,0.45)";
-        ctx.fillRect(tx * T + 2, ty * T + 2, T - 4, T - 4);
+  const paintFloor = () => {
+    ctx.clearRect(0, 0, c.width, c.height);
+    if (map.template === "rooftop") drawRooftopSky(ctx, c.width, c.height);
+    for (let ty = 0; ty < map.height; ty++)
+      for (let tx = 0; tx < map.width; tx++) {
+        const k = tileAt(map, tx, ty);
+        if (k === "wall") continue;
+        drawFloorTile(ctx, floorKindAt(map, tx, ty), tx, ty);
+        if (k === "door") {
+          ctx.fillStyle = "rgba(169,138,99,0.45)";
+          ctx.fillRect(tx * T + 2, ty * T + 2, T - 4, T - 4);
+        }
       }
-    }
-  drawWindowLight(ctx, map);
-  drawWallShadows(ctx, map);
-  drawWalls(ctx, map);
+    drawWindowLight(ctx, map);
+    drawWallShadows(ctx, map);
+    drawWalls(ctx, map);
+    // Rugs are ground decorations, not interaction/occlusion sprites.
+    for (const o of map.objects) if (o.kind === "rug") drawObject(ctx, o);
+  };
+  paintFloor();
 
   const sprites: Sprite[] = [];
   const lights: Light[] = [];
@@ -417,8 +424,7 @@ export function renderWorld(
     (a, b) => (a.kind === "rug" ? -1 : 0) - (b.kind === "rug" ? -1 : 0) || a.y - b.y,
   );
   for (const o of order) {
-    if (isTall(o.kind)) sprites.push(makeSprite(o));
-    else drawObject(ctx, o);
+    if (o.kind !== "rug") sprites.push(makeSprite(o, map));
     if (o.kind === "lamp") lights.push({ x: (o.x + 0.5) * T, y: o.y * T - 6, r: 110, color: "255,214,140" });
     if (o.kind === "tv") lights.push({ x: (o.x + o.w / 2) * T, y: o.y * T + 4, r: 70, color: "150,210,255" });
     if (o.kind === "arcade")
@@ -440,15 +446,11 @@ export function renderWorld(
     illustrated: false,
     ready: Promise.resolve(),
   };
-  const asset = options.illustration === false ? null : illustrationFor(map);
-  if (asset) {
-    layers.ready = loadIllustration(asset).then((image) => {
-      if (!image) return;
-      ctx.clearRect(0, 0, c.width, c.height);
-      ctx.drawImage(image, 0, 0, c.width, c.height);
-      // Furniture and warm lighting already exist in the illustration; no double rendering.
-      layers.sprites = [];
-      layers.lights = [];
+  if (options.illustration !== false) {
+    layers.ready = loadEnvironmentAssets().then((loaded) => {
+      if (!loaded) return;
+      paintFloor();
+      layers.sprites = order.filter((o) => o.kind !== "rug").map((o) => makeSprite(o, map));
       layers.illustrated = true;
     });
   }

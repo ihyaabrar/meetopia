@@ -9,6 +9,11 @@ import type { AvatarCondition } from "@/shared/avatar";
 import { AVATAR_MAP_SCALE, drawAvatar, avatarNameOffset } from "./art/avatar";
 import { renderWorld, type WorldLayers } from "./art/world";
 import { INK } from "./art/common";
+import { drawFurniture } from "./art/environment-assets";
+import { AVATAR_RENDER_METRICS } from "@/shared/avatar-metrics";
+import { attachedSurface } from "@/shared/workstation";
+import { workstationHandTargets, workstationLayout } from "./art/workstation-assets";
+import { paintedAvatarReady } from "./art/avatar-assets";
 
 export interface PersonView {
   p: Presence;
@@ -29,6 +34,7 @@ export interface SceneFrame {
   dpr: number;
   cam: { x: number; y: number; zoom: number };
   time: number;
+  serverTime?: number;
   people: PersonView[];
   self: PersonView | null;
   target: { x: number; y: number } | null;
@@ -50,7 +56,7 @@ export interface SceneFrame {
 
 const T = TILE;
 const STATUS_COLOR = { active: "#00d69b", busy: "#d9584c", meeting: "#8f6fd1", away: "#d99a2b" } as const;
-const FOOT = 8; // offset kaki avatar dari pusat tile (px)
+const FOOT = AVATAR_RENDER_METRICS.footOffset;
 
 interface Timed {
   x: number;
@@ -248,12 +254,30 @@ export class Scene {
 
     // Sprite tinggi + avatar, diurutkan dari atas ke bawah
     type Item = { y: number; draw: () => void };
-    const items: Item[] = this.layers.sprites.map((s) => ({
-      y: s.sortY,
-      draw: () => ctx.drawImage(s.canvas, s.x, s.y),
-    }));
-    for (const v of f.people)
-      items.push({ y: v.y * T + FOOT, draw: () => this.drawPerson(ctx, v, f.reducedMotion ? 0 : time) });
+    const items: Item[] = this.layers.sprites.map((s) => {
+      const seated = f.people.find((v) => v.p.sitting && v.p.seatId === s.obj.id);
+      return { y: seated ? seated.y * T - 12 : s.sortY, draw: () => ctx.drawImage(s.canvas, s.x, s.y) };
+    });
+    for (const v of f.people) {
+      // Sort seated people at the physical seat, before the front edge of their desk/chair.
+      items.push({
+        y: v.y * T + (v.p.sitting ? 0 : FOOT),
+        draw: () => this.drawPerson(ctx, v, f.reducedMotion ? 0 : time, f.serverTime),
+      });
+      const seat = v.p.sitting && this.map.objects.find((o) => o.id === v.p.seatId);
+      if (seat) items.push({ y: v.y * T + FOOT + 0.1, draw: () => drawFurniture(ctx, seat, this.map, true) });
+      const workstation = seat ? attachedSurface(this.map, seat) : null;
+      if (
+        workstation?.surface.kind === "desk" &&
+        workstation.dir !== "up" &&
+        paintedAvatarReady() &&
+        workstationLayout(workstation.surface, this.map)
+      )
+        items.push({
+          y: (workstation.surface.y + workstation.surface.h) * T + 0.2,
+          draw: () => this.drawPerson(ctx, v, f.reducedMotion ? 0 : time, f.serverTime, "upper"),
+        });
+    }
     items.sort((a, b) => a.y - b.y);
     for (const it of items) it.draw();
 
@@ -291,6 +315,17 @@ export class Scene {
     }
     ctx.globalAlpha = 1;
     ctx.restore();
+
+    const ambience = this.map.appearance?.ambience;
+    if (ambience && ambience !== "normal") {
+      ctx.fillStyle =
+        ambience === "night"
+          ? "rgba(14,22,58,.32)"
+          : ambience === "dim"
+            ? "rgba(9,23,28,.18)"
+            : "rgba(255,239,186,.07)";
+      ctx.fillRect(0, 0, this.map.width * T, this.map.height * T);
+    }
 
     // Sorotan ruang privat: area lain diredupkan
     if (f.privateZone) {
@@ -473,12 +508,34 @@ export class Scene {
     ctx.stroke();
   }
 
-  private drawPerson(ctx: CanvasRenderingContext2D, v: PersonView, time: number) {
+  private drawPerson(
+    ctx: CanvasRenderingContext2D,
+    v: PersonView,
+    time: number,
+    serverTime = Date.now(),
+    layer?: "upper",
+  ) {
     const px = v.x * T;
     const py = v.y * T + FOOT;
     const p = v.p;
+    const seat = p.sitting && this.map.objects.find((o) => o.id === p.seatId);
+    const surface = seat ? attachedSurface(this.map, seat)?.surface : undefined;
+    const targets = surface?.kind === "desk" ? workstationHandTargets(surface, this.map) : null;
+    const workstationHands =
+      targets && p.avatarAction === "type"
+        ? {
+            left: [
+              (targets.left[0] - px) / AVATAR_MAP_SCALE,
+              (targets.left[1] - py) / AVATAR_MAP_SCALE,
+            ] as const,
+            right: [
+              (targets.right[0] - px) / AVATAR_MAP_SCALE,
+              (targets.right[1] - py) / AVATAR_MAP_SCALE,
+            ] as const,
+          }
+        : undefined;
     // Cincin sedang bicara
-    if (v.speaking > 0.08 && p.media.mic) {
+    if (!layer && v.speaking > 0.08 && p.media.mic) {
       const k = Math.min(1, v.speaking);
       ctx.save();
       ctx.strokeStyle = `rgba(79,174,99,${0.5 + k * 0.5})`;
@@ -487,13 +544,13 @@ export class Scene {
       ctx.ellipse(px, py, 17 + k * 4, 6.5 + k * 1.5, 0, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
-    } else if (p.status === "busy") {
+    } else if (!layer && p.status === "busy") {
       ctx.strokeStyle = "rgba(210,85,74,0.75)";
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.ellipse(px, py, 17, 6.5, 0, 0, Math.PI * 2);
       ctx.stroke();
-    } else if (v.isSelf) {
+    } else if (!layer && v.isSelf) {
       ctx.strokeStyle = "rgba(38,235,174,0.85)";
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -503,9 +560,11 @@ export class Scene {
     ctx.globalAlpha = p.status === "away" ? 0.55 : 1;
     drawAvatar(ctx, p.avatar, px, py, AVATAR_MAP_SCALE, {
       dir: p.dir,
+      layer,
+      workstationHands,
       walk: v.phase,
       sitting: p.sitting,
-      time,
+      time: p.pairedAction && time !== 0 ? Math.max(0, (serverTime - p.pairedAction.startedAt) / 1000) : time,
       seed: v.seed,
       condition: v.condition,
       staticPose: time === 0,
@@ -534,7 +593,7 @@ export class Scene {
                             : "idle",
     });
     ctx.globalAlpha = 1;
-    if (p.status === "away") {
+    if (!layer && p.status === "away") {
       // "zzz" melayang
       ctx.fillStyle = "rgba(43,38,35,0.7)";
       ctx.font = "700 10px Outfit, system-ui, sans-serif";

@@ -22,17 +22,53 @@ export function Modal({
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     const first = ref.current?.querySelector<HTMLElement>("input, select, textarea, button");
     first?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeRef.current();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const focusable = [
+        ...(ref.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex="0"]',
+        ) ?? []),
+      ].filter((el) => el.offsetParent !== null);
+      const first = focusable[0],
+        last = focusable.at(-1);
+      if (!first) {
+        e.preventDefault();
+        ref.current?.focus();
+        return;
+      }
+      if (
+        e.shiftKey &&
+        (document.activeElement === first || !ref.current?.contains(document.activeElement))
+      ) {
+        e.preventDefault();
+        last?.focus();
+      } else if (
+        !e.shiftKey &&
+        (document.activeElement === last || !ref.current?.contains(document.activeElement))
+      ) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
       prev?.focus();
     };
-  }, [onClose]);
+  }, []);
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
@@ -41,6 +77,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        tabIndex={-1}
       >
         {!bare && <h2>{title}</h2>}
         {!bare && sub && <p className="sub">{sub}</p>}

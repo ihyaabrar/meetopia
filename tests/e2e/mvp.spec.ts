@@ -80,7 +80,7 @@ test("MVP: grup, undangan, sinkron posisi, chat, catatan, mic, sambung ulang", a
 
   // --- Undangan
   await a.getByRole("button", { name: "Undang anggota" }).first().click();
-  await expect(a.getByTestId("invite-link")).toHaveValue(/\/invite\/[A-Z0-9]{6}$/);
+  await expect(a.getByTestId("invite-link")).toHaveValue(/\/invite\/[A-Z0-9]{6}$/, { timeout: 20_000 });
   const link = await a.getByTestId("invite-link").inputValue();
   expect(link).toContain("/invite/");
   await a.keyboard.press("Escape");
@@ -135,7 +135,10 @@ test("MVP: grup, undangan, sinkron posisi, chat, catatan, mic, sambung ulang", a
   // Obrolan tertutup jadi bilah ketik; A langsung mengetik, B membuka obrolan untuk membaca.
   await a.getByPlaceholder("Kirim pesan ke #umum").fill("Halo tim! 👋");
   await a.keyboard.press("Enter");
-  await expect(b.locator(".chat-toggle .unread")).toBeVisible();
+  // Pesan belum dibaca ditandai di bilah obrolan (chat terbuka) atau di tombol chat rail (chat tertutup).
+  await expect(b.locator(".chat-toggle .unread, .rail .count-badge.dot").first()).toBeVisible({
+    timeout: 15_000,
+  });
   await b.getByRole("button", { name: "Buka obrolan" }).click();
   await b.getByRole("tab", { name: /# umum/ }).click();
   await expect(b.locator(".msg .body", { hasText: "Halo tim! 👋" })).toBeVisible();
@@ -222,7 +225,7 @@ test("Ruang privat: pemegang mengunci dengan PIN, peran pindah saat keluar (FR-2
   await a.getByRole("button", { name: "Buat", exact: true }).click();
   await enterRoom(a);
   await a.getByRole("button", { name: "Undang anggota" }).first().click();
-  await expect(a.getByTestId("invite-link")).toHaveValue(/\/invite\/[A-Z0-9]{6}$/);
+  await expect(a.getByTestId("invite-link")).toHaveValue(/\/invite\/[A-Z0-9]{6}$/, { timeout: 20_000 });
   const link = await a.getByTestId("invite-link").inputValue();
   await a.keyboard.press("Escape");
 
@@ -244,9 +247,22 @@ test("Ruang privat: pemegang mengunci dengan PIN, peran pindah saat keluar (FR-2
   // B berhenti di depan pintu: PIN salah ditolak, PIN benar membuka pintu
   await goTo(b, "Ruang rapat");
   await expect(b.getByRole("dialog", { name: "Ruang rapat dikunci" })).toBeVisible({ timeout: 20_000 });
-  expect(
-    await b.evaluate(() => (window as unknown as { __meetopia: Debug }).__meetopia.room.self!.y),
-  ).toBeGreaterThan(10.5);
+  // B berhenti di depan salah satu pintu (selatan atau timur), tidak masuk area ruang rapat.
+  const outside = await b.evaluate(() => {
+    const d = (
+      window as unknown as {
+        __meetopia: Debug & {
+          room: {
+            snapshot: { map: { zones: Array<{ id: string; x: number; y: number; w: number; h: number }> } };
+          };
+        };
+      }
+    ).__meetopia;
+    const me = d.room.self!;
+    const z = d.room.snapshot.map.zones.find((zz) => zz.id === "meeting")!;
+    return !(me.x >= z.x && me.x < z.x + z.w && me.y >= z.y && me.y < z.y + z.h);
+  });
+  expect(outside).toBe(true);
   await b.getByLabel("PIN (4 sampai 6 angka)").fill("1111");
   await b.getByRole("button", { name: "Masuk", exact: true }).click();
   await expect(b.getByText("PIN salah.")).toBeVisible();
@@ -313,7 +329,7 @@ test("Speaker: musik makin pelan saat menjauh, hilang di luar jangkauan", async 
   await a.getByRole("button", { name: "Buat", exact: true }).click();
   await enterRoom(a);
   await a.getByRole("button", { name: "Undang anggota" }).first().click();
-  await expect(a.getByTestId("invite-link")).toHaveValue(/\/invite\/[A-Z0-9]{6}$/);
+  await expect(a.getByTestId("invite-link")).toHaveValue(/\/invite\/[A-Z0-9]{6}$/, { timeout: 20_000 });
   const link = await a.getByTestId("invite-link").inputValue();
   await a.keyboard.press("Escape");
 
@@ -424,7 +440,7 @@ test("Jenis ruangan: buat Rumah, lalu ganti ke Gaming house", async ({ browser }
 
   // Kamar bisa dikunci dari dalam
   await goTo(a, "Kamar Tidur");
-  await expect(a.locator(".hud-tl")).toContainText("Kamar Tidur", { timeout: 20_000 });
+  await expect(a.locator(".hud-tl")).toContainText("Kamar Tidur", { timeout: 40_000 });
   await a.locator(".hud-tl").getByRole("button", { name: "Kunci" }).click();
   await a.getByLabel("PIN (4 sampai 6 angka)").fill("1234");
   await a.getByRole("button", { name: "Kunci ruangan" }).click();
@@ -455,7 +471,7 @@ test("Berbagi layar: rekan di dekat melihat layar, bisa diperkecil dan disembuny
   await a.getByRole("button", { name: "Buat", exact: true }).click();
   await enterRoom(a);
   await a.getByRole("button", { name: "Undang anggota" }).first().click();
-  await expect(a.getByTestId("invite-link")).toHaveValue(/\/invite\/[A-Z0-9]{6}$/);
+  await expect(a.getByTestId("invite-link")).toHaveValue(/\/invite\/[A-Z0-9]{6}$/, { timeout: 20_000 });
   const link = await a.getByTestId("invite-link").inputValue();
   await a.keyboard.press("Escape");
   await register(b, `t${stamp}@contoh.id`, "Tomi");

@@ -11,6 +11,8 @@ import {
   unifiedBodySprite,
 } from "./avatar-assets";
 import { groundShadow, INK, rr, shade } from "./common";
+import { drawHeldProp, loadEnvironmentAssets } from "./environment-assets";
+import { AVATAR_RENDER_METRICS } from "@/shared/avatar-metrics";
 
 type AccessoryPainter = (
   ctx: CanvasRenderingContext2D,
@@ -369,9 +371,22 @@ function drawPaintedEyewear(
   }
   ctx.stroke();
 }
-function prop(ctx: CanvasRenderingContext2D, rig: RigPose, a: AvatarConfig) {
+function prop(ctx: CanvasRenderingContext2D, rig: RigPose, a: AvatarConfig, back = false) {
   const p = rig.prop === "none" ? a.prop : rig.prop,
     [hx, hy] = rig.right;
+  const wide = ["laptop", "book", "pen", "board"].includes(p);
+  if (
+    drawHeldProp(
+      ctx,
+      p,
+      wide ? 0 : hx,
+      wide ? -12 : hy,
+      wide ? (p === "board" ? 19 : 18) : p === "phone" ? 5 : 7,
+      back,
+    )
+  )
+    return;
+  void loadEnvironmentAssets("props");
   ctx.strokeStyle = INK;
   ctx.lineWidth = 0.65;
   if (p === "laptop") {
@@ -524,7 +539,9 @@ export function drawPaintedAvatar(
     pose.staticPose ?? false,
   );
   if (pose.sitting) rig.seated = true;
-  if (rig.prop === "none" && a.prop !== "none") {
+  const atKeyboard = action === "type" && !!pose.workstationHands;
+  if (atKeyboard) rig.prop = "none";
+  if (!atKeyboard && rig.prop === "none" && a.prop !== "none") {
     rig.prop = a.prop;
     if (a.prop === "book" || a.prop === "laptop") {
       rig.left = [-6, -13];
@@ -534,8 +551,8 @@ export function drawPaintedAvatar(
     }
   }
   const d = paintedDims(a),
-    leg = rig.seated ? 4 : d.leg,
-    hip = -3 - leg,
+    leg = rig.seated ? AVATAR_RENDER_METRICS.seatedLegUnits : d.leg,
+    hip = -AVATAR_RENDER_METRICS.hipPaddingUnits - leg,
     top = hip - d.torso;
   const head = headLayout(a, pose.dir);
   let headY = top - head.offset;
@@ -548,10 +565,20 @@ export function drawPaintedAvatar(
   ctx.scale(scale, scale);
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
-  groundShadow(ctx, 0, 0, 11, 3.5, 0.22);
+  if (!pose.layer) groundShadow(ctx, 0, 0, 11, 3.5, 0.22);
   ctx.translate(0, rig.bob);
   ctx.rotate(rig.lean);
   const bodyW = d.width * (side ? (diagonal ? 0.91 : 0.78) : 1);
+  const cloth = avatarSprite(a, pose.dir, "cloth")!;
+  const directionalTorso = cloth.collarX !== undefined && cloth.collarY !== undefined;
+  const torsoHeight = directionalTorso ? d.torso + 4.5 : d.torso + 1.5;
+  const torsoWidth = bodyW * 1.04;
+  const torsoY = directionalTorso ? top - 3 : top;
+  // Every source view has its own neck center. Centering the image bounding box would slide a
+  // profile jacket behind the head; align the anatomical neck instead (left is mirrored later).
+  const torsoX = directionalTorso
+    ? (side ? 0.6 : 0) - (cloth.collarX! / cloth.canvas.width) * torsoWidth
+    : -bodyW * 0.52;
   const offset = rig.seated ? 3 : 0,
     left: [number, number] = [rig.left[0], rig.left[1] + offset],
     right: [number, number] = [rig.right[0], rig.right[1] + offset];
@@ -569,26 +596,47 @@ export function drawPaintedAvatar(
     : [-bodyW * 0.43, top + 2];
   // A hand raised above the shoulders goes further forward so the arm does not cover the face.
   const raisedReach = right[1] < top - 4 ? (view === "profile" ? 4 : 2.5) : 0;
-  const nearHand: [number, number] = sideways
+  let nearHand: [number, number] = sideways
     ? [
         nearShoulder[0] + side * (1.4 + raisedReach + reach(right) * (view === "profile" ? 0.85 : 0.8)),
         right[1],
       ]
     : right;
-  const farHand: [number, number] = sideways
+  let farHand: [number, number] = sideways
     ? [farShoulder[0] + side * (0.6 + reach(left) * 0.5), left[1]]
     : left;
+  if (atKeyboard) {
+    const tick = pose.staticPose ? 0 : Math.sin((pose.time ?? 0) * Math.PI * 10) * 0.35;
+    farHand = [pose.workstationHands!.left[0], pose.workstationHands!.left[1] + tick];
+    nearHand = [pose.workstationHands!.right[0], pose.workstationHands!.right[1] - tick];
+  }
   const seatedSideways = rig.seated && side !== 0 && !back;
   const unified =
     !rig.seated && !pose.part && rig.prop === "none"
       ? unifiedBodySprite(a, pose.dir, action, rig.frame)
       : null;
+  // An item held in front of a rear-facing avatar belongs behind the torso, not pasted on its back.
+  if (
+    !atKeyboard &&
+    back &&
+    (rig.prop !== "none" || a.prop !== "none") &&
+    !pose.part &&
+    rig.prop !== "board"
+  ) {
+    ctx.save();
+    ctx.translate(diagonal ? side * 4 : 0, 0);
+    prop(ctx, { ...rig, right: nearHand }, a, true);
+    ctx.restore();
+  }
   if (!back && unified?.collarY !== undefined) {
     const height = d.torso + d.leg + 6;
     const collar = top - 3 + (unified.collarY * height) / unified.canvas.height;
     // Authored quarter/profile bodies have a longer bare neck than the front body.
     // Attach the chin to their actual garment seam, not the top of the entire sprite.
     headY = collar - (pose.dir === "down" ? 1.6 : 0.6) - head.chin;
+  } else if (!unified && directionalTorso) {
+    const collar = torsoY + (cloth.collarY! * torsoHeight) / cloth.canvas.height;
+    headY = collar - (back ? 0.25 : pose.dir === "down" ? 1.0 : 0.45) - head.chin;
   }
   // Shared physical attachment for ALL body sources, including generated quarter/rear views.
   // The head and garment overpaint its ends, leaving only the short anatomical neck visible.
@@ -598,7 +646,7 @@ export function drawPaintedAvatar(
   rr(ctx, -2.35 + side * 0.6, top - 3.2, 4.7, 4.8, 1.1);
   ctx.fill();
   ctx.stroke();
-  if (unified) {
+  if (!pose.layer && unified) {
     ctx.save();
     if (pose.dir.includes("left")) ctx.scale(-1, 1);
     const height = d.torso + d.leg + 6;
@@ -619,7 +667,7 @@ export function drawPaintedAvatar(
       );
     else ctx.drawImage(unified.canvas, -width / 2, top - 3, width, height);
     ctx.restore();
-  } else {
+  } else if (!pose.layer) {
     for (const sd of [-1, 1]) {
       const stride = rig.stride * sd,
         // Seated and facing sideways: thighs point forward instead of hanging straight down.
@@ -627,10 +675,12 @@ export function drawPaintedAvatar(
           action === "sit-floor"
             ? -sd * 4.5
             : seatedSideways
-              ? side * (diagonal ? 3.2 : 5.2) + sd * (diagonal ? 2.2 : 0.7)
+              ? side * (diagonal ? 5.5 : 8) + sd * (diagonal ? 2.2 : 0.7)
               : sd * (side ? 2 : 3.3) + (side ? stride : 0),
-        footY = seatedSideways ? -2.6 : -2 - Math.max(0, stride);
-      if (drawPaintedLeg(ctx, a, sd * 3.2, hip, footX, footY, sd > 0)) continue;
+        footY = rig.seated && action !== "sit-floor" ? 1.2 : -2 - Math.max(0, stride);
+      const knee: readonly [number, number] | undefined =
+        rig.seated && action !== "sit-floor" ? [seatedSideways ? footX : sd * 4.4, hip + 2.5] : undefined;
+      if (drawPaintedLeg(ctx, a, sd * 3.2, hip, footX, footY, sd > 0, knee)) continue;
       const shorts = a.bottom === "shorts" || a.bottom === "skirt";
       path(
         ctx,
@@ -692,12 +742,12 @@ export function drawPaintedAvatar(
     }
     arm(ctx, a, farShoulder, farHand, action, pose.dir);
     if (!sideways) arm(ctx, a, nearShoulder, nearHand, action, pose.dir);
-    const cloth = avatarSprite(a, pose.dir, "cloth")!;
     ctx.save();
     if (avatarSpriteMirror(a, pose.dir, "cloth")) ctx.scale(-1, 1);
-    // Front body-kit torsos have a complete natural silhouette; do not slice off their ink contour.
-    if (!back) {
-      ctx.drawImage(cloth.canvas, -bodyW * 0.52, top, bodyW * 1.04, d.torso + 1.5);
+    // Directional bodices are closed torso silhouettes. Arms are separate animated material,
+    // not a front jacket panel or fixed sleeve stubs composited over the turning body.
+    if (directionalTorso || !back) {
+      ctx.drawImage(cloth.canvas, torsoX, torsoY, torsoWidth, torsoHeight);
     } else {
       // Keep only the torso from the older rear shirt atlas: its static shoulder stubs must not be drawn
       // over separately animated long sleeves. Overlap the clavicle joints under the garment.
@@ -715,9 +765,10 @@ export function drawPaintedAvatar(
     }
     ctx.restore();
     // Seen from the side, the near arm lies over the torso (raised arms are drawn later, over the head).
-    if (sideways && nearHand[1] >= top + 2) arm(ctx, a, nearShoulder, nearHand, action, pose.dir);
+    if (sideways && (nearHand[1] >= top + 2 || atKeyboard))
+      arm(ctx, a, nearShoulder, nearHand, action, pose.dir);
   }
-  if (a.accessory === "backpack") {
+  if (!pose.layer && a.accessory === "backpack") {
     ctx.fillStyle = a.accessoryColor;
     rr(ctx, side ? -side * 9 : -6, top + 3, side ? 5 : 12, 11, 2);
     ctx.fill();
@@ -733,17 +784,20 @@ export function drawPaintedAvatar(
     ctx.restore();
     return true;
   }
+  if (pose.layer && sideways) arm(ctx, a, farShoulder, farHand, action, pose.dir);
   if (rig.prop === "board") {
     ctx.save();
     ctx.translate(side < 0 ? -34 : 17, top - 11);
-    path(ctx, [0, 0, 17, 0, 17, 14, 0, 14], "#f4edda");
-    ctx.strokeStyle = "#71a992";
-    ctx.lineWidth = 0.6;
-    for (let i = 0; i < 3; i++) {
-      ctx.beginPath();
-      ctx.moveTo(3, 3 + i * 3);
-      ctx.lineTo(13, 3 + i * 3);
-      ctx.stroke();
+    if (!drawHeldProp(ctx, "board", 8.5, 7, 23)) {
+      path(ctx, [0, 0, 17, 0, 17, 14, 0, 14], "#f4edda");
+      ctx.strokeStyle = "#71a992";
+      ctx.lineWidth = 0.6;
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(3, 3 + i * 3);
+        ctx.lineTo(13, 3 + i * 3);
+        ctx.stroke();
+      }
     }
     ctx.restore();
   }
@@ -792,18 +846,20 @@ export function drawPaintedAvatar(
   accessory(ctx, accessoryA, 0, headY, 12, 1, diagonal ? side * 0.4 : side, back);
   if (a.headphones && a.accessory !== "headphones")
     accessory(ctx, { ...a, accessory: "headphones" }, 0, headY, 12, 1, side * 0.4, back);
-  if (!back) {
+  if (!atKeyboard && !back && rig.prop !== "board" && (rig.prop !== "none" || a.prop !== "none")) {
     // Held items follow the near hand; laptops/books shift toward the facing side.
     ctx.save();
     const shift = sideways ? side * (view === "profile" ? 4 : 2.5) : 0;
     ctx.translate(shift, 0);
-    prop(ctx, { ...rig, right: [nearHand[0] - shift, nearHand[1]] }, a);
+    prop(ctx, { ...rig, right: [nearHand[0] - shift, nearHand[1]] }, a, back);
     ctx.restore();
   }
   // Raised hands draw in front of the head/props; ordinary arms stay behind the garment.
-  if (nearHand[1] < top + 2) arm(ctx, a, nearShoulder, nearHand, action, pose.dir);
+  if ((pose.layer && sideways) || (!pose.layer && !atKeyboard && nearHand[1] < top + 2))
+    arm(ctx, a, nearShoulder, nearHand, action, pose.dir);
   // Seen from the side, a raised far arm stays behind the head (it was drawn before the torso).
-  if (!sideways && farHand[1] < top + 2) arm(ctx, a, farShoulder, farHand, action, pose.dir);
+  if (!pose.layer && !atKeyboard && !sideways && farHand[1] < top + 2)
+    arm(ctx, a, farShoulder, farHand, action, pose.dir);
   if (rig.bubble) {
     ctx.save();
     ctx.translate(17, headY - 12 - Math.max(0, Math.sin((pose.time ?? 0) * 3)) * 0.8);

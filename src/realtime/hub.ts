@@ -54,6 +54,9 @@ import {
   type ZoneLock,
 } from "@/shared/protocol";
 import { createHash } from "node:crypto";
+import { canSitAt, seatPose } from "@/shared/seats";
+import { directionFrom } from "@/shared/avatar-animation";
+import { OrderedQueue } from "./ordered-queue";
 
 /** Status ruangan di Redis: pemegang, kunci, dan hash PIN (hanya di server). */
 interface StoredZone extends ZoneLock {
@@ -296,11 +299,60 @@ export class RealtimeHub {
     room.conns.set(auth.userId, conn);
     await this.writePresence(conn);
 
+    // Install before welcome: clients can send immediately when it arrives. Async commands must
+    // preserve websocket order (stand → move → invite), not race through Redis operations.
+    const commands = new OrderedQueue((e) => console.error("[realtime] pesan gagal", e));
+    let queuedMove: { message: Extract<ClientMessage, { t: "move" }> } | null = null;
+    ws.on("message", (raw) => {
+      let data: unknown;
+      try {
+        data = JSON.parse(String(raw));
+      } catch {
+        return;
+      }
+      const parsed = clientMessageSchema.safeParse(data);
+      if (!parsed.success) return send(ws, { t: "error", code: "badMessage" });
+      const message = parsed.data;
+      if (message.t === "ping") return send(ws, { t: "pong" });
+      // Movement is sent ~11x per second. While a move still waits in the queue, a newer one simply
+      // replaces it (only the latest position matters), so a slow Redis (e.g. Upstash from Vercel)
+      // cannot build a backlog that delays positions by seconds or overflows the queue.
+      if (message.t === "move" && queuedMove) {
+        queuedMove.message = message;
+        return;
+      }
+      if (message.t === "move") {
+        const slot = { message };
+        queuedMove = slot;
+        if (
+          !commands.enqueue(async () => {
+            if (queuedMove === slot) queuedMove = null;
+            if (room.conns.get(conn.userId) === conn) await this.onMessage(room, conn, slot.message);
+          })
+        ) {
+          queuedMove = null;
+          send(ws, { t: "error", code: "rateLimited" });
+        }
+        return;
+      }
+      // Any other command seals the pending move, so later moves stay after it (stand → move → sit).
+      queuedMove = null;
+      if (
+        !commands.enqueue(async () => {
+          if (room.conns.get(conn.userId) === conn) await this.onMessage(room, conn, message);
+        })
+      )
+        send(ws, { t: "error", code: "rateLimited" });
+    });
+    ws.on("close", () => {
+      if (room.conns.get(conn.userId) === conn) this.scheduleLeave(room, conn);
+    });
+
     const peers = (await this.readPresence(room)).filter((p) => p.id !== auth.userId);
     send(ws, {
       t: "welcome",
       selfId: auth.userId,
-      peers,
+      peers: [presence, ...peers],
       map: room.map,
       sharedNote: await repo.getSharedNote(auth.groupId),
       music: await this.readMusic(room),
@@ -312,21 +364,6 @@ export class RealtimeHub {
     await publishToRoom(auth.groupId, { msg: { t: "join", peer: presence } });
     const startZone = privateZoneAt(room.map, presence.x, presence.y);
     if (startZone) await this.enterZone(room, conn, startZone);
-
-    ws.on("message", (raw) => {
-      let data: unknown;
-      try {
-        data = JSON.parse(String(raw));
-      } catch {
-        return;
-      }
-      const parsed = clientMessageSchema.safeParse(data);
-      if (!parsed.success) return send(ws, { t: "error", code: "badMessage" });
-      void this.onMessage(room, conn, parsed.data).catch((e) => console.error("[realtime] pesan gagal", e));
-    });
-    ws.on("close", () => {
-      if (room.conns.get(conn.userId) === conn) this.scheduleLeave(room, conn);
-    });
   }
 
   /** Titik muncul di sekitar spawn yang tidak ditempati orang lain (agar avatar tidak menumpuk). */
@@ -374,12 +411,29 @@ export class RealtimeHub {
 
   private async writePresence(conn: Conn) {
     const kv = await this.kv();
+    const p = conn.presence;
+    if (
+      p.sitting &&
+      p.seatId &&
+      !(await kv.claim(`seat:${conn.groupId}:${p.seatId}:${p.seatIndex ?? 0}`, p.conn, 90))
+    ) {
+      p.sitting = false;
+      delete p.seatId;
+      delete p.seatIndex;
+      send(conn.ws, { t: "seatRejected", reason: "occupied" });
+    }
     conn.presenceWrittenAt = Date.now();
     await kv.hset(
       keys.presence(conn.groupId),
       conn.userId,
       JSON.stringify({ p: conn.presence, seen: Date.now() }),
     );
+  }
+
+  private async releaseSeat(conn: Conn) {
+    const p = conn.presence;
+    if (p.seatId)
+      await (await this.kv()).release(`seat:${conn.groupId}:${p.seatId}:${p.seatIndex ?? 0}`, p.conn);
   }
 
   /**
@@ -404,6 +458,7 @@ export class RealtimeHub {
   }
 
   private scheduleLeave(room: Room, conn: Conn) {
+    void this.releaseSeat(conn);
     room.conns.delete(conn.userId);
     room.leaving.set(conn.userId, conn);
     setTimeout(() => void this.finalizeLeave(room, conn), LEAVE_GRACE_MS);
@@ -435,6 +490,7 @@ export class RealtimeHub {
   }
 
   private closeConn(room: Room, conn: Conn, reason: string, leave = true) {
+    void this.releaseSeat(conn);
     send(conn.ws, { t: "kicked", reason });
     if (room.conns.get(conn.userId) === conn) {
       if (leave) this.scheduleLeave(room, conn);
@@ -469,7 +525,82 @@ export class RealtimeHub {
         if (conn.emoteTimes.length >= CHAT_MAX_PER_WINDOW) return;
         conn.emoteTimes.push(now);
         p.avatarAction = m.action;
+        delete p.pairedAction;
         return this.broadcastUpdate(conn);
+      }
+
+      case "pairInvite": {
+        const target = (await this.readPresence(room)).find(
+          (other) => other.id === m.toUserId && other.id !== p.id,
+        );
+        if (
+          !target ||
+          target.sitting ||
+          p.sitting ||
+          Math.hypot(target.x - p.x, target.y - p.y) > 1.5 ||
+          pairVolume(room.map, p, target) <= 0
+        )
+          return send(conn.ws, { t: "pairResult", accepted: false, reason: "tooFar" });
+        const kv = await this.kv();
+        if ((await kv.incr(`pair-rate:${conn.groupId}:${p.id}`, 10)) > 3)
+          return send(conn.ws, { t: "pairResult", accepted: false, reason: "rateLimited" });
+        const requestId = newId(),
+          expiresAt = Date.now() + 30_000;
+        await kv.set(
+          `pair:${conn.groupId}:${requestId}`,
+          JSON.stringify({ from: p.id, to: target.id, action: m.action, expiresAt }),
+          30,
+        );
+        await publishToRoom(conn.groupId, {
+          to: [target.id],
+          msg: { t: "pairInvite", requestId, fromId: p.id, fromName: p.name, action: m.action, expiresAt },
+        });
+        return;
+      }
+      case "pairReply": {
+        const kv = await this.kv(),
+          key = `pair:${conn.groupId}:${m.requestId}`;
+        const raw = await kv.get(key);
+        if (!raw) return send(conn.ws, { t: "pairResult", accepted: false, reason: "expired" });
+        const req = JSON.parse(raw) as {
+          from: string;
+          to: string;
+          action: "handshake" | "high-five" | "fist-bump";
+          expiresAt: number;
+        };
+        if (req.to !== p.id || (await kv.incr(`${key}:claim`, 30)) > 1) return;
+        await kv.del(key);
+        const other = (await this.readPresence(room)).find((o) => o.id === req.from);
+        const near =
+          other &&
+          !p.sitting &&
+          !other.sitting &&
+          Math.hypot(other.x - p.x, other.y - p.y) <= 1.5 &&
+          pairVolume(room.map, p, other) > 0;
+        if (!m.accept || !near)
+          return publishToRoom(conn.groupId, {
+            to: [p.id, req.from],
+            msg: { t: "pairResult", accepted: false, reason: m.accept ? "tooFar" : "declined" },
+          });
+        const startedAt = Date.now() + 250;
+        await publishToRoom(conn.groupId, {
+          control: {
+            kind: "pairPose",
+            a: req.from,
+            b: p.id,
+            action: req.action,
+            startedAt,
+            expiresAt: startedAt + 2200,
+            ax: other!.x,
+            ay: other!.y,
+            bx: p.x,
+            by: p.y,
+          },
+        });
+        return publishToRoom(conn.groupId, {
+          to: [p.id, req.from],
+          msg: { t: "pairResult", accepted: true },
+        });
       }
 
       case "move": {
@@ -492,7 +623,13 @@ export class RealtimeHub {
         p.moving = m.moving;
         if (m.moving) p.avatarAction = "idle";
         const stoodUp = m.moving && p.sitting;
-        if (m.moving) p.sitting = false;
+        if (m.moving) {
+          await this.releaseSeat(conn);
+          p.sitting = false;
+          delete p.seatId;
+          delete p.seatIndex;
+          delete p.pairedAction;
+        }
         if (stoodUp) this.sendLife(room, conn);
         const statusBefore = p.status;
         this.autoMeetingStatus(room, conn);
@@ -512,12 +649,42 @@ export class RealtimeHub {
         return;
       }
 
-      case "sit":
+      case "sit": {
         this.tickLife(room, conn);
+        if (m.sitting) {
+          const obj = m.objectId
+            ? room.map.objects.find((o) => o.id === m.objectId)
+            : room.map.objects.find((o) => o.actions?.includes("sit") && distanceToObject(o, p.x, p.y) < 0.8);
+          if (!canSitAt(room.map, obj, p.x, p.y, m.seatIndex))
+            return send(conn.ws, { t: "seatRejected", reason: "tooFar" });
+          const seat = seatPose(room.map, obj!, m.seatIndex);
+          const peers = await this.readPresence(room);
+          if (
+            peers.some(
+              (other) =>
+                other.id !== p.id &&
+                other.sitting &&
+                other.seatId === seat.seatId &&
+                (other.seatIndex ?? 0) === seat.seatIndex,
+            )
+          )
+            return send(conn.ws, { t: "seatRejected", reason: "occupied" });
+          const kv = await this.kv();
+          if (!(await kv.claim(`seat:${conn.groupId}:${seat.seatId}:${seat.seatIndex}`, p.conn, 90)))
+            return send(conn.ws, { t: "seatRejected", reason: "occupied" });
+          if (p.seatId && (p.seatId !== seat.seatId || p.seatIndex !== seat.seatIndex))
+            await this.releaseSeat(conn);
+          Object.assign(p, seat, { moving: false });
+        } else {
+          await this.releaseSeat(conn);
+          delete p.seatId;
+          delete p.seatIndex;
+        }
         p.sitting = m.sitting;
         p.avatarAction = "idle";
         this.sendLife(room, conn);
         return this.broadcastUpdate(conn);
+      }
 
       case "status":
         p.status = m.status;
@@ -975,20 +1142,89 @@ export class RealtimeHub {
   }
 
   private async onControl(room: Room, ctl: NonNullable<Envelope["control"]>) {
+    if (ctl.kind === "pairPose") {
+      for (const id of [ctl.a, ctl.b]) {
+        const conn = room.conns.get(id);
+        if (!conn) continue;
+        const first = id === ctl.a;
+        Object.assign(conn.presence, {
+          moving: false,
+          dir: directionFrom(
+            first ? ctl.bx - ctl.ax : ctl.ax - ctl.bx,
+            first ? ctl.by - ctl.ay : ctl.ay - ctl.by,
+            conn.presence.dir,
+          ),
+          avatarAction: ctl.action,
+          pairedAction: {
+            partnerId: first ? ctl.b : ctl.a,
+            startedAt: ctl.startedAt,
+            expiresAt: ctl.expiresAt,
+          },
+        });
+        await this.broadcastUpdate(conn);
+        const timer = setTimeout(
+          () => {
+            if (
+              conn.ws.readyState !== WebSocket.OPEN ||
+              conn.presence.pairedAction?.startedAt !== ctl.startedAt
+            )
+              return;
+            delete conn.presence.pairedAction;
+            conn.presence.avatarAction = "idle";
+            void this.broadcastUpdate(conn);
+          },
+          Math.max(0, ctl.expiresAt - Date.now()),
+        );
+        timer.unref();
+      }
+      return;
+    }
     if (ctl.kind === "map") {
       const templateChanged = room.map.template !== ctl.map.template;
+      const geometryChanged =
+        room.map.width !== ctl.map.width ||
+        room.map.height !== ctl.map.height ||
+        room.map.tiles.join("") !== ctl.map.tiles.join("");
       room.map = ctl.map;
       room.walkable = buildWalkable(ctl.map);
       for (const c of room.conns.values()) send(c.ws, { t: "map", map: ctl.map });
-      if (!templateChanged) return;
+      if (!templateChanged && !geometryChanged) {
+        for (const c of room.conns.values()) {
+          const seat = ctl.map.objects.find((o) => o.id === c.presence.seatId);
+          if (c.presence.sitting && seat) {
+            await this.releaseSeat(c);
+            Object.assign(c.presence, seatPose(ctl.map, seat, c.presence.seatIndex));
+            send(c.ws, { t: "teleported", x: c.presence.x, y: c.presence.y, toName: "" });
+            await this.broadcastUpdate(c);
+          } else if (!this.isWalkable(room, c.presence.x, c.presence.y) || (c.presence.sitting && !seat)) {
+            await this.releaseSeat(c);
+            const spot = this.freeSpawn(room, []);
+            Object.assign(c.presence, spot, { sitting: false, moving: false });
+            delete c.presence.seatId;
+            send(c.ws, { t: "teleported", x: spot.x, y: spot.y, toName: "" });
+            await this.broadcastUpdate(c);
+          }
+        }
+        return;
+      }
       // Tata ruang baru: pindahkan semua orang ke titik muncul baru, buka semua kunci.
       const kv = await this.kv();
       for (const id of Object.keys(await kv.hgetall(keys.locks(room.groupId))))
         await kv.hdel(keys.locks(room.groupId), id);
       const placed: Presence[] = [];
       for (const c of room.conns.values()) {
+        await this.releaseSeat(c);
         const spot = this.freeSpawn(room, placed);
-        Object.assign(c.presence, { ...spot, moving: false, sitting: false, allowedZone: null });
+        Object.assign(c.presence, {
+          ...spot,
+          moving: false,
+          sitting: false,
+          allowedZone: null,
+          avatarAction: "idle",
+        });
+        delete c.presence.seatId;
+        delete c.presence.seatIndex;
+        delete c.presence.pairedAction;
         placed.push(c.presence);
         send(c.ws, { t: "teleported", x: spot.x, y: spot.y, toName: "" });
         await this.broadcastUpdate(c);

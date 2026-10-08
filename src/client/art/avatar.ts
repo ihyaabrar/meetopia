@@ -6,6 +6,7 @@ import type { AvatarConfig, AvatarDirection, AvatarActivity, AvatarCondition } f
 import { drawHeldProp, drawCondition, drawClothingDetail } from "./avatar-details";
 import { C, INK, rr, shade, groundShadow } from "./common";
 import { drawPaintedAvatar, paintedDims, paintedHeadOffset, paintedTopY } from "./avatar-painted";
+import { AVATAR_RENDER_METRICS } from "@/shared/avatar-metrics";
 
 export interface AvatarPose {
   dir: AvatarDirection;
@@ -21,6 +22,10 @@ export interface AvatarPose {
   condition?: AvatarCondition;
   /** Freeze at a representative frame for reduced-motion users. */
   staticPose?: boolean;
+  /** Contextual desk contacts, in avatar rig units relative to its foot/root. */
+  workstationHands?: { left: readonly [number, number]; right: readonly [number, number] };
+  /** Repaint head and reaching arms above a desktop, keeping knees/feet behind it. */
+  layer?: "upper";
 }
 
 const LINE = 1.15;
@@ -47,7 +52,7 @@ export function avatarHeadY(a: AvatarConfig): number {
  * Skala avatar di peta. Peta ilustrasi memperlihatkan seluruh denah, jadi avatar sedikit lebih besar dari
  * perabot agar orang tetap mudah dikenali (sekitar 1,8 tile tingginya).
  */
-export const AVATAR_MAP_SCALE = 1.5;
+export const AVATAR_MAP_SCALE = AVATAR_RENDER_METRICS.mapScale;
 
 export function avatarNameOffset(a: AvatarConfig, dir: AvatarDirection, sitting = false) {
   const s = AVATAR_MAP_SCALE;

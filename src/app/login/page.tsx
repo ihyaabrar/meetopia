@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { safeNext } from "@/shared/redirect";
 import { Suspense, useState } from "react";
 import { PublicShell } from "@/components/PublicShell";
 import { AuthExperience } from "@/components/AuthExperience";
@@ -22,7 +23,7 @@ function LoginForm() {
     setError(null);
     try {
       await api("/api/auth/login", { body: { email: f.get("email"), password: f.get("password") } });
-      router.replace(next.startsWith("/") ? next : "/app");
+      router.replace(safeNext(next));
       router.refresh();
     } catch (err) {
       setError(t(errorKey(err)));

@@ -8,6 +8,7 @@ import type { MapData } from "@/shared/map";
 import type { ServerMessage } from "@/shared/protocol";
 import type { Role } from "@/shared/roles";
 import type { LifeSettings } from "@/shared/life";
+import type { PAIRED_ACTIONS } from "@/shared/protocol";
 
 export type Control =
   | { kind: "replaced"; userId: string; conn: string }
@@ -25,12 +26,25 @@ export type Control =
   | { kind: "map"; map: MapData }
   | { kind: "life"; life: LifeSettings }
   | { kind: "groupDeleted" };
+// Gesture control is applied by the instance owning each socket; no cross-instance presence writes.
+export type PairControl = {
+  kind: "pairPose";
+  a: string;
+  b: string;
+  action: (typeof PAIRED_ACTIONS)[number];
+  startedAt: number;
+  expiresAt: number;
+  ax: number;
+  ay: number;
+  bx: number;
+  by: number;
+};
 
 export interface Envelope {
   /** Bila diisi, hanya dikirim ke pengguna ini. */
   to?: string[];
   msg?: ServerMessage;
-  control?: Control;
+  control?: Control | PairControl;
 }
 
 export async function publishToRoom(groupId: string, env: Envelope): Promise<void> {

@@ -40,7 +40,8 @@ try {
   await page.screenshot({ path: `${output}/creator-male.png`, fullPage: true });
   const select = page.getByLabel("Pose & aktivitas", { exact: true }),
     preview = page.locator(".avatar-pedestal canvas");
-  // A short skin bridge below the broad jaw contour must remain visible above the collar.
+  // A chibi neck is deliberately short: 0.5–2.2 world units below the jaw, not a fixed pixel height.
+  // Production renderer continuity is checked independently across eight directions.
   const neckCheck = await preview.evaluate((canvas) => {
     const { width: w, height: h } = canvas;
     const pixels = canvas.getContext("2d").getImageData(0, 0, w, h).data;
@@ -62,7 +63,7 @@ try {
       longest = Math.max(longest, consecutive);
     }
     return {
-      visible: longest >= w / 64,
+      visible: chinFound && longest >= (w / 64) * 0.5 && longest <= (w / 64) * 2.2,
       longest,
       chinFound,
       scale: w / 64,

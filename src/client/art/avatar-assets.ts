@@ -4,6 +4,7 @@ type Sprite = {
   canvas: HTMLCanvasElement;
   face: { x: number; y: number; w: number; h: number } | null;
   collarY?: number;
+  collarX?: number;
 };
 const atlases = new Map<string, Sprite[]>();
 const variants = new Map<string, Sprite>();
@@ -16,6 +17,7 @@ export const AVATAR_ASSET_URLS = [
   "/avatars/painted/sleeves-v1.webp",
   "/avatars/painted/body-kit-v2.webp",
   "/avatars/painted/bodies-v3.webp",
+  "/avatars/painted/torso-directions-v4.webp",
 ] as const;
 const skinPixel = (r: number, g: number, b: number) =>
   r > 170 && g > 110 && b > 75 && r > g * 1.1 && g > b * 1.08;
@@ -66,7 +68,12 @@ export function removeCellDebris(pixels: ImageData, w: number, h: number) {
   }
 }
 /** Isolated atlas cells are cropped in memory only. Source PNG and alpha are never rewritten. */
-function decodeAtlas(image: HTMLImageElement, cols: number, rows: number, bodies = false): Sprite[] {
+function decodeAtlas(
+  image: HTMLImageElement,
+  cols: number,
+  rows: number,
+  neck: "body" | "torso" | null = null,
+): Sprite[] {
   const cellW = image.width / cols,
     cellH = image.height / rows;
   return Array.from({ length: cols * rows }, (_, i) => {
@@ -93,6 +100,8 @@ function decodeAtlas(image: HTMLImageElement, cols: number, rows: number, bodies
       maxX = 0,
       maxY = 0;
     let collarY = cell.height;
+    let neckX = 0,
+      neckCount = 0;
     let fx = cell.width,
       fy = cell.height,
       fmaxX = 0,
@@ -116,17 +125,24 @@ function decodeAtlas(image: HTMLImageElement, cols: number, rows: number, bodies
           count++;
         }
       }
-    if (bodies) {
+    if (neck) {
       // Follow only the first central skin run (the neck), stopping at the ink collar.
       // Shoulder tips can start above the neckline, so their garment bounding box is not an anchor.
       let started = false,
         missing = 0;
       for (let y = minY; y < Math.min(cell.height, minY + cell.height * 0.3); y++) {
         let skin = 0;
-        for (let x = Math.floor(cell.width * 0.4); x < cell.width * 0.6; x++) {
+        for (
+          let x = Math.floor(cell.width * (neck === "torso" ? 0.2 : 0.4));
+          x < cell.width * (neck === "torso" ? 0.8 : 0.6);
+          x++
+        ) {
           const j = (y * cell.width + x) * 4;
-          if (pixels.data[j + 3] > 100 && skinPixel(pixels.data[j], pixels.data[j + 1], pixels.data[j + 2]))
+          if (pixels.data[j + 3] > 100 && skinPixel(pixels.data[j], pixels.data[j + 1], pixels.data[j + 2])) {
             skin++;
+            neckX += x;
+            neckCount++;
+          }
         }
         if (skin >= 3) {
           started = true;
@@ -143,7 +159,8 @@ function decodeAtlas(image: HTMLImageElement, cols: number, rows: number, bodies
       .drawImage(cell, minX, minY, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
     return {
       canvas,
-      ...(bodies && collarY < cell.height ? { collarY: collarY - minY } : {}),
+      ...(neck && collarY < cell.height ? { collarY: collarY - minY } : {}),
+      ...(neck === "torso" && neckCount ? { collarX: neckX / neckCount - minX } : {}),
       face:
         count > cell.width * cell.height * 0.04
           ? { x: fx - minX, y: fy - minY, w: fmaxX - fx + 1, h: fmaxY - fy + 1 }
@@ -162,7 +179,12 @@ export function loadAvatarAssets(): Promise<void> {
             img.onload = () => {
               atlases.set(
                 url,
-                decodeAtlas(img, i === 2 || i === 3 ? 4 : 8, i === 0 || i === 6 ? 6 : 4, i === 6),
+                decodeAtlas(
+                  img,
+                  i === 2 || i === 3 ? 4 : 8,
+                  i === 0 || i === 6 ? 6 : 4,
+                  i === 6 ? "body" : i === 7 ? "torso" : null,
+                ),
               );
               resolve();
             };
@@ -184,6 +206,10 @@ export function spriteView(dir: AvatarDirection): { view: number; mirror: boolea
   if (dir.includes("-")) return { view: 1, mirror: dir === "down-right" };
   return { view: 0, mirror: false };
 }
+/** v4 has outfits in columns and anatomical views in rows, unlike the older clothing atlas. */
+export function directionalTorsoCell(a: AvatarConfig, dir: AvatarDirection) {
+  return spriteView(dir).view * OUTFITS.length + OUTFITS.indexOf(a.outfit);
+}
 /** The hair sheet faces left; clothing/headwear sheets face right. Keep layers anatomically aligned. */
 export function avatarSpriteMirror(a: AvatarConfig, dir: AvatarDirection, kind: "head" | "cloth") {
   if (kind === "head" && dir.startsWith("up-")) return dir === "up-right";
@@ -198,7 +224,7 @@ function recolor(
   source: Sprite,
   key: string,
   a: AvatarConfig,
-  kind: "head" | "cloth" | "cover" | "limb" | "leg" | "body",
+  kind: "head" | "cloth" | "cover" | "limb" | "leg" | "body" | "torso",
 ): Sprite {
   const cached = variants.get(key);
   if (cached) return cached;
@@ -233,7 +259,7 @@ function recolor(
       target = skin;
       lum = (r + g + b) / (252 + 211 + 179);
     } else if (
-      (kind === "cloth" || kind === "cover" || kind === "limb" || kind === "body") &&
+      (kind === "cloth" || kind === "cover" || kind === "limb" || kind === "body" || kind === "torso") &&
       g > r * 1.07 &&
       g > b * 1.05
     ) {
@@ -244,6 +270,7 @@ function recolor(
       kind !== "limb" &&
       kind !== "leg" &&
       kind !== "body" &&
+      kind !== "torso" &&
       r > 47 &&
       r > g * 1.02 &&
       g >= b * 0.98 &&
@@ -268,24 +295,29 @@ export function avatarSprite(a: AvatarConfig, dir: AvatarDirection, kind: "head"
       ? 0
       : -1;
   const rear = kind === "head" && dir.startsWith("up-") && atlases.has(AVATAR_ASSET_URLS[3]);
-  const cohesive = kind === "cloth" && !dir.startsWith("up") && atlases.has(AVATAR_ASSET_URLS[5]);
-  const url = AVATAR_ASSET_URLS[cohesive ? 5 : rear ? 3 : kind === "cloth" ? 1 : cover >= 0 ? 2 : 0];
-  const index = cohesive
-    ? OUTFITS.indexOf(a.outfit)
-    : rear
-      ? cover >= 0
-        ? 12 + cover
-        : HAIR_STYLES.indexOf(a.hair)
-      : (kind === "cloth" ? OUTFITS.indexOf(a.outfit) : cover >= 0 ? cover : HAIR_STYLES.indexOf(a.hair)) *
-          4 +
-        view;
+  const directional = kind === "cloth" && atlases.has(AVATAR_ASSET_URLS[7]);
+  // The body-kit torso is FRONT only. It must never be used for a turned articulated body.
+  const cohesive = kind === "cloth" && dir === "down" && atlases.has(AVATAR_ASSET_URLS[5]);
+  const url =
+    AVATAR_ASSET_URLS[directional ? 7 : cohesive ? 5 : rear ? 3 : kind === "cloth" ? 1 : cover >= 0 ? 2 : 0];
+  const index = directional
+    ? directionalTorsoCell(a, dir)
+    : cohesive
+      ? OUTFITS.indexOf(a.outfit)
+      : rear
+        ? cover >= 0
+          ? 12 + cover
+          : HAIR_STYLES.indexOf(a.hair)
+        : (kind === "cloth" ? OUTFITS.indexOf(a.outfit) : cover >= 0 ? cover : HAIR_STYLES.indexOf(a.hair)) *
+            4 +
+          view;
   const source = atlases.get(url)?.[index];
   if (!source) return null;
   return recolor(
     source,
     `${url}:${index}:${a.skin}:${a.hairColor}:${a.bodyColor}:${a.accessoryColor}`,
     a,
-    kind === "cloth" ? "cloth" : cover > 0 ? "cover" : "head",
+    directional ? "torso" : kind === "cloth" ? "cloth" : cover > 0 ? "cover" : "head",
   );
 }
 
@@ -339,10 +371,36 @@ export function drawPaintedLeg(
   footX: number,
   footY: number,
   mirror: boolean,
+  knee?: readonly [number, number],
 ): boolean {
   const source = atlases.get(AVATAR_ASSET_URLS[5])?.[24];
   if (!source) return false;
   const sprite = recolor(source, `leg:${a.pantsColor}:${a.skin}:${a.bottom}:${a.shoes}`, a, "leg");
+  if (knee) {
+    const draw = (sx: number, sy: number, ex: number, ey: number, cropY: number, cropH: number) => {
+      ctx.save();
+      ctx.translate(sx, sy);
+      const dx = ex - sx,
+        dy = ey - sy;
+      ctx.rotate(-Math.atan2(dx, dy));
+      if (mirror) ctx.scale(-1, 1);
+      ctx.drawImage(
+        sprite.canvas,
+        0,
+        cropY * sprite.canvas.height,
+        sprite.canvas.width,
+        cropH * sprite.canvas.height,
+        -3,
+        -0.5,
+        6,
+        Math.hypot(dx, dy) + 1.5,
+      );
+      ctx.restore();
+    };
+    draw(x, hip - 1, knee[0], knee[1], 0, 0.63);
+    draw(knee[0], knee[1], footX, footY + 2, 0.6, 0.4);
+    return true;
+  }
   ctx.save();
   ctx.translate(x, hip - 1);
   const dx = footX - x,

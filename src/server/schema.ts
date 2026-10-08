@@ -73,6 +73,23 @@ CREATE TABLE IF NOT EXISTS maps (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS workspace_entries (
+  id TEXT PRIMARY KEY,
+  group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('agenda','task','resource','file')),
+  title TEXT NOT NULL,
+  detail TEXT NOT NULL DEFAULT '',
+  url TEXT,
+  starts_at TIMESTAMPTZ,
+  completed BOOLEAN NOT NULL DEFAULT FALSE,
+  created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  file_data TEXT,
+  file_mime TEXT,
+  file_size INTEGER
+);
+CREATE INDEX IF NOT EXISTS workspace_entries_group_idx ON workspace_entries(group_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS invites (
   id TEXT PRIMARY KEY,
   token_hash TEXT NOT NULL UNIQUE,

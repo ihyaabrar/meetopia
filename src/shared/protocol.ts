@@ -30,6 +30,8 @@ export interface Presence {
   dir: Direction;
   moving: boolean;
   sitting: boolean;
+  seatId?: string;
+  seatIndex?: number;
   status: PresenceStatus;
   /** Status diatur manual (tidak ditimpa otomatis "jauh"). */
   manualStatus: boolean;
@@ -41,6 +43,7 @@ export interface Presence {
   lastActive: number;
   /** Explicit public cosmetic pose. No private LifeState is exposed. */
   avatarAction?: AvatarAction;
+  pairedAction?: { partnerId: string; startedAt: number; expiresAt: number };
 }
 
 /** Status ruangan yang bisa dikunci: pemegang (orang pertama yang masuk) dan apakah terkunci PIN. */
@@ -74,6 +77,7 @@ const num = z.number().finite();
 /** Emote yang bisa dimunculkan di atas kepala avatar. */
 export const EMOTES = ["👋", "👍", "❤️", "😂", "🎉", "☕", "🤔", "👏"] as const;
 export type Emote = (typeof EMOTES)[number];
+export const PAIRED_ACTIONS = ["handshake", "high-five", "fist-bump"] as const;
 
 export const clientMessageSchema = z.discriminatedUnion("t", [
   z.object({
@@ -83,10 +87,17 @@ export const clientMessageSchema = z.discriminatedUnion("t", [
     dir: z.enum(AVATAR_DIRECTIONS),
     moving: z.boolean(),
   }),
-  z.object({ t: z.literal("sit"), sitting: z.boolean() }),
+  z.object({
+    t: z.literal("sit"),
+    sitting: z.boolean(),
+    objectId: z.string().max(80).optional(),
+    seatIndex: z.number().int().min(0).max(20).optional(),
+  }),
   z.object({ t: z.literal("status"), status: z.enum(STATUSES), manual: z.boolean() }),
   z.object({ t: z.literal("activity") }),
   z.object({ t: z.literal("avatarAction"), action: z.enum(AVATAR_ACTIONS) }),
+  z.object({ t: z.literal("pairInvite"), toUserId: z.string().max(64), action: z.enum(PAIRED_ACTIONS) }),
+  z.object({ t: z.literal("pairReply"), requestId: z.string().max(64), accept: z.boolean() }),
   z.object({
     t: z.literal("chat"),
     kind: z.enum(["channel", "nearby", "dm"]),
@@ -148,9 +159,20 @@ export type ServerMessage =
   | { t: "knockResult"; knockId: string; accept: boolean; byName: string; zoneId: string | null }
   | { t: "moveRejected"; x: number; y: number; reason: "privateZone" }
   | { t: "screenRejected"; presenterId: string }
+  | { t: "seatRejected"; reason: "occupied" | "tooFar" }
+  | {
+      t: "pairInvite";
+      requestId: string;
+      fromId: string;
+      fromName: string;
+      action: (typeof PAIRED_ACTIONS)[number];
+      expiresAt: number;
+    }
+  | { t: "pairResult"; accepted: boolean; reason?: "declined" | "tooFar" | "expired" | "rateLimited" }
   | { t: "sharedNote"; note: SharedNote }
   | { t: "map"; map: MapData }
   | { t: "groupChanged" }
+  | { t: "workspaceChanged" }
   | { t: "locks"; locks: Record<string, ZoneLock> }
   | { t: "pinResult"; zoneId: string; ok: boolean }
   | { t: "tv"; objectId: string; state: TvState | null; serverNow: number }

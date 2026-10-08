@@ -13,6 +13,9 @@ export interface Kv {
   hgetall(key: string): Promise<Record<string, string>>;
   set(key: string, value: string, ttlSeconds: number): Promise<void>;
   get(key: string): Promise<string | null>;
+  /** Atomic expiring ownership: acquire or renew only for the same owner. */
+  claim(key: string, owner: string, ttlSeconds: number): Promise<boolean>;
+  release(key: string, owner: string): Promise<void>;
   del(key: string): Promise<void>;
   /** Menambah penghitung; masa berlaku dipasang saat penghitung baru dibuat. */
   incr(key: string, ttlSeconds: number): Promise<number>;
@@ -53,6 +56,15 @@ class MemoryKv implements Kv {
   }
   async del(key: string) {
     this.values.delete(key);
+  }
+  async claim(key: string, owner: string, ttl: number) {
+    const e = this.values.get(key);
+    if (e && e.exp > Date.now() && e.v !== owner) return false;
+    this.values.set(key, { v: owner, exp: Date.now() + ttl * 1000 });
+    return true;
+  }
+  async release(key: string, owner: string) {
+    if (this.values.get(key)?.v === owner) this.values.delete(key);
   }
   async incr(key: string, ttl: number) {
     const now = Date.now();
@@ -95,6 +107,27 @@ async function createRedisKv(url: string): Promise<Kv> {
       await cmd.set(k, v, "EX", ttl);
     },
     get: (k) => cmd.get(k),
+    async claim(k, owner, ttl) {
+      return (
+        Number(
+          await cmd.eval(
+            "local v=redis.call('GET',KEYS[1]); if not v or v==ARGV[1] then redis.call('SET',KEYS[1],ARGV[1],'EX',ARGV[2]); return 1 end; return 0",
+            1,
+            k,
+            owner,
+            ttl,
+          ),
+        ) === 1
+      );
+    },
+    async release(k, owner) {
+      await cmd.eval(
+        "if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('DEL',KEYS[1]) end; return 0",
+        1,
+        k,
+        owner,
+      );
+    },
     async del(k) {
       await cmd.del(k);
     },
