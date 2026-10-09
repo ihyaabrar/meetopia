@@ -1813,3 +1813,67 @@
 .main-head .icon-btn {
   position: relative;
 }
+
+/* Tombol aksi utama di popup objek: tekan E lagi untuk menjalankannya. */
+.hint-pop .key-hint {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  font:
+    600 10px/16px Outfit,
+    system-ui,
+    sans-serif;
+  opacity: 0.75;
+}
+
+/*
+ * Gradasi halus (9 Oktober 2026). Alasan (R-01/R-31): gradasi hanya menandai elevasi dan arah cahaya,
+ * bukan dekorasi. Permukaan dasar (latar, sidebar) tetap datar; permukaan yang melayang di atas peta
+ * (dock, chip HUD, popover, dialog) mendapat kilau atas tipis agar terbaca "di atas", dan header
+ * memudar ke latar supaya peta menjadi satu-satunya titik fokus. Tombol utama mint diberi gradasi
+ * vertikal pendek sebagai satu aksen yang disengaja.
+ */
+:root:not([data-theme="light"]) .main-head {
+  background: linear-gradient(180deg, #0b1b22 0%, var(--chrome-deep) 100%);
+}
+:root:not([data-theme="light"]) .rail {
+  background: linear-gradient(90deg, #06111a 0%, var(--rail) 100%);
+}
+:root:not([data-theme="light"]) .dock,
+:root:not([data-theme="light"]) .hud-chip {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 55%), rgba(5, 17, 24, 0.96);
+}
+:root:not([data-theme="light"]) .hint-pop,
+:root:not([data-theme="light"]) .modal,
+:root:not([data-theme="light"]) .popover {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0) 40%);
+}
+.btn:not(.secondary):not(.ghost):not(.danger):not(:disabled) {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 60%);
+}
+:root:not([data-theme="light"]) .dock-btn:not(.on):not(.off):not(.active) {
+  background: linear-gradient(180deg, #1c2e36 0%, #152530 100%);
+}
+
+/* Tab papan tim: tab aktif harus terbaca (sebelumnya ketiga chip tampak sama). */
+.board-tabs .chip[aria-selected="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+/* Beranda di ponsel: judul, pencarian, dan tombol buat ditumpuk satu per baris. */
+@media (max-width: 760px) {
+  .picker-head > .grow {
+    flex: 1 1 100%;
+  }
+  .picker-head .picker-search {
+    width: 100%;
+  }
+  .picker-head > .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}

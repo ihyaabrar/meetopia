@@ -36,6 +36,14 @@ Verifikasi: `npm run typecheck`, `npm test`, `npm run lint`, `npm run build`; br
 - **Ponsel:** header halaman publik muat satu baris (tombol Daftar ada di hero).
 - **Aset:** atlas avatar WebP lossless (warna dan posisi leher dibaca dari piksel); lima atlas lingkungan WebP q90 alpha100, sekitar 1,62 MiB. PNG sumber tetap tersedia. Atlas lingkungan menggantikan unduhan wallpaper map penuh. Angka performa cold/warm dicatat terpisah dalam QA; tidak menyatakan target 3 detik sudah terpenuhi.
 
+### Satu pintu per aksi — 9 Oktober 2026
+
+- **Tidak ada tombol kembar.** Di desktop, rail adalah satu-satunya tempat alat workspace: Chat, Catatan, Anggota, dan satu tombol **Papan tim** (Agenda/Tugas/File menjadi tab di dalamnya, bukan tiga ikon). Tombol Chat/Anggota di header hanya tampil di ponsel, karena di sana rail berada di laci. Catatan dihapus dari dock; menu profil menggabungkan "Ubah profil" dan "Ganti avatar" (keduanya membuka halaman yang sama).
+- **Dock = kendali diri di ruangan:** mic, kamera, layar, ekspresi, status, "Pergi ke…" (nama area saat ini sudah ada di chip HUD, tidak diulang), perangkat audio (ikon volume, bukan gerigi), bantuan.
+- **Kontrol keyboard:** WASD/panah berjalan, Space melompat (juga sambil berjalan), E menampilkan aksi objek terdekat dan E sekali lagi menjalankannya; saat duduk, E untuk berdiri. Tombol aksi utama di popup diberi tanda `E`.
+- **Gradasi halus** hanya pada permukaan yang melayang (dock, chip HUD, popover, dialog) sebagai penanda elevasi, header memudar ke latar, dan tombol utama mint sebagai satu aksen. Permukaan dasar tetap datar. Peta mendapat color grading soft-light: cahaya hangat dari atas, bayangan sejuk di bawah.
+- **Anti-slop:** label kapital berspasi lebar di atas judul (eyebrow), penomoran dekoratif ("02 / DUNIA"), titik status dekoratif, ikon panah di tombol, dan klaim "Tim sedang aktif" yang tidak berdasar data dihapus. Em dash dihapus dari teks UI.
+
 ### Implementasi lingkungan interaktif — 7 Oktober 2026
 
 - Tiga atlas furnitur mencakup 36 jenis barang; atlas props tangan terpisah dari lingkungan, dan atlas material lantai tidak mempunyai barang. Prompt dan asal aset: `public/environment/PROMPTS.md`.

@@ -13,9 +13,10 @@ import { ToastProvider, useToast } from "@/components/Toasts";
 import { Logo, LogoMark } from "@/components/Logo";
 import { Icon, type IconName } from "@/components/Icon";
 import { AvatarCanvas } from "@/components/AvatarCanvas";
+import { drawAvatar } from "@/client/art/avatar";
 import { buildWalkable, zoneAt, type MapObject, type ObjectAction } from "@/shared/map";
 import { nearestFree } from "@/shared/pathfinding";
-import { templateOf } from "@/shared/templates";
+import { isTemplateId, templateOf } from "@/shared/templates";
 import type { Point } from "@/shared/pathfinding";
 import type { Presence } from "@/shared/protocol";
 import { PAIRED_ACTIONS } from "@/shared/protocol";
@@ -235,6 +236,8 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
         media: m,
         music: mp,
         walkTo: (p: Point) => walkToRef.current?.(p),
+        // Renderer avatar yang sama dengan peta, untuk QA animasi frame demi frame.
+        drawAvatar,
       };
     if (!sessionStorage.getItem("mt_device_checked")) {
       setJoining(true);
@@ -496,6 +499,13 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
 
   const onlineCount = snap.peers.size;
   const activeGroup = groups.find((g) => g.id === activeId);
+  // Jenis ruangan: dari map yang termuat, atau dari ringkasan grup selama masih menyambung.
+  const roomKind = snap.map
+    ? templateOf(snap.map)
+    : isTemplateId(activeGroup?.template)
+      ? activeGroup.template
+      : null;
+  const roomLabel = roomKind ? t(`tpl.${roomKind}`) : t("nav.room");
 
   return (
     <div
@@ -564,20 +574,18 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
             >
               <Icon name="users" size={22} />
             </button>
-            {(["agenda", "task", "resource"] as const).map((v) => (
-              <button
-                className="rail-item nav"
-                key={v}
-                aria-label={t(`board.${v}`)}
-                title={t(`board.${v}`)}
-                onClick={() => {
-                  setBoard(v);
-                  setShowNav(false);
-                }}
-              >
-                <Icon name={v === "agenda" ? "clock" : v === "task" ? "check" : "folder"} size={22} />
-              </button>
-            ))}
+            <button
+              className="rail-item nav"
+              aria-label={t("board.open")}
+              title={t("board.open")}
+              aria-pressed={!!board}
+              onClick={() => {
+                closeDrawer();
+                setBoard((v) => (v ? null : "agenda"));
+              }}
+            >
+              <Icon name="board" size={22} />
+            </button>
           </div>
         )}
         {groups.map((g) => (
@@ -650,7 +658,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
                     <Icon name="door" size={18} />
                   </span>
                   <span className="grow">
-                    <b>{t("nav.office")}</b>
+                    <b>{roomLabel}</b>
                     <span className="count">
                       <span className={`live-dot ${snap.conn === "open" ? "" : "off"}`} />
                       {t("nav.inRoom", { n: onlineCount })}
@@ -716,7 +724,8 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
             <Logo size={29} />
           </div>
           <button
-            className="icon-btn"
+            // Di Beranda desktop tidak ada sidebar kanal; di ponsel tombol ini membuka laci rail.
+            className={`icon-btn ${home || !activeId ? "mobile-only" : ""}`}
             onClick={() => setShowNav((v) => !v)}
             aria-expanded={showNav}
             aria-label={t("nav.open")}
@@ -727,8 +736,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
             <h2>{home || !activeId ? t("nav.home") : activeGroup ? activeGroup.name : "Meetopia"}</h2>
             {activeGroup && !home && (
               <span className="head-sub">
-                <Icon name="door" size={13} /> {snap.map ? t(`tpl.${templateOf(snap.map)}`) : t("nav.office")}{" "}
-                · {t("nav.inRoom", { n: onlineCount })}
+                <Icon name="door" size={13} /> {roomLabel} · {t("nav.inRoom", { n: onlineCount })}
               </span>
             )}
           </div>
@@ -775,9 +783,10 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
               )}
             </div>
           )}
+          {/* Chat & anggota ada di rail; di ponsel rail tersembunyi di laci, jadi header memuatnya. */}
           {!home && activeId && (
             <button
-              className="icon-btn"
+              className="icon-btn mobile-only"
               onClick={toggleChat}
               aria-label={chatUnread ? `${t("nav.toggleChat")} · ${t("chat.unread")}` : t("nav.toggleChat")}
               aria-pressed={showChat}
@@ -786,9 +795,9 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
               {chatUnread && <span className="count-badge dot" aria-hidden="true" />}
             </button>
           )}
-          {detail && (
+          {detail && !home && (
             <button
-              className="icon-btn"
+              className="icon-btn mobile-only"
               onClick={() => setShowMembers((v) => !v)}
               aria-label={t("members.title")}
               aria-expanded={showMembers}
@@ -886,8 +895,8 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
                   {(
                     [
                       ["smile", me.statusText ? "cs.edit" : "cs.set", () => setModal("status")],
-                      ["edit", "pp.editProfile", () => openUserSettings("profile")],
-                      ["user", "pp.changeAvatar", () => openUserSettings("profile")],
+                      // Profil dan avatar ada di halaman yang sama: satu pintu masuk, bukan dua.
+                      ["user", "pp.editProfile", () => openUserSettings("profile")],
                       ["settings", "pp.settings", () => openUserSettings("appearance")],
                     ] as const
                   ).map(([icon, label, run]) => (
@@ -963,7 +972,6 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
                   selectPeer(m, p);
                 }}
                 onOpenDevices={() => setModal("devices")}
-                onOpenNotes={() => setNotes("private")}
                 onHelp={() => setModal("tips")}
                 registerWalkTo={registerWalkTo}
                 life={prefs.showLifeHud ? life : null}

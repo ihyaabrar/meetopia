@@ -38,6 +38,7 @@ export const ICON_PATHS: Record<string, string> = {
   bell: "M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0",
   palette:
     "M12 22a10 10 0 1 1 10-10c0 2.8-2.2 4-4 4h-2a2 2 0 0 0-1.5 3.3A1.6 1.6 0 0 1 12 22zM7.5 11.5h.01M10.5 7.5h.01M15.5 8.5h.01",
+  board: "M4 5h16v14H4zM9.5 5v14M14.5 5v14M6 8.5h2M11 8.5h2M16 8.5h2M6 11.5h2M11 11.5h2",
   monitor: "M3 4h18v12H3zM8 20h8M12 16v4",
   music: "M9 18V5l12-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM21 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z",
   play: "M6 4l14 8-14 8z",

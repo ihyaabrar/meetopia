@@ -85,16 +85,15 @@ export function WorkspaceBoard({
         : Number(a.completed) - Number(b.completed),
     );
   return (
-    <Modal title={labels[tab]} onClose={onClose} wide bare>
+    <Modal title={id ? "Papan tim" : "Team board"} onClose={onClose} wide bare>
       <div className="workspace-board">
         <div className="gallery-heading">
           <div>
-            <span className="eyebrow">TEAM WORKSPACE</span>
-            <h3>{labels[tab]}</h3>
+            <h3>{id ? "Papan tim" : "Team board"}</h3>
             <p>
               {id
-                ? "Rencana, pekerjaan, dan bahan tim—di satu tempat."
-                : "Your team's plans, work and resources in one place."}
+                ? "Agenda, tugas, dan file tim di satu tempat."
+                : "Your team's agenda, tasks and files in one place."}
             </p>
           </div>
           <button className="icon-btn" onClick={onClose} aria-label={id ? "Tutup" : "Close"}>

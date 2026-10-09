@@ -47,6 +47,9 @@ try {
     errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(process.env.UI_CHECK_URL ?? "http://localhost:3000/register");
+  // Inject only after React has hydrated the page, or the extra DOM causes a hydration mismatch.
+  await page.waitForLoadState("networkidle");
+  await page.waitForTimeout(500);
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
   const result = await page.evaluate(() => window.masterQA());
   expect(errors).toEqual([]);

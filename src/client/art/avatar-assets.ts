@@ -481,6 +481,8 @@ export interface WalkingBody {
   legTop: number;
   /** Source-pixel hip pivot of each leg. */
   hips: Array<[number, number]>;
+  /** Arms cut from the body (already removed from `upper`), with their shoulder pivot. */
+  arms: Array<{ canvas: HTMLCanvasElement; pivot: [number, number]; side: -1 | 1 }>;
 }
 const walkingBodies = new WeakMap<HTMLCanvasElement, WalkingBody>();
 
@@ -622,6 +624,11 @@ export function walkingBodyParts(a: AvatarConfig, dir: AvatarDirection): Walking
         }
       }
     }
+  const arms = cutArms(upperPx, kind, w, h, legTop, profile, { SKIN, GARMENT }).map((arm) => {
+    const c = make();
+    c.getContext("2d")!.putImageData(arm.px, 0, 0);
+    return { canvas: c, pivot: arm.pivot, side: arm.side };
+  });
   upper.getContext("2d")!.putImageData(upperPx, 0, 0);
   const legs = legPx.map((px) => {
     const c = make();
@@ -640,7 +647,146 @@ export function walkingBodyParts(a: AvatarConfig, dir: AvatarDirection): Walking
         }
     return [n ? sum / n : w / 2, legTop - h * (profile ? 0.06 : 0.02)];
   });
-  const parts = { upper, legs, legTop, hips };
+  const parts = { upper, legs, legTop, hips, arms };
   walkingBodies.set(body.canvas, parts);
   return parts;
+}
+
+/**
+ * Cut the arms out of a body's upper half so they can swing. Hands are the skin blobs between chest
+ * and thigh. Quarter/rear views: each arm hangs beside the torso, so it is cut at the gap column
+ * between forearm and torso. Profile: the near arm lies over the torso, so it is cut along the
+ * shoulder-to-hand axis and the torso behind it is filled with the nearest garment color (the
+ * silhouette outline is kept). The cut pixels are removed from `upper` in place.
+ */
+function cutArms(
+  upper: ImageData,
+  kind: Uint8Array,
+  w: number,
+  h: number,
+  legTop: number,
+  profile: boolean,
+  k: { SKIN: number; GARMENT: number },
+): Array<{ px: ImageData; pivot: [number, number]; side: -1 | 1 }> {
+  const a = upper.data;
+  const opaque = (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < h && a[(y * w + x) * 4 + 3] > 0;
+  // Skin blobs (4-connected) with their bounds.
+  const seen = new Uint8Array(w * h);
+  const blobs: Array<{ n: number; x0: number; x1: number; y0: number; y1: number; cx: number; cy: number }> =
+    [];
+  for (let start = 0; start < w * h; start++) {
+    if (seen[start] || kind[start] !== k.SKIN || a[start * 4 + 3] === 0) continue;
+    const stack = [start];
+    seen[start] = 1;
+    let n = 0,
+      sx = 0,
+      sy = 0,
+      x0 = w,
+      x1 = 0,
+      y0 = h,
+      y1 = 0;
+    while (stack.length) {
+      const p = stack.pop()!,
+        x = p % w,
+        y = (p - x) / w;
+      n++;
+      sx += x;
+      sy += y;
+      x0 = Math.min(x0, x);
+      x1 = Math.max(x1, x);
+      y0 = Math.min(y0, y);
+      y1 = Math.max(y1, y);
+      for (const q of [x > 0 ? p - 1 : -1, x < w - 1 ? p + 1 : -1, p - w, p + w])
+        if (q >= 0 && q < w * h && !seen[q] && kind[q] === k.SKIN && a[q * 4 + 3] > 0) {
+          seen[q] = 1;
+          stack.push(q);
+        }
+    }
+    blobs.push({ n, x0, x1, y0, y1, cx: sx / n, cy: sy / n });
+  }
+  const hands = blobs.filter((b) => b.n >= 12 && b.cy > h * 0.4 && b.cy < h * 0.85).sort((p, q) => q.n - p.n);
+  const out: Array<{ px: ImageData; pivot: [number, number]; side: -1 | 1 }> = [];
+  const take = (inArm: (x: number, y: number) => boolean, y0: number, y1: number, fill: boolean) => {
+    const px = new ImageData(w, h);
+    const mark = new Uint8Array(w * h);
+    let sumX = 0,
+      nTop = 0;
+    for (let y = Math.max(0, y0); y <= Math.min(h - 1, y1); y++)
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        if (!inArm(x, y) || a[i * 4 + 3] === 0) continue;
+        px.data.set(a.subarray(i * 4, i * 4 + 4), i * 4);
+        mark[i] = 1;
+        if (y < y0 + 5) {
+          sumX += x;
+          nTop++;
+        }
+      }
+    for (let i = 0; i < w * h; i++) {
+      if (!mark[i]) continue;
+      const x = i % w,
+        y = (i - x) / w;
+      const edge = !opaque(x - 1, y) || !opaque(x + 1, y) || !opaque(x, y - 1) || !opaque(x, y + 1);
+      if (!fill || y >= legTop) {
+        a[i * 4 + 3] = 0;
+        continue;
+      }
+      if (edge && kind[i] !== k.SKIN) continue;
+      // Torso behind the arm: nearest uncovered garment pixel in the same row.
+      let done = false;
+      for (let d = 1; d < w && !done; d++)
+        for (const xx of [x - d, x + d]) {
+          const q = y * w + xx;
+          if (xx < 0 || xx >= w || mark[q] || kind[q] !== k.GARMENT || a[q * 4 + 3] === 0) continue;
+          a.set(a.subarray(q * 4, q * 4 + 4), i * 4);
+          done = true;
+          break;
+        }
+      if (!done) a[i * 4 + 3] = 0;
+    }
+    return { px, pivotX: nTop ? sumX / nTop : w / 2 };
+  };
+  if (profile) {
+    const hand = hands[0];
+    if (!hand) return out;
+    const sx = hand.cx + w * 0.03,
+      sy = h * 0.2,
+      ex = hand.cx,
+      ey = hand.y1,
+      half = w * 0.19;
+    const inArm = (x: number, y: number) => {
+      const vx = ex - sx,
+        vy = ey - sy,
+        t = Math.max(0, Math.min(1, ((x - sx) * vx + (y - sy) * vy) / (vx * vx + vy * vy)));
+      return Math.hypot(x - (sx + vx * t), y - (sy + vy * t)) <= half;
+    };
+    const arm = take(inArm, Math.floor(sy - half * 0.4), ey + 3, true);
+    out.push({ px: arm.px, pivot: [sx, sy], side: 1 });
+    return out;
+  }
+  for (const side of [-1, 1] as const) {
+    const hand = hands.find((b) => (side < 0 ? b.cx < w * 0.32 : b.cx > w * 0.68));
+    if (!hand) continue;
+    // Gap column between forearm and torso, searched from the hand's inner edge toward the middle.
+    const ya = Math.max(0, Math.floor(hand.y0 - h * 0.1)),
+      yb = hand.y1;
+    let cut = side < 0 ? hand.x1 + 1 : hand.x0 - 1,
+      best = 1e9;
+    for (let x = side < 0 ? hand.x1 : hand.x0; side < 0 ? x < w * 0.42 : x > w * 0.58; x -= side) {
+      let n = 0;
+      for (let y = ya; y <= yb; y++) if (opaque(x, y)) n++;
+      if (n < best) {
+        best = n;
+        cut = x;
+      }
+    }
+    // Only the part hanging free of the torso swings (from where the gap opens down to the hand);
+    // above it sleeve and torso share an outline, so cutting there would tear the shoulder open.
+    let top = hand.y0;
+    while (top > 0 && !opaque(cut, top - 1)) top--;
+    // Two extra rows take the hand's outline along, so no ink specks stay behind when it moves.
+    const arm = take((x) => (side < 0 ? x < cut : x > cut), top, hand.y1 + 3, false);
+    out.push({ px: arm.px, pivot: [arm.pivotX, top], side });
+  }
+  return out;
 }

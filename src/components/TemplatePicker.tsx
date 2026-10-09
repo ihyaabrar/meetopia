@@ -95,7 +95,6 @@ export function TemplatePicker({
     <div className="map-gallery">
       <div className="gallery-heading">
         <div>
-          <span className="eyebrow">MEETOPIA WORLDS</span>
           <h3>{t("gallery.title")}</h3>
           <p>{t("gallery.subtitle")}</p>
         </div>

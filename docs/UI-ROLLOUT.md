@@ -75,3 +75,11 @@ Entry points: Map → Ruangan for gallery/appearance/size, Map → Editor furnit
 - **Kursi bar Rooftop menghadap meja bar.** Stool berjarak satu petak dari meja bar sehingga arah duduk jatuh ke bawaan "menghadap bawah" (membelakangi bar); kini stool menempel di meja bar dan menghadap ke atas. Revisi template rooftop naik ke 3 (peta rooftop yang belum diedit ikut diperbarui).
 - **Duduk membelakangi kamera:** kaki tidak lagi digambar menjuntai ke arah kamera di bawah sandaran kursi (dari belakang kaki ada di depan tubuh, tertutup kursi/meja).
 - Avatar dengan rok/celana pendek atau yang memegang barang memakai kaki artikulasi dan sudah melangkah di semua arah.
+
+## Jalan, duduk, kontrol, dan perapian UI — 9 Oktober 2026
+
+- **Jalan:** kaki kiri-kanan bergantian dan lengan berayun di kedelapan arah. Tampak depan memakai dua frame bergambar; samping/serong/belakang dipotong dari badan bergambar (`walkingBodyParts` + `cutArms`): lengan samping berotasi dari bahu (torso di belakangnya diisi warna baju), lengan serong/belakang hanya bagian yang menggantung bebas yang berayun (bahu tetap utuh, tanpa celah). Alat QA frame-per-frame: hook dev `window.__meetopia.drawAvatar`.
+- **Tempat duduk ganda:** sofa satu orang per petak (3 petak = 3 orang, 2 petak = 2), kasur satu orang per 2 petak; `seatCount()` dipakai server, klien, dan validasi editor. Avatar berjalan ke slot kosong terdekat dan memilih ulang bila slot diambil saat berjalan.
+- **Kontrol:** Space lompat (tetap terlihat saat berjalan; server tidak mereset "jump" ketika bergerak, animasi dimulai dari awal), E dua tahap (lihat aksi, lalu jalankan), E untuk berdiri saat duduk.
+- **Bug:** Beranda di ponsel memakai kolom 72px (aturan `.app.home` ber-`!important` berlaku di semua lebar) sehingga isinya terjepit; tombol hamburger di Beranda desktop tidak melakukan apa-apa; tombol Anggota tampil di Beranda; subjudul header menulis "Kantor" untuk semua jenis ruangan selama menyambung; pratinjau tema di Pengaturan masih palet arang lama.
+- Lihat `DESIGN.md` bagian "Satu pintu per aksi" untuk keputusan tata letak dan alasannya.

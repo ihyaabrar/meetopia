@@ -2500,25 +2500,26 @@ input.switch:checked::before {
   flex: 0 0 18%;
 }
 .t-dark .theme-swatch i:nth-child(1) {
-  background: #141312;
+  background: #07131a;
 }
 .t-dark .theme-swatch i:nth-child(2) {
-  background: #2a2724;
+  background: #11232b;
 }
 .t-light .theme-swatch i:nth-child(1) {
-  background: #e6e1d8;
+  background: #efebe4;
 }
 .t-light .theme-swatch i:nth-child(2) {
   background: #ffffff;
 }
 .t-system .theme-swatch i:nth-child(1) {
-  background: #2a2724;
+  background: #11232b;
 }
 .t-system .theme-swatch i:nth-child(2) {
   background: #f6f3ee;
 }
+/* Pratinjau tema memakai token tema yang sebenarnya (ink-teal + mint), bukan palet arang lama. */
 .theme-swatch i:nth-child(3) {
-  background: #18864a;
+  background: #00cf92;
 }
 :root[data-motion="reduced"] *,
 :root[data-motion="reduced"] *::before {
@@ -3087,8 +3088,11 @@ input.switch:checked::before {
 }
 
 /* ---------- Beranda: Pilih Workspace ---------- */
-.app.home {
-  grid-template-columns: 72px minmax(0, 1fr) !important;
+/* Hanya desktop: di ponsel rail ada di laci, jadi Beranda memakai satu kolom penuh. */
+@media (min-width: 761px) {
+  .app.home {
+    grid-template-columns: 72px minmax(0, 1fr) !important;
+  }
 }
 .app.home .sidebar,
 .app.home .members {

@@ -84,6 +84,7 @@ const LEAVE_GRACE_MS = 3_000;
 const LAST_POSITION_TTL = 24 * 3600;
 const CHAT_WINDOW_MS = 5_000;
 const CHAT_MAX_PER_WINDOW = 6;
+const JUMP_TTL_MS = 1_200;
 const NEEDS_TTL = 30 * 24 * 3600;
 /** Gaji dicairkan ke Neon setiap terkumpul sekian koin (sekitar 10 menit), bukan tiap menit. */
 const WALLET_FLUSH_COINS = 10;
@@ -97,6 +98,8 @@ interface Conn {
   autoAway: boolean;
   chatTimes: number[];
   emoteTimes: number[];
+  /** When the current jump started (a jump never outlives JUMP_TTL_MS while moving). */
+  jumpAt: number;
   musicTimes: number[];
   lastPosSave: number;
   /** Kapan kehadiran terakhir ditulis ke Redis. */
@@ -228,7 +231,11 @@ export class RealtimeHub {
     const all = present.filter((p) => p.id !== auth.userId);
     const live = present.find((p) => p.id === auth.userId);
     const savedRaw = live ? null : await kv.get(keys.lastPosition(auth.groupId, auth.userId));
-    const saved = live ? { x: live.x, y: live.y } : savedRaw ? (JSON.parse(savedRaw) as { x: number; y: number }) : null;
+    const saved = live
+      ? { x: live.x, y: live.y }
+      : savedRaw
+        ? (JSON.parse(savedRaw) as { x: number; y: number })
+        : null;
     const restored = !!saved && this.isWalkable(room, saved.x, saved.y);
     if (restored) pos = saved;
     // Jangan muncul di dalam ruang privat yang sedang dipakai orang lain
@@ -283,6 +290,7 @@ export class RealtimeHub {
       autoAway: false,
       chatTimes: [],
       emoteTimes: [],
+      jumpAt: 0,
       musicTimes: [],
       lastPosSave: 0,
       presenceWrittenAt: 0,
@@ -527,9 +535,13 @@ export class RealtimeHub {
 
       case "avatarAction": {
         const now = Date.now();
-        conn.emoteTimes = conn.emoteTimes.filter((t) => now - t < CHAT_WINDOW_MS);
-        if (conn.emoteTimes.length >= CHAT_MAX_PER_WINDOW) return;
-        conn.emoteTimes.push(now);
+        // Ending a pose is never rate limited: a dropped "idle" would leave a jump looping for peers.
+        if (m.action !== "idle") {
+          conn.emoteTimes = conn.emoteTimes.filter((t) => now - t < CHAT_WINDOW_MS);
+          if (conn.emoteTimes.length >= CHAT_MAX_PER_WINDOW) return;
+          conn.emoteTimes.push(now);
+        }
+        if (m.action === "jump") conn.jumpAt = now;
         p.avatarAction = m.action;
         delete p.pairedAction;
         return this.broadcastUpdate(conn);
@@ -627,7 +639,9 @@ export class RealtimeHub {
         p.y = m.y;
         p.dir = m.dir;
         p.moving = m.moving;
-        if (m.moving) p.avatarAction = "idle";
+        // Walking ends a pose, but a jump (Space) keeps playing while moving, and only briefly.
+        if (m.moving && !(p.avatarAction === "jump" && Date.now() - conn.jumpAt < JUMP_TTL_MS))
+          p.avatarAction = "idle";
         const stoodUp = m.moving && p.sitting;
         if (m.moving) {
           await this.releaseSeat(conn);

@@ -51,7 +51,6 @@ export function AuthExperience({
   return (
     <div className="auth-experience" data-expanded={expanded || undefined}>
       <aside className="auth-story">
-        <span className="auth-eyebrow">{t("auth.panelEyebrow")}</span>
         <h2>
           {t("auth.panelTitle")} <span className="auth-story-accent">{t("auth.panelJoin")}</span>
         </h2>

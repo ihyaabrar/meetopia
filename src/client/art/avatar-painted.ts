@@ -544,6 +544,26 @@ function drawWalkingBody(
     });
   }
   ctx.drawImage(parts.upper, x, y, w, h);
+  // Arms swing against the legs: the arm opposite the stepping leg goes forward.
+  for (const arm of parts.arms) {
+    const [px, py] = arm.pivot;
+    ctx.save();
+    ctx.translate(x + px * kx, y + py * ky);
+    if (view === "profile") {
+      // The near leg (drawn last above) is forward while s > 0, so the near arm swings back.
+      ctx.rotate(s * 0.5);
+    } else if (view === "quarter" || diagonal) {
+      // Viewer-left leg steps while s > 0; the viewer-right arm then reaches toward the heading.
+      // Sheared from the shoulder (not rotated) so the sleeve stays attached to the torso.
+      ctx.transform(1, 0, (arm.side > 0 ? s : -s) * 0.6, 1, 0, 0);
+    } else {
+      // Straight from behind a forward swing is foreshortened (shorter), a back swing slightly longer.
+      const p = arm.side > 0 ? s : -s;
+      ctx.scale(1, p > 0 ? 1 - p * 0.16 : 1 - p * 0.05);
+    }
+    ctx.drawImage(arm.canvas, -px * kx, -py * ky, w, h);
+    ctx.restore();
+  }
 }
 
 /** Painted modular head/garment sprites + deterministic articulated limbs, not whole-sheet screenshots. */

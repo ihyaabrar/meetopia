@@ -34,7 +34,7 @@ import { avatarCondition } from "@/shared/avatar-state";
 import { LifeHud } from "./LifeHud";
 import { AvatarActions } from "./AvatarActions";
 import { directionFrom, type AvatarAction } from "@/shared/avatar-animation";
-import { seatPose } from "@/shared/seats";
+import { seatCount, seatPose } from "@/shared/seats";
 import { furnitureAt } from "@/client/art/environment-assets";
 
 const noSub = () => () => {};
@@ -69,7 +69,6 @@ interface Props {
   onAction: (action: ObjectAction, obj: MapObject) => void;
   onPeerClick: (peer: Presence) => void;
   onOpenDevices: () => void;
-  onOpenNotes: () => void;
   onHelp: () => void;
   /** Dipanggil komponen induk untuk meminta avatar berjalan ke titik/orang tertentu. */
   registerWalkTo: (fn: (p: Point) => void) => void;
@@ -84,11 +83,19 @@ interface Display {
   phase: number;
   lastPuff: number;
   level: number;
+  /** Current avatar action and when (scene seconds) it started, so a jump starts on the ground. */
+  action?: string;
+  actionAt: number;
 }
 
 function dirFrom(dx: number, dy: number, fallback: Direction): Direction {
   return directionFrom(dx, dy, fallback);
 }
+
+/** Walking cancels poses (wave, phone...), but a jump keeps playing while moving. */
+const keepJump = (me: { avatarAction?: string }) => (me.avatarAction === "jump" ? "jump" : "idle");
+/** Length of one jump (the rig spends its first half-second in the air). */
+const JUMP_MS = 650;
 
 export function RoomStage({
   room,
@@ -99,7 +106,6 @@ export function RoomStage({
   onAction,
   onPeerClick,
   onOpenDevices,
-  onOpenNotes,
   onHelp,
   registerWalkTo,
   life,
@@ -328,7 +334,7 @@ export function RoomStage({
           if (free(nx + (vx / len) * step, ny)) nx += (vx / len) * step;
           if (free(nx, ny + (vy / len) * step)) ny += (vy / len) * step;
           const dir = dirFrom(vx, vy, me.dir);
-          room.updateSelf({ x: nx, y: ny, dir, moving: true, sitting: false, avatarAction: "idle" });
+          room.updateSelf({ x: nx, y: ny, dir, moving: true, sitting: false, avatarAction: keepJump(me) });
           st.keyMoving = true;
           if (nowMs - st.lastSend > SEND_INTERVAL) {
             st.lastSend = nowMs;
@@ -362,7 +368,7 @@ export function RoomStage({
         }
         const moving = st.path.length > 0;
         const dir = dirFrom(dx, dy, me.dir);
-        room.updateSelf({ x: nx, y: ny, dir, moving, sitting: false, avatarAction: "idle" });
+        room.updateSelf({ x: nx, y: ny, dir, moving, sitting: false, avatarAction: keepJump(me) });
         if (nowMs - st.lastSend > SEND_INTERVAL || !moving) {
           st.lastSend = nowMs;
           room.send({ t: "move", x: nx, y: ny, dir, moving });
@@ -413,7 +419,7 @@ export function RoomStage({
       for (const p of s.peers.values()) {
         let d = st.display.get(p.id);
         if (!d) {
-          d = { x: p.x, y: p.y, phase: 0, lastPuff: 0, level: 0 };
+          d = { x: p.x, y: p.y, phase: 0, lastPuff: 0, level: 0, actionAt: 0 };
           st.display.set(p.id, d);
         }
         if (p.id === s.selfId) {
@@ -439,11 +445,16 @@ export function RoomStage({
         }
         const lv = p.media.mic ? media.level(p.id === s.selfId ? "self" : p.id) : 0;
         d.level = Math.max(lv, d.level * 0.85);
+        if (d.action !== p.avatarAction) {
+          d.action = p.avatarAction;
+          d.actionAt = time;
+        }
         const view: PersonView = {
           p,
           x: d.x,
           y: d.y,
           phase: d.phase,
+          actionAt: d.actionAt,
           speaking: d.level,
           isSelf: p.id === s.selfId,
           seed: hashStr(p.id),
@@ -598,6 +609,11 @@ export function RoomStage({
   useEffect(() => {
     nearestObjectRef.current = nearestObject;
   });
+  const keyActionsRef = useRef<{ interact: () => void; jump: () => void }>({
+    interact: () => {},
+    jump: () => {},
+  });
+
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key !== "Enter") return;
     const obj = nearestObject();
@@ -607,7 +623,7 @@ export function RoomStage({
     }
   };
 
-  // Keyboard: WASD/panah untuk berjalan, E untuk membuka aksi objek terdekat (sama dengan mengetuknya).
+  // Keyboard: WASD/panah untuk berjalan, Space untuk lompat, E untuk aksi objek terdekat (E lagi = jalankan).
   useEffect(() => {
     const KEYS: Record<string, string> = {
       w: "up",
@@ -632,8 +648,14 @@ export function RoomStage({
         state.current.keys.add(KEYS[k]);
         setHint(null);
       } else if (k === "e" && !e.repeat) {
-        const obj = nearestObjectRef.current();
-        if (obj) setHint({ obj, pinned: true });
+        e.preventDefault();
+        keyActionsRef.current.interact();
+      } else if (e.key === " " && !e.repeat) {
+        // Space on a focused button still presses that button; on the map it jumps.
+        const el = e.target;
+        if (el instanceof HTMLElement && el !== document.body && el.tagName !== "CANVAS") return;
+        e.preventDefault();
+        keyActionsRef.current.jump();
       }
     };
     const up = (e: KeyboardEvent) => {
@@ -660,21 +682,38 @@ export function RoomStage({
     // Setelah memilih aksi, popup ditutup; ketuk objeknya lagi untuk aksi lain.
     setHint(null);
     if (action === "sit") {
-      walkTo({ x: obj.x + Math.floor(obj.w / 2), y: obj.y }, () => {
-        // Sit facing the way the seat faces (desk chairs toward the desk, sofas toward the room),
-        // not whichever way the last step of the walk happened to point.
+      // Free places on a sofa/bed, nearest to where the person is standing first.
+      const freeSlots = () => {
         const peers = [...room.getSnapshot().peers.values()];
-        const slots = obj.kind === "sofa" ? Math.max(1, Math.floor(obj.w / 1.4)) : 1;
-        const slot = Array.from({ length: slots }, (_, i) => i).find(
-          (i) =>
-            !peers.some(
-              (p) => p.id !== room.self?.id && p.sitting && p.seatId === obj.id && (p.seatIndex ?? 0) === i,
-            ),
-        );
+        const me = room.self;
+        return Array.from({ length: seatCount(obj) }, (_, i) => i)
+          .filter(
+            (i) =>
+              !peers.some(
+                (p) => p.id !== me?.id && p.sitting && p.seatId === obj.id && (p.seatIndex ?? 0) === i,
+              ),
+          )
+          .sort((a, b) => {
+            const pa = seatPose(map, obj, a),
+              pb = seatPose(map, obj, b);
+            return me ? Math.hypot(pa.x - me.x, pa.y - me.y) - Math.hypot(pb.x - me.x, pb.y - me.y) : a - b;
+          });
+      };
+      const first = freeSlots()[0];
+      if (first === undefined) {
+        toast({ text: t("seat.occupied"), kind: "error" });
+        return;
+      }
+      const target = seatPose(map, obj, first);
+      walkTo({ x: Math.floor(target.x), y: Math.floor(target.y) }, () => {
+        // Someone may have taken that place during the walk: re-pick from here.
+        const slot = freeSlots()[0];
         if (slot === undefined) {
           toast({ text: t("seat.occupied"), kind: "error" });
           return;
         }
+        // Sit facing the way the seat faces (desk chairs toward the desk, sofas toward the room),
+        // not whichever way the last step of the walk happened to point.
         const seat = seatPose(map, obj, slot);
         room.send({ t: "sit", sitting: true, objectId: obj.id, seatIndex: slot });
         room.updateSelf({ sitting: true, moving: false, ...seat });
@@ -689,6 +728,41 @@ export function RoomStage({
     }
     onAction(action, obj);
   };
+
+  /**
+   * E: the first press opens the nearest object's actions, a second press on the same object runs its
+   * main action (sit, watch, music...). Seated with nothing else nearby, E stands up.
+   */
+  const interact = () => {
+    const me = room.self;
+    const obj = nearestObject();
+    if (hint?.pinned && obj && hint.obj.id === obj.id && obj.actions?.length) {
+      runAction(obj.actions[0], obj);
+      return;
+    }
+    if (me?.sitting && (!obj || obj.id === me.seatId)) {
+      setHint(null);
+      room.updateSelf({ sitting: false, seatId: undefined, seatIndex: undefined });
+      room.send({ t: "sit", sitting: false });
+      return;
+    }
+    if (obj) setHint({ obj, pinned: true });
+  };
+  /** Space: a short jump, also while walking (seated people stand up first with E). */
+  const jump = () => {
+    const me = room.self;
+    if (!me || me.sitting || me.avatarAction === "jump") return;
+    room.updateSelf({ avatarAction: "jump" });
+    room.send({ t: "avatarAction", action: "jump" });
+    window.setTimeout(() => {
+      if (room.self?.avatarAction !== "jump") return;
+      room.updateSelf({ avatarAction: "idle" });
+      room.send({ t: "avatarAction", action: "idle" });
+    }, JUMP_MS);
+  };
+  useEffect(() => {
+    keyActionsRef.current = { interact, jump };
+  });
 
   // ------------------------------------------------------------ kontrol media
   const [busyMedia, setBusyMedia] = useState(false);
@@ -1002,9 +1076,15 @@ export function RoomStage({
             </button>
           </div>
           <div className="actions">
-            {hint.obj.actions?.map((a) => (
-              <button key={a} className="btn small" onClick={() => runAction(a, hint.obj)}>
+            {hint.obj.actions?.map((a, i) => (
+              <button
+                key={a}
+                className="btn small"
+                onClick={() => runAction(a, hint.obj)}
+                title={i === 0 ? t("hint.pressE") : undefined}
+              >
                 {t(`action.${a}`)}
+                {i === 0 && <kbd className="key-hint">E</kbd>}
               </button>
             ))}
           </div>
@@ -1092,7 +1172,8 @@ export function RoomStage({
             trigger={
               <>
                 <Icon name="pin" size={16} />
-                <span className="dropdown-value">{zoneHere ? t(zoneHere.label) : t("room.goTo")}</span>
+                {/* Area saat ini sudah tampil di chip HUD; tombol ini hanya untuk berpindah. */}
+                <span className="dropdown-value">{t("room.goTo")}</span>
               </>
             }
             items={map.zones.map((z) => ({
@@ -1103,19 +1184,11 @@ export function RoomStage({
           />
           <button
             className="dock-btn"
-            onClick={onOpenNotes}
-            aria-label={t("notes.title")}
-            title={t("notes.title")}
-          >
-            <Icon name="notes" />
-          </button>
-          <button
-            className="dock-btn"
             onClick={onOpenDevices}
             aria-label={t("devices.title")}
             title={t("devices.title")}
           >
-            <Icon name="settings" />
+            <Icon name="volume" />
           </button>
           <button
             className="dock-btn hide-sm"

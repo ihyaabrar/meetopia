@@ -167,7 +167,6 @@ export function FurnitureEditor({ groupId, onSaved }: { groupId: string; onSaved
     <section className="furniture-editor">
       <div className="gallery-heading">
         <div>
-          <span className="eyebrow">MEETOPIA SPACE BUILDER</span>
           <h3>{t("editor.title")}</h3>
           <p>{t("editor.help")}</p>
         </div>

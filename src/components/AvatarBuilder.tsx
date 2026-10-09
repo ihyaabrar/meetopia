@@ -172,10 +172,7 @@ export function AvatarBuilder({
   return (
     <div className={`builder avatar-studio avatar-tabbed ${previewExpanded ? "preview-expanded" : ""}`}>
       <div className="builder-preview">
-        <span className="builder-kicker">
-          <i />
-          {t("avatar.preview")}
-        </span>
+        <span className="builder-kicker">{t("avatar.preview")}</span>
         <div className="avatar-pedestal">
           <AvatarCanvas
             avatar={value}

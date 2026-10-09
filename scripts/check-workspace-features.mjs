@@ -234,11 +234,12 @@ try {
   expect(newer.appearance.roomSize).toBe("large");
   expect(newer.width).toBeGreaterThan(48);
   await page.waitForFunction(() => window.__meetopia.room.snapshot.map.template === "home");
-  await page.getByRole("button", { name: "Tugas", exact: true }).click();
+  // One rail button opens the team board; Agenda/Tugas/File are tabs inside it.
+  await page.getByRole("button", { name: "Papan tim", exact: true }).click();
+  await page.getByRole("tab", { name: "Tugas", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Review aset chibi" })).toBeVisible();
   await page.screenshot({ path: output + "/tasks.png", fullPage: true });
-  await page.getByRole("button", { name: "Tutup", exact: true }).click();
-  await page.getByRole("button", { name: "File", exact: true }).click();
+  await page.getByRole("tab", { name: "File & tautan", exact: true }).click();
   await expect(page.getByRole("heading", { name: "design-notes.txt" })).toBeVisible();
   await page.screenshot({ path: output + "/files.png", fullPage: true });
   await page.getByRole("button", { name: "Tutup", exact: true }).click();
@@ -281,7 +282,8 @@ try {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Buka menu", exact: true }).click();
-  await page.getByRole("button", { name: "Tugas", exact: true }).click();
+  await page.getByRole("button", { name: "Papan tim", exact: true }).click();
+  await page.getByRole("tab", { name: "Tugas", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Review aset chibi" })).toBeVisible();
   await page.screenshot({ path: output + "/tasks-mobile.png", fullPage: true });
   const dialog = page.getByRole("dialog");

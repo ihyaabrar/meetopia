@@ -26,6 +26,8 @@ export interface PersonView {
   seed: number;
   /** Owner-only cosmetic needs; never written to Presence or sent to peers. */
   condition?: AvatarCondition;
+  /** Scene time (s) when the current avatar action started. */
+  actionAt?: number;
 }
 
 export interface SceneFrame {
@@ -85,6 +87,7 @@ export class Scene {
   private measure: CanvasRenderingContext2D;
   private lightSprites = new Map<string, HTMLCanvasElement>();
   private vignette: { w: number; h: number; c: HTMLCanvasElement } | null = null;
+  private grade: { h: number; g: CanvasGradient } | null = null;
 
   /** Gradien cahaya dirender sekali lalu dipakai ulang (lebih ringan daripada gradien per frame). */
   private lightSprite(color: string, r: number): HTMLCanvasElement {
@@ -283,7 +286,12 @@ export class Scene {
       bodies.some((b) => {
         if (b.sortY >= y || b.seat === s.obj.id) return false;
         const hw = 9 * AVATAR_MAP_SCALE;
-        if (b.x + hw < s.x || b.x - hw > s.x + s.canvas.width || b.bottom < s.y || b.top > s.y + s.canvas.height)
+        if (
+          b.x + hw < s.x ||
+          b.x - hw > s.x + s.canvas.width ||
+          b.bottom < s.y ||
+          b.top > s.y + s.canvas.height
+        )
           return false;
         let hit = 0;
         for (let i = 0; i < 3; i++)
@@ -368,6 +376,24 @@ export class Scene {
     }
     ctx.globalAlpha = 1;
     ctx.restore();
+
+    // Color grading: warm light from the top of the map, a cooler shade toward the bottom
+    // (soft-light keeps it subtle and adds a little contrast to floor and furniture).
+    {
+      const worldH = this.map.height * T;
+      if (!this.grade || this.grade.h !== worldH) {
+        const g = ctx.createLinearGradient(0, 0, 0, worldH);
+        g.addColorStop(0, "rgba(255,222,170,0.22)");
+        g.addColorStop(0.55, "rgba(255,240,215,0.06)");
+        g.addColorStop(1, "rgba(40,70,90,0.20)");
+        this.grade = { h: worldH, g };
+      }
+      ctx.save();
+      ctx.globalCompositeOperation = "soft-light";
+      ctx.fillStyle = this.grade.g;
+      ctx.fillRect(0, 0, this.map.width * T, worldH);
+      ctx.restore();
+    }
 
     const ambience = this.map.appearance?.ambience;
     if (ambience && ambience !== "normal") {
@@ -617,33 +643,41 @@ export class Scene {
       workstationHands,
       walk: v.phase,
       sitting: p.sitting,
-      time: p.pairedAction && time !== 0 ? Math.max(0, (serverTime - p.pairedAction.startedAt) / 1000) : time,
+      time:
+        p.pairedAction && time !== 0
+          ? Math.max(0, (serverTime - p.pairedAction.startedAt) / 1000)
+          : p.avatarAction === "jump" && time !== 0
+            ? Math.max(0, time - (v.actionAt ?? 0))
+            : time,
       seed: v.seed,
       condition: v.condition,
       staticPose: time === 0,
-      activity: v.phase
-        ? "walk"
-        : p.avatarAction && p.avatarAction !== "idle"
-          ? p.avatarAction
-          : this.emotes.get(p.id)?.emoji === "👋"
-            ? "wave"
-            : this.emotes.get(p.id)?.emoji === "☕"
-              ? "coffee"
-              : this.emotes.get(p.id)?.emoji === "👍"
-                ? "thumbs-up"
-                : this.emotes.get(p.id)?.emoji === "👏"
-                  ? "clap"
-                  : this.emotes.get(p.id)?.emoji === "😂"
-                    ? "laugh"
-                    : this.emotes.get(p.id)?.emoji === "🤔"
-                      ? "think"
-                      : this.emotes.get(p.id)?.emoji === "🎉"
-                        ? "dance"
-                        : v.speaking > 0.08 && p.media.mic
-                          ? "talk"
-                          : p.sitting
-                            ? "sit"
-                            : "idle",
+      activity:
+        p.avatarAction === "jump"
+          ? "jump"
+          : v.phase
+            ? "walk"
+            : p.avatarAction && p.avatarAction !== "idle"
+              ? p.avatarAction
+              : this.emotes.get(p.id)?.emoji === "👋"
+                ? "wave"
+                : this.emotes.get(p.id)?.emoji === "☕"
+                  ? "coffee"
+                  : this.emotes.get(p.id)?.emoji === "👍"
+                    ? "thumbs-up"
+                    : this.emotes.get(p.id)?.emoji === "👏"
+                      ? "clap"
+                      : this.emotes.get(p.id)?.emoji === "😂"
+                        ? "laugh"
+                        : this.emotes.get(p.id)?.emoji === "🤔"
+                          ? "think"
+                          : this.emotes.get(p.id)?.emoji === "🎉"
+                            ? "dance"
+                            : v.speaking > 0.08 && p.media.mic
+                              ? "talk"
+                              : p.sitting
+                                ? "sit"
+                                : "idle",
     });
     ctx.globalAlpha = 1;
     if (!layer && p.status === "away") {

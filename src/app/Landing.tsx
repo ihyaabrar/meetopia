@@ -208,29 +208,15 @@ export function Landing() {
       <section className="hero-card">
         <div className="hero">
           <div>
-            <span className="hero-eyebrow">
-              <i /> {t("landing.eyebrow")}
-            </span>
             <h1 dangerouslySetInnerHTML={{ __html: t("landing.title") }} />
             <p className="lead">{t("landing.lead")}</p>
             <div className="row" style={{ flexWrap: "wrap" }}>
               <Link className="btn" href="/login" style={{ minHeight: 48, padding: "10px 22px" }}>
-                {t("landing.ctaEnter")} <Icon name="send" size={16} />
+                {t("landing.ctaEnter")}
               </Link>
               <Link className="btn secondary" href="/register" style={{ minHeight: 48 }}>
                 {t("landing.ctaCreate")}
               </Link>
-            </div>
-            <div className="hero-proof" aria-label={t("landing.proof.live")}>
-              <span className="proof-faces" aria-hidden>
-                {["#d9605a", "#4a7fc1", "#e0a33a"].map((color) => (
-                  <i key={color} style={{ background: color }} />
-                ))}
-              </span>
-              <span>
-                <b>{t("landing.proof.live")}</b>
-                <small>{t("landing.proof.rooms")}</small>
-              </span>
             </div>
           </div>
           <div className="hero-art">
@@ -240,19 +226,17 @@ export function Landing() {
         <section className="room-showcase" aria-labelledby="room-showcase-title">
           <div className="room-showcase-head">
             <div>
-              <span className="section-no">02 / DUNIA</span>
               <h2 id="room-showcase-title">{t("landing.spacesTitle")}</h2>
             </div>
             <p>{t("landing.spacesSub")}</p>
           </div>
           <div className="room-showcase-grid">
-            {TEMPLATE_IDS.map((id, index) => (
+            {TEMPLATE_IDS.map((id) => (
               <article className={`room-mini room-${id}`} key={id}>
                 <span className="room-mini-art" aria-hidden>
                   <MapPreview id={id} />
                 </span>
                 <span className="room-mini-copy">
-                  <small>0{index + 1}</small>
                   <b>
                     <Icon name={roomIcons[id]} size={16} /> {t(`tpl.${id}`)}
                   </b>

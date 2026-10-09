@@ -34,7 +34,6 @@ function LoginForm() {
   return (
     <AuthExperience>
       <form className="card auth-card" onSubmit={submit}>
-        <span className="auth-form-kicker">{t("auth.panelEyebrow")}</span>
         <h1>{t("auth.loginTitle")}</h1>
         <p className="sub">{t("auth.loginSub")}</p>
         {error && (

@@ -8,7 +8,7 @@ import {
   type MapData,
   type MapObject,
 } from "./map";
-import { canSitAt, seatPose } from "./seats";
+import { canSitAt, seatCount, seatPose } from "./seats";
 
 export const OBJECT_KINDS = [
   "desk",
@@ -145,8 +145,7 @@ export function layoutError(map: MapData): string | null {
     if (ids.has(obj.id)) return "editor.err.duplicate";
     ids.add(obj.id);
     if (obj.actions?.includes("sit")) {
-      const slots = obj.kind === "sofa" ? Math.max(1, Math.floor(obj.w / 1.4)) : 1;
-      for (let slot = 0; slot < slots; slot++) {
+      for (let slot = 0; slot < seatCount(obj); slot++) {
         const p = seatPose(map, obj, slot);
         if (!canSitAt(map, obj, p.x, p.y, slot) || !visited.has(`${Math.floor(p.x)},${Math.floor(p.y)}`))
           return "editor.err.seatUnreachable";
