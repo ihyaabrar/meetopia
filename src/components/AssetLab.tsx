@@ -118,6 +118,11 @@ export default function AssetLab() {
           tidak mengubah profil atau map milikmu.
         </p>
         <span className="asset-lab-badge">Prototype · Oak / Emerald</span>
+        <p>
+          <Link className="btn small" href="/3d-lab">
+            Buka master 3D ↗
+          </Link>
+        </p>
       </section>
       <div className="asset-lab-controls" aria-label="Pengaturan pratinjau">
         <label className="field">
