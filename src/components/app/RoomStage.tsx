@@ -36,6 +36,24 @@ import { AvatarActions } from "./AvatarActions";
 import { directionFrom, type AvatarAction } from "@/shared/avatar-animation";
 import { seatCount, seatPose } from "@/shared/seats";
 import { furnitureAt } from "@/client/art/environment-assets";
+import dynamic from "next/dynamic";
+import type { Room3DApi, Room3DFrame } from "@/features/world3d/room/Room3D";
+
+// Three.js only loads when the 3D room is used.
+const Room3D = dynamic(() => import("@/features/world3d/room/Room3D"), {
+  ssr: false,
+  loading: () => <div className="room3d-loading" aria-hidden="true" />,
+});
+
+/** WebGL support, checked once in the browser. */
+function hasWebGL() {
+  try {
+    const c = document.createElement("canvas");
+    return !!(c.getContext("webgl2") || c.getContext("webgl"));
+  } catch {
+    return false;
+  }
+}
 
 const noSub = () => () => {};
 const NO_AUDIBLE: never[] = [];
@@ -137,10 +155,17 @@ export function RoomStage({
   const self = snap.selfId ? snap.peers.get(snap.selfId) : undefined;
 
   const grid = useMemo(() => buildWalkable(map), [map]);
+  // 3D room by default (Settings > Appearance can switch back to the 2D map); 2D without WebGL.
+  const [webgl, setWebgl] = useState<boolean | null>(null);
+  useEffect(() => setWebgl(hasWebGL()), []);
+  const use3d = prefs.world3d && webgl === true;
+  const zoneLabel = useCallback((k: string) => t(k), [t]);
   const scene = useMemo(
-    () => (typeof document === "undefined" ? null : new Scene(map, (k) => t(k))),
-    [map, t],
+    () => (typeof document === "undefined" || use3d || webgl === null ? null : new Scene(map, (k) => t(k))),
+    [map, t, use3d, webgl],
   );
+  const frame3dRef = useRef<Room3DFrame | null>(null);
+  const api3dRef = useRef<Room3DApi | null>(null);
 
   const state = useRef({
     path: [] as Point[],
@@ -155,6 +180,8 @@ export function RoomStage({
     camera: { x: 0, y: 0, zoom: 1 },
     /** Zoom masih "pas peta" otomatis (belum diubah pengguna). */
     autoZoom: true,
+    /** Tombol "pas peta" ditekan: tampilkan seluruh peta, juga di 3D. */
+    fitAll: false,
     sizeKey: "",
     /** Tombol arah yang sedang ditekan (WASD / panah). */
     keys: new Set<string>(),
@@ -270,9 +297,14 @@ export function RoomStage({
         state.current.target = null;
         toast({ text: t("knock.rejectedMove"), kind: "error" });
       }),
-      room.on("emote", (e) => scene?.emote(e.id, e.emoji, now())),
+      room.on("emote", (e) => {
+        scene?.emote(e.id, e.emoji, now());
+        api3dRef.current?.emote(e.id, e.emoji);
+      }),
       room.on("chat", (m) => {
-        if (m.kind === "nearby") scene?.bubble(m.senderId, m.body, now());
+        if (m.kind !== "nearby") return;
+        scene?.bubble(m.senderId, m.body, now());
+        api3dRef.current?.bubble(m.senderId, m.body);
       }),
     ];
     return () => offs.forEach((o) => o());
@@ -280,14 +312,19 @@ export function RoomStage({
 
   // ------------------------------------------------------------ loop permainan
   useEffect(() => {
-    if (!scene) return;
-    const canvas = canvasRef.current!;
-    const ctx = canvas.getContext("2d")!;
+    if (!scene && !use3d) return;
     let raf = 0;
     let last = performance.now();
     let slowTick = 0;
 
     const frame = (nowMs: number) => {
+      // The 3D canvas is created asynchronously (dynamic import); wait for it.
+      const canvas = canvasRef.current;
+      if (!canvas) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+      const ctx = use3d ? null : canvas.getContext("2d");
       const dt = Math.max(0, Math.min(0.05, (nowMs - last) / 1000));
       last = nowMs;
       const time = nowMs / 1000;
@@ -380,7 +417,7 @@ export function RoomStage({
       const w = canvas.clientWidth;
       const h = canvas.clientHeight;
       const dpr = Math.min(2, window.devicePixelRatio || 1);
-      if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+      if (ctx && (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr))) {
         canvas.width = Math.round(w * dpr);
         canvas.height = Math.round(h * dpr);
       }
@@ -390,7 +427,8 @@ export function RoomStage({
       const inset = viewInsets(w);
       const sizeKey = `${w}x${h}`;
       if (!st.zoom || (st.autoZoom && st.sizeKey !== sizeKey)) {
-        st.zoom = fitZoom(map, w, h);
+        // 3D starts closer than "whole map" so people stay readable; the fit button shows it all.
+        st.zoom = fitZoom(map, w, h) * (use3d && !st.fitAll ? 2 : 1);
         st.autoZoom = true;
       }
       st.sizeKey = sizeKey;
@@ -441,7 +479,7 @@ export function RoomStage({
         d.phase = walking ? d.phase + dt * 13 : 0;
         if (walking && time - d.lastPuff > 0.22) {
           d.lastPuff = time;
-          scene.puff(d.x, d.y, time);
+          scene?.puff(d.x, d.y, time);
         }
         const lv = p.media.mic ? media.level(p.id === s.selfId ? "self" : p.id) : 0;
         d.level = Math.max(lv, d.level * 0.85);
@@ -478,38 +516,56 @@ export function RoomStage({
         }
       }
 
-      scene.draw(ctx, {
-        w,
-        h,
-        dpr,
-        cam: st.camera,
-        time,
-        serverTime: Date.now() + s.clockOffset,
-        people,
-        self: selfView,
-        target: st.target,
-        hoverTile: st.hover,
-        focusObj: hintObjRef.current,
-        links,
-        privateZone: me ? privateZoneAt(map, me.x, me.y) : null,
-        showRadius: !!me && (me.moving || st.path.length > 0),
-        speakers: Object.values(s.music).flatMap((m) => {
-          const obj = map.objects.find((o) => o.id === m.objectId);
-          if (!obj) return [];
-          return [{ obj, level: me ? speakerVolume(map, obj, me.x, me.y).volume : 0 }];
-        }),
-        reducedMotion: reducedMotion(),
-        showNames: getPrefs().showNames,
-        playingTvs: Object.keys(s.tv).flatMap((id) => map.objects.filter((o) => o.id === id)),
-        lockedZones: Object.fromEntries(Object.entries(s.locks).filter(([, l]) => l.locked)),
-      });
+      if (use3d)
+        frame3dRef.current = {
+          people,
+          zoom: z,
+          insetTop: inset.top,
+          insetBottom: inset.bottom,
+          target: st.target,
+          focusObj: hintObjRef.current,
+          reducedMotion: reducedMotion(),
+          showNames: getPrefs().showNames,
+          time,
+        };
+      else if (scene && ctx)
+        scene.draw(ctx, {
+          w,
+          h,
+          dpr,
+          cam: st.camera,
+          time,
+          serverTime: Date.now() + s.clockOffset,
+          people,
+          self: selfView,
+          target: st.target,
+          hoverTile: st.hover,
+          focusObj: hintObjRef.current,
+          links,
+          privateZone: me ? privateZoneAt(map, me.x, me.y) : null,
+          showRadius: !!me && (me.moving || st.path.length > 0),
+          speakers: Object.values(s.music).flatMap((m) => {
+            const obj = map.objects.find((o) => o.id === m.objectId);
+            if (!obj) return [];
+            return [{ obj, level: me ? speakerVolume(map, obj, me.x, me.y).volume : 0 }];
+          }),
+          reducedMotion: reducedMotion(),
+          showNames: getPrefs().showNames,
+          playingTvs: Object.keys(s.tv).flatMap((id) => map.objects.filter((o) => o.id === id)),
+          lockedZones: Object.fromEntries(Object.entries(s.locks).filter(([, l]) => l.locked)),
+        });
 
       // Posisi popup petunjuk objek
       const ho = hintObjRef.current;
       const hel = hintRef.current;
       if (hel && ho) {
-        hel.style.left = `${((ho.x + ho.w / 2) * TILE - st.camera.x) * z}px`;
-        hel.style.top = `${(ho.y * TILE - 18 - st.camera.y) * z}px`;
+        const at = use3d
+          ? api3dRef.current?.project(ho.x + ho.w / 2, ho.y + ho.h / 2, 1.3)
+          : { left: ((ho.x + ho.w / 2) * TILE - st.camera.x) * z, top: (ho.y * TILE - 18 - st.camera.y) * z };
+        if (at) {
+          hel.style.left = `${at.left}px`;
+          hel.style.top = `${at.top}px`;
+        }
       }
 
       // Tiap 200 ms: jumlah orang di dekat, dan tutup popup objek bila sudah ditinggal jauh.
@@ -527,10 +583,11 @@ export function RoomStage({
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [scene, map, room, media, grid]);
+  }, [scene, map, room, media, grid, use3d]);
 
   // ------------------------------------------------------------ input
   const toWorld = (clientX: number, clientY: number) => {
+    if (use3d) return api3dRef.current?.pick(clientX, clientY) ?? { x: -100, y: -100 };
     const r = canvasRef.current!.getBoundingClientRect();
     const cam = state.current.camera;
     return {
@@ -827,19 +884,40 @@ export function RoomStage({
 
   return (
     <div className="stage">
-      <canvas
-        ref={canvasRef}
-        className="map"
-        style={effects.blur > 0 ? { filter: `blur(${effects.blur}px)` } : undefined}
-        tabIndex={0}
-        aria-label={t("room.canvasLabel")}
-        onPointerDown={onPointerDown}
-        onPointerUp={onPointerUp}
-        onPointerMove={onPointerMove}
-        onPointerLeave={() => (state.current.hover = null)}
-        onKeyDown={onKeyDown}
-        onWheel={(e) => zoomBy(e.deltaY < 0 ? 1.1 : 0.9)}
-      />
+      {use3d ? (
+        <Room3D
+          map={map}
+          frameRef={frame3dRef}
+          apiRef={api3dRef}
+          zoneLabel={zoneLabel}
+          canvasLabel={t("room.canvasLabel")}
+          onCanvas={(c) => (canvasRef.current = c)}
+          style={effects.blur > 0 ? { filter: `blur(${effects.blur}px)` } : undefined}
+          handlers={{
+            onPointerDown,
+            onPointerUp,
+            onPointerMove,
+            onKeyDown,
+            onWheel: (e) => zoomBy(e.deltaY < 0 ? 1.1 : 0.9),
+          }}
+        />
+      ) : webgl === null ? (
+        <div className="room3d-loading" aria-hidden="true" />
+      ) : (
+        <canvas
+          ref={canvasRef}
+          className="map"
+          style={effects.blur > 0 ? { filter: `blur(${effects.blur}px)` } : undefined}
+          tabIndex={0}
+          aria-label={t("room.canvasLabel")}
+          onPointerDown={onPointerDown}
+          onPointerUp={onPointerUp}
+          onPointerMove={onPointerMove}
+          onPointerLeave={() => (state.current.hover = null)}
+          onKeyDown={onKeyDown}
+          onWheel={(e) => zoomBy(e.deltaY < 0 ? 1.1 : 0.9)}
+        />
+      )}
 
       <div className="hud-tl">
         {life && life.settings.enabled && <LifeHud life={life} />}
@@ -966,6 +1044,7 @@ export function RoomStage({
                 Object.assign(state.current, {
                   zoom: fitZoom(map, c.clientWidth, c.clientHeight),
                   autoZoom: true,
+                  fitAll: true,
                 });
             }}
           >

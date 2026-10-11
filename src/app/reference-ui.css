@@ -1877,3 +1877,99 @@
     justify-content: center;
   }
 }
+
+/* ---------- Ruangan 3D (Three.js) ---------- */
+.stage .room3d,
+.stage .room3d-loading {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+.stage .room3d-loading {
+  background: var(--chrome-deep);
+}
+.stage .room3d > div:first-child {
+  position: absolute !important;
+  inset: 0;
+}
+.stage .room3d canvas.map {
+  cursor: pointer;
+}
+.stage .room3d canvas.map:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+/* Name chips follow the heads; positioned every frame by the renderer (transform only). */
+.room3d-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.room3d-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  will-change: transform;
+}
+.room3d-label > * {
+  translate: -50% -100%;
+}
+.room3d-label .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px 3px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #1d2a2f;
+  font: 600 11px/16px var(--font);
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+.room3d-label .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--status, #00d69b);
+}
+.room3d-label .mic {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d2554a;
+}
+.room3d-label[data-mic="on"] .mic {
+  background: #4fae63;
+}
+.room3d-label[data-speaking="true"] .chip {
+  box-shadow:
+    0 0 0 2px #4fae63,
+    0 2px 6px rgba(0, 0, 0, 0.18);
+}
+.room3d-label .x {
+  position: absolute;
+  bottom: 22px;
+  left: 0;
+  max-width: 220px;
+}
+.room3d-label .x[data-kind="none"] {
+  display: none;
+}
+.room3d-label .x[data-kind="emoji"] {
+  font-size: 26px;
+  line-height: 1;
+}
+.room3d-label .x[data-kind="bubble"] {
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #1d2a2f;
+  font: 500 12px/1.35 var(--font);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  white-space: normal;
+  width: max-content;
+}

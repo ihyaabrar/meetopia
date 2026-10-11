@@ -854,6 +854,8 @@
   "us.roomSettings": "Pengaturan ruang",
   "us.showMinimap": "Tampilkan minimap",
   "us.showNames": "Tampilkan nama pengguna",
+  "us.world3d": "Ruangan 3D",
+  "us.world3dHint": "Avatar, furnitur, dan dinding digambar 3D. Matikan untuk peta 2D (lebih ringan untuk perangkat lama).",
   "us.showNamesHint": "Label nama di atas avatar orang lain. Namamu sendiri tetap tampil.",
   "us.avatarAnimation": "Animasi avatar",
   "us.notifSounds": "Suara notifikasi",

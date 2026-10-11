@@ -194,6 +194,7 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
   }, []);
 
   // Pindah grup tanpa memuat ulang halaman (FR-70, FR-71). Audio ruangan sebelumnya diputus.
+  const hadGroup = useRef(false);
   useEffect(() => {
     if (!activeId) {
       // Tidak ada grup lagi (dikeluarkan/grup dihapus): lepaskan koneksi ruangan yang sudah ditutup
@@ -202,13 +203,16 @@ function Shell({ initialUser, initialGroups }: { initialUser: Me; initialGroups:
       setRoom(null);
       setMedia(null);
       setMusic(null);
+      // Only after leaving a workspace: on first mount activeId is still empty while ?g= is being
+      // read, and dropping it then would send the user to their first workspace instead.
       const url = new URL(location.href);
-      if (url.searchParams.has("g")) {
+      if (hadGroup.current && url.searchParams.has("g")) {
         url.searchParams.delete("g");
         history.replaceState(null, "", url);
       }
       return;
     }
+    hadGroup.current = true;
     const url = new URL(location.href);
     url.searchParams.set("g", activeId);
     history.replaceState(null, "", url);

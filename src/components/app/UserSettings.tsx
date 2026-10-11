@@ -518,6 +518,13 @@ function AppearanceSection({ me, onSaved }: { me: Me; onSaved: (me: Me) => void 
           onChange={(v) => setPrefs({ showNames: v })}
         />
         <Toggle
+          id="us-world3d"
+          label={t("us.world3d")}
+          hint={t("us.world3dHint")}
+          checked={prefs.world3d}
+          onChange={(v) => setPrefs({ world3d: v })}
+        />
+        <Toggle
           id="us-life-hud"
           label={t("us.showLifeHud")}
           hint={t("us.showLifeHudHint")}

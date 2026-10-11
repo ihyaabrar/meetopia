@@ -854,6 +854,8 @@
   "us.roomSettings": "Room settings",
   "us.showMinimap": "Show minimap",
   "us.showNames": "Show user names",
+  "us.world3d": "3D room",
+  "us.world3dHint": "Avatars, furniture and walls are drawn in 3D. Turn off for the 2D map (lighter on older devices).",
   "us.showNamesHint": "Name labels above other people's avatars. Your own name always shows.",
   "us.avatarAnimation": "Avatar animation",
   "us.notifSounds": "Notification sounds",

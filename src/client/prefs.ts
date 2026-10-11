@@ -28,6 +28,8 @@ export interface Prefs {
   showMinimap: boolean;
   /** Label nama di atas avatar. */
   showNames: boolean;
+  /** Ruangan digambar 3D (Three.js); mati = peta 2D. Otomatis 2D bila WebGL tidak tersedia. */
+  world3d: boolean;
   /** Bar kebutuhan & koin di layar ruangan. */
   showLifeHud: boolean;
   /** Efek ringan saat bar hampir kosong (lebih lambat, suara mengecil, buram). Aturan 6 PRD. */
@@ -51,6 +53,7 @@ export const DEFAULT_PREFS: Prefs = {
   reducedMotion: false,
   showMinimap: true,
   showNames: true,
+  world3d: true,
   showLifeHud: true,
   lifeEffects: true,
 };
