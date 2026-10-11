@@ -13,6 +13,11 @@ import { findPath, type Point } from "@/shared/pathfinding";
 import { randomAvatar, DEFAULT_AVATAR } from "@/shared/avatar";
 import { MapPreview } from "@/components/MapPreview";
 import { loadAvatarAssets } from "@/client/art/avatar-assets";
+import dynamic from "next/dynamic";
+import { useWebGL } from "@/features/world3d/useWebGL";
+
+// The 3D preview (Three.js) loads only in browsers with WebGL; others keep the 2D preview.
+const Diorama3D = dynamic(() => import("@/features/world3d/room/Diorama3D"), { ssr: false });
 
 /** Pratinjau hidup: karakter berjalan acak di kantor template, lengkap dengan emote dan balon chat. */
 function HeroMap() {
@@ -190,6 +195,7 @@ function HeroMap() {
 
 export function Landing() {
   const t = useT();
+  const webgl = useWebGL();
   const roomIcons: Record<TemplateId, IconName> = {
     office: "briefcase",
     home: "home",
@@ -220,7 +226,17 @@ export function Landing() {
             </div>
           </div>
           <div className="hero-art">
-            <HeroMap />
+            {webgl ? (
+              <Diorama3D
+                template="office"
+                names={["Rani", "Dito", "Ayu", "Bima", "Sari", "Lala"]}
+                zoom={1.15}
+                zoneLabel={(k) => t(k)}
+                label={t("landing.previewAlt3d")}
+              />
+            ) : webgl === false ? (
+              <HeroMap />
+            ) : null}
           </div>
         </div>
         <section className="room-showcase" aria-labelledby="room-showcase-title">

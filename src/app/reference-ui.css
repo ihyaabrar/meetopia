@@ -1888,9 +1888,18 @@
 .stage .room3d-loading {
   background: var(--chrome-deep);
 }
-.stage .room3d > div:first-child {
+.room3d > div:first-child {
   position: absolute !important;
   inset: 0;
+}
+/* Decorative 3D previews (landing hero, auth panel) fill their frame. */
+.hero-art .room3d,
+.auth-room-preview .room3d {
+  position: absolute;
+  inset: 0;
+}
+.auth-room-preview .room3d-label .chip {
+  font-size: 10px;
 }
 .stage .room3d canvas.map {
   cursor: pointer;

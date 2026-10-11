@@ -398,6 +398,7 @@ export default function Room3D({
   handlers,
   onCanvas,
   style,
+  interactive = true,
 }: {
   map: MapData;
   frameRef: React.RefObject<Room3DFrame | null>;
@@ -408,6 +409,8 @@ export default function Room3D({
   /** Receives the WebGL canvas (RoomStage measures it and attaches the pointer cursor to it). */
   onCanvas?: (canvas: HTMLCanvasElement | null) => void;
   style?: React.CSSProperties;
+  /** false = decorative preview: not focusable, announced as an image. */
+  interactive?: boolean;
   handlers: Pick<
     React.HTMLAttributes<HTMLDivElement>,
     "onPointerDown" | "onPointerUp" | "onPointerMove" | "onKeyDown" | "onWheel"
@@ -428,9 +431,11 @@ export default function Room3D({
           gl.toneMappingExposure = 1.02;
           const c = gl.domElement;
           // Same DOM contract as the 2D canvas (keyboard focus, tests, assistive tech).
-          c.classList.add("map");
-          c.tabIndex = 0;
-          c.setAttribute("role", "application");
+          if (interactive) {
+            c.classList.add("map");
+            c.tabIndex = 0;
+            c.setAttribute("role", "application");
+          } else c.setAttribute("role", "img");
           c.setAttribute("aria-label", canvasLabel);
           c.dataset.renderer = "3d";
           c.style.background = new Color("#0b1a21").getStyle();
