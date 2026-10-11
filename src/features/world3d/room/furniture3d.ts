@@ -202,12 +202,13 @@ const beanbag: Builder = (k) => {
 const bed: Builder = (k, w, d) => {
   k.box([0, 0.18, 0], [w - 0.06, 0.24, d - 0.06], C.darkOak, 0.04);
   k.box([0, 0.36, 0.02], [w - 0.14, 0.14, d - 0.14], C.white, 0.06);
-  k.box([0, 0.44, 0.18], [w - 0.18, 0.06, d * 0.55], "#5b7f9c", 0.05);
-  k.box([0, 0.55, -d / 2 + 0.06], [w - 0.06, 0.6, 0.08], C.darkOak, 0.03);
+  // The sitter faces -Z: blanket toward them, headboard and pillows behind (+Z).
+  k.box([0, 0.44, -0.18], [w - 0.18, 0.06, d * 0.55], "#5b7f9c", 0.05);
+  k.box([0, 0.55, d / 2 - 0.06], [w - 0.06, 0.6, 0.08], C.darkOak, 0.03);
   const pillows = Math.max(1, Math.round(w / 1.2));
   for (let i = 0; i < pillows; i++)
     k.box(
-      [-w / 2 + (w * (i + 0.5)) / pillows, 0.47, -d / 2 + 0.3],
+      [-w / 2 + (w * (i + 0.5)) / pillows, 0.47, d / 2 - 0.3],
       [Math.min(0.6, w / pillows - 0.12), 0.1, 0.32],
       C.cream,
       0.05,
@@ -489,6 +490,24 @@ const builders: Partial<Record<MapObject["kind"], Builder>> = {
   },
 };
 
+/**
+ * Where a TV's screen points: toward the nearest sofa or beanbag (templates never said which way a
+ * screen faced). Returned as the local gaze; the TV builder puts the screen on the opposite side.
+ */
+function tvFacing(map: MapData, tv: MapObject): string {
+  const cx = tv.x + tv.w / 2,
+    cy = tv.y + tv.h / 2;
+  const dist = (o: MapObject) => Math.hypot(o.x + o.w / 2 - cx, o.y + o.h / 2 - cy);
+  const seat = map.objects
+    .filter((o) => o.kind === "sofa" || o.kind === "beanbag")
+    .sort((a, b) => dist(a) - dist(b))[0];
+  if (!seat || dist(seat) > 10) return "up";
+  const dx = seat.x + seat.w / 2 - cx,
+    dy = seat.y + seat.h / 2 - cy;
+  if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? "left" : "right";
+  return dy > 0 ? "up" : "down";
+}
+
 /** Fallback for kinds without a dedicated model: a neutral block of the right footprint. */
 const fallback = tall("#b8a98f", 0.8);
 
@@ -502,7 +521,9 @@ export function buildFurniture(map: MapData): Group {
     const dir =
       o.kind === "chair" || o.kind === "desk" || o.kind === "gamingDesk"
         ? workstationFacing(map, o)
-        : (o.facing ?? (o.kind === "sofa" || o.kind === "beanbag" || o.kind === "bed" ? "down" : "up"));
+        : o.kind === "tv" && !o.facing
+          ? tvFacing(map, o)
+          : (o.facing ?? (o.kind === "sofa" || o.kind === "beanbag" || o.kind === "bed" ? "down" : "up"));
     const yaw = facingYaw(dir);
     // Model in a local frame whose width runs across the gaze; a sideways object swaps footprint axes.
     const sideways = dir === "left" || dir === "right";

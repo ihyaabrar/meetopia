@@ -1,6 +1,12 @@
 "use client";
 import { useId, useState } from "react";
 import { AvatarCanvas } from "./AvatarCanvas";
+import dynamic from "next/dynamic";
+import { usePrefs } from "@/client/prefs";
+import { useWebGL } from "@/features/world3d/useWebGL";
+
+// The avatar editor shows the same 3D model as the room (2D when WebGL or the 3D room is off).
+const Avatar3DView = dynamic(() => import("@/features/avatar3d/Avatar3DView"), { ssr: false });
 import { Icon, type IconName } from "./Icon";
 import { useT, useI18n } from "@/i18n/client";
 import { actionLabel } from "@/shared/avatar-animation";
@@ -89,6 +95,9 @@ export function AvatarBuilder({
   const [clothing, setClothing] = useState<"outfit" | "bottom" | "shoes">("outfit");
   const [hairFilter, setHairFilter] = useState<AvatarGender>(value.gender);
   const [direction, setDirection] = useState<AvatarDirection>("down");
+  const prefs = usePrefs();
+  const webgl = useWebGL();
+  const use3d = webgl === true && prefs.world3d;
   const [activity, setActivity] = useState<AvatarActivity>("idle");
   const [condition, setCondition] = useState<AvatarCondition>("normal");
   const [previewExpanded, setPreviewExpanded] = useState(false);
@@ -174,14 +183,24 @@ export function AvatarBuilder({
       <div className="builder-preview">
         <span className="builder-kicker">{t("avatar.preview")}</span>
         <div className="avatar-pedestal">
-          <AvatarCanvas
-            avatar={value}
-            size={300}
-            animate
-            direction={direction}
-            activity={activity}
-            condition={condition}
-          />
+          {use3d ? (
+            <Avatar3DView
+              avatar={value}
+              direction={direction}
+              activity={activity}
+              reduced={prefs.reducedMotion}
+              label={t("avatar.preview")}
+            />
+          ) : (
+            <AvatarCanvas
+              avatar={value}
+              size={300}
+              animate
+              direction={direction}
+              activity={activity}
+              condition={condition}
+            />
+          )}
           <div className="avatar-rotate" role="group" aria-label={t("avatar.viewLabel")}>
             <button
               type="button"

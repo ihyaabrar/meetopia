@@ -7,13 +7,14 @@
   Meetopia
 </h1>
 
-**Work • Talk • Together.** Kantor virtual 2D yang jalan langsung di browser.
+**Work • Talk • Together.** Kantor virtual 3D yang jalan langsung di browser, dengan mode 2D sebagai cadangan.
 
 [**Coba demo**](https://meetopia-two.vercel.app) &nbsp;·&nbsp; [Spesifikasi (PRD)](docs/PRD.md) &nbsp;·&nbsp; [Arah desain](DESIGN.md)
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-149eca?logo=react&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript&logoColor=white)
+![three.js](https://img.shields.io/badge/three.js-R3F-000000?logo=threedotjs&logoColor=white)
 ![WebRTC](https://img.shields.io/badge/WebRTC-mesh-333333?logo=webrtc&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon%20%7C%20PGlite-4169e1?logo=postgresql&logoColor=white)
 ![Redis](https://img.shields.io/badge/Redis-pub%2Fsub-dc382d?logo=redis&logoColor=white)
@@ -28,7 +29,7 @@
 
 ---
 
-Setiap workspace punya ruangan 2D sendiri. Anggotanya hadir sebagai avatar chibi yang bisa berjalan, ngobrol dengan suara yang mengikuti jarak, berbagi layar, nonton YouTube bareng, dan menulis catatan bersama. Kerangkanya terasa seperti Discord: daftar workspace di kiri, kanal chat, dan panel anggota. Bedanya, di tengahnya ada ruangan yang hidup.
+Setiap workspace punya ruangan sendiri, digambar sebagai diorama 3D (three.js) dari data peta yang sama dengan versi 2D. Anggotanya hadir sebagai avatar chibi 3D yang bisa berjalan, ngobrol dengan suara yang mengikuti jarak, berbagi layar, nonton YouTube bareng, dan menulis catatan bersama. Kerangkanya terasa seperti Discord: daftar workspace di kiri, kanal chat, dan panel anggota. Bedanya, di tengahnya ada ruangan yang hidup.
 
 Spesifikasi lengkap ada di [`docs/PRD.md`](docs/PRD.md), lengkap dengan centang per milestone. Arah tampilan ada di [`DESIGN.md`](DESIGN.md).
 
@@ -43,6 +44,14 @@ Spesifikasi lengkap ada di [`docs/PRD.md`](docs/PRD.md), lengkap dengan centang 
 - [Peta jalan](#peta-jalan)
 
 ## Fitur
+
+### Ruangan 3D
+
+- **Diorama 3D** dengan kamera miring yang bisa diperbesar, mengikuti avatarmu dan tidak keluar dari batas peta. Lantai, dinding, dan label area dibangun dari data peta; tidak ada model atau tekstur pihak ketiga.
+- **36 jenis furnitur prosedural** (meja kerja dengan monitor, sofa, kasur, TV, speaker, dapur, mesin penjual, arcade, dan lainnya). TV otomatis menghadap sofa terdekat.
+- **Avatar chibi 3D** dari profil yang sama dengan avatar 2D: rambut, topi/hijab, kacamata, headphone, tujuh gaya atasan, celana panjang/pendek/rok. Animasi jalan dengan langkah kaki dan ayunan tangan bergantian, loncat, lambai, tepuk tangan, ngetik saat duduk di meja.
+- **Tempat duduk multi-slot:** sofa panjang muat satu orang per kotak, sofa kecil dua orang, kasur satu orang per dua kotak. Server menolak kursi yang sudah terisi.
+- **Mode 2D tetap ada.** Matikan "Ruangan 3D" di Pengaturan → Tampilan, atau otomatis kembali ke 2D bila browser tidak mendukung WebGL.
 
 ### Ruangan
 
@@ -109,7 +118,11 @@ Spesifikasi lengkap ada di [`docs/PRD.md`](docs/PRD.md), lengkap dengan centang 
 
 <table>
   <tr>
-    <td colspan="2"><img src="docs/assets/room.png" alt="Ruangan kantor dengan lima orang di lounge: label nama, status mikrofon, balon chat, dan panel anggota"><br><sub><b>Ruangan.</b> Lima orang di lounge. Garis putus-putus menunjukkan siapa yang bisa saling mendengar.</sub></td>
+    <td width="50%"><img src="docs/assets/room-3d.png" alt="Ruangan kantor 3D: avatar duduk di sofa area kerja tim, meja dengan monitor, TV menghadap sofa"><br><sub><b>Kantor 3D.</b> Duduk di sofa; tiap kotak sofa satu orang.</sub></td>
+    <td width="50%"><img src="docs/assets/home-3d.png" alt="Ruangan rumah 3D: ruang keluarga dengan sofa panjang, dua avatar dan label nama"><br><sub><b>Rumah 3D.</b> Ruang keluarga, label nama mengikuti kepala avatar.</sub></td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/assets/room.png" alt="Ruangan kantor dengan lima orang di lounge: label nama, status mikrofon, balon chat, dan panel anggota"><br><sub><b>Mode 2D.</b> Lima orang di lounge. Garis putus-putus menunjukkan siapa yang bisa saling mendengar.</sub></td>
   </tr>
   <tr>
     <td width="50%"><img src="docs/assets/vending.png" alt="Panel mesin penjual otomatis dengan daftar minuman, efek, dan harga koin"><br><sub><b>Mesin penjual.</b> Tiap item punya efek berbeda; harga dan saldo dicek di server.</sub></td>
@@ -182,12 +195,14 @@ Playwright memakai Chromium di `/opt/pw-browsers` secara bawaan. Di mesin lain, 
 
 ## Kontrol
 
-| Tombol           | Aksi                                                                     |
-| ---------------- | ------------------------------------------------------------------------ |
-| `W` `A` `S` `D`  | Berjalan (bisa juga dengan tombol panah)                                 |
-| Klik atau ketuk  | Berjalan ke titik itu, atau pilih objek                                  |
-| `E` atau `Enter` | Buka aksi objek terdekat (TV, speaker, meja, pintu, mesin penjual, kopi) |
-| Tombol `+` / `−` | Perbesar atau perkecil peta (di pojok layar)                             |
+| Tombol           | Aksi                                                                   |
+| ---------------- | ---------------------------------------------------------------------- |
+| `W` `A` `S` `D`  | Berjalan (bisa juga dengan tombol panah)                               |
+| Klik atau ketuk  | Berjalan ke titik itu, atau pilih objek                                |
+| `Spasi`          | Loncat                                                                 |
+| `E` atau `Enter` | Duduk atau buka aksi objek terdekat (TV, speaker, meja, mesin penjual) |
+| `E` lagi         | Berdiri, atau jalankan aksi yang sedang ditawarkan                     |
+| Tombol `+` / `−` | Perbesar atau perkecil peta (di pojok layar)                           |
 
 Popup aksi objek baru muncul setelah objeknya diketuk, lalu tertutup sendiri setelah aksi dipilih.
 
@@ -214,18 +229,19 @@ docs/                     PRD dan aset README
 
 PRD meminta solusi paling sederhana untuk pengembang tunggal yang baru mengenal real-time dan WebRTC. Semuanya jalan **tanpa akun pihak ketiga** saat pengembangan, dan semuanya bisa diganti.
 
-| Bagian     | Pilihan                                                 | Alasan                                                                                                                                                             |
-| ---------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Framework  | Next.js 16 (App Router), React 19, TypeScript           | Satu repo untuk UI dan API, cocok untuk Vercel                                                                                                                     |
-| Kanvas 2D  | Canvas 2D bawaan browser, tilemap dan A\* sendiri       | Peta kecil dan aset prosedural, tidak perlu Phaser atau PixiJS. Logika peta ada di `src/shared`, jadi server juga memvalidasi gerak                                |
-| Real-time  | WebSocket (`ws`) dan pub/sub                            | Status ruang (kehadiran, kunci, speaker, TV, kebutuhan) di Redis, bukan di memori proses. Klien menyambung ulang otomatis dan memulihkan posisi                    |
-| Database   | PostgreSQL (Neon) lewat `pg`, PGlite untuk lokal        | SQL biasa. Skema di `src/server/schema.ts` dibuat dan diperbarui otomatis                                                                                          |
-| Redis      | `ioredis` bila `REDIS_URL` ada, memori bila tidak       | Penyedia bebas selama mendukung protokol Redis (Upstash, Redis Cloud, dll.)                                                                                        |
-| WebRTC     | Mesh buatan sendiri, STUN publik Google                 | Tanpa penyedia dan tanpa biaya. Server hanya meneruskan sinyal antar-orang yang memang boleh saling mendengar. TURN bisa ditambah lewat `NEXT_PUBLIC_ICE_SERVERS`  |
-| Musik      | Web Audio untuk stasiun, iframe YouTube, `<audio>`      | Stasiun bawaan disintesis di browser, jadi tanpa berkas dan lisensi pihak ketiga. Speaker yang tidak terdengar dihentikan setelah 4 detik agar hemat CPU dan kuota |
-| Auth       | Email dan kata sandi (bcrypt), sesi cookie JWT (`jose`) | Sederhana, tanpa library auth besar. Ganti atau reset kata sandi mencabut sesi lain                                                                                |
-| Email      | `nodemailer` via `SMTP_URL`                             | Konsol saat pengembangan. Verifikasi email mati secara bawaan                                                                                                      |
-| Terjemahan | JSON sendiri (`id`, `en`) dan React context             | Semua teks UI dari berkas terjemahan; tes memastikan kedua bahasa lengkap                                                                                          |
+| Bagian     | Pilihan                                                 | Alasan                                                                                                                                                                                   |
+| ---------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Framework  | Next.js 16 (App Router), React 19, TypeScript           | Satu repo untuk UI dan API, cocok untuk Vercel                                                                                                                                           |
+| 3D         | three.js dan React Three Fiber, dimuat hanya di klien   | Model prosedural digabung per material agar draw call sedikit. Pratinjau di landing berhenti saat tidak terlihat. Detail: [`docs/MEETOPIA-3D-RESEARCH.md`](docs/MEETOPIA-3D-RESEARCH.md) |
+| Kanvas 2D  | Canvas 2D bawaan browser, tilemap dan A\* sendiri       | Peta kecil dan aset prosedural, tidak perlu Phaser atau PixiJS. Logika peta ada di `src/shared`, jadi server juga memvalidasi gerak                                                      |
+| Real-time  | WebSocket (`ws`) dan pub/sub                            | Status ruang (kehadiran, kunci, speaker, TV, kebutuhan) di Redis, bukan di memori proses. Klien menyambung ulang otomatis dan memulihkan posisi                                          |
+| Database   | PostgreSQL (Neon) lewat `pg`, PGlite untuk lokal        | SQL biasa. Skema di `src/server/schema.ts` dibuat dan diperbarui otomatis                                                                                                                |
+| Redis      | `ioredis` bila `REDIS_URL` ada, memori bila tidak       | Penyedia bebas selama mendukung protokol Redis (Upstash, Redis Cloud, dll.)                                                                                                              |
+| WebRTC     | Mesh buatan sendiri, STUN publik Google                 | Tanpa penyedia dan tanpa biaya. Server hanya meneruskan sinyal antar-orang yang memang boleh saling mendengar. TURN bisa ditambah lewat `NEXT_PUBLIC_ICE_SERVERS`                        |
+| Musik      | Web Audio untuk stasiun, iframe YouTube, `<audio>`      | Stasiun bawaan disintesis di browser, jadi tanpa berkas dan lisensi pihak ketiga. Speaker yang tidak terdengar dihentikan setelah 4 detik agar hemat CPU dan kuota                       |
+| Auth       | Email dan kata sandi (bcrypt), sesi cookie JWT (`jose`) | Sederhana, tanpa library auth besar. Ganti atau reset kata sandi mencabut sesi lain                                                                                                      |
+| Email      | `nodemailer` via `SMTP_URL`                             | Konsol saat pengembangan. Verifikasi email mati secara bawaan                                                                                                                            |
+| Terjemahan | JSON sendiri (`id`, `en`) dan React context             | Semua teks UI dari berkas terjemahan; tes memastikan kedua bahasa lengkap                                                                                                                |
 
 ### Aturan PRD yang ditegakkan di kode
 
@@ -288,6 +304,8 @@ Server real-time berjalan di `/api/ws` memakai `experimental_upgradeWebSocket()`
 
 Untuk Railway, Render, Fly.io, atau VPS: jalankan `npm run build && npm start` dengan `DATABASE_URL`, `AUTH_SECRET`, `APP_URL`, dan opsional `REDIS_URL` serta `SMTP_URL`. Next.js dan WebSocket (`/ws`) jalan di port yang sama.
 
+Di balik reverse proxy, pembatas laju membaca IP dari `X-Forwarded-For`. Isi `TRUSTED_PROXY_HOPS` dengan jumlah proxy di depan aplikasi (bawaan `1`), supaya klien tidak bisa memalsukan IP lewat header itu. Di Vercel, `x-vercel-forwarded-for` dipakai otomatis.
+
 ### Suara atau layar tidak tersambung? Tambahkan TURN
 
 Bawaannya hanya memakai STUN. Itu cukup di jaringan rumah, tetapi sering gagal di jaringan kantor, kampus, atau seluler yang ketat. Saat itu terjadi, aplikasi menampilkan pesan "koneksi gagal". Solusinya adalah server TURN (misalnya dari Metered, Twilio, Cloudflare Calls, atau coturn sendiri). Isi `NEXT_PUBLIC_ICE_SERVERS` dalam format JSON, lalu deploy ulang:
@@ -309,7 +327,7 @@ Logo memakai **konsep 7 (Minimalist)**: dua daun pintu, satu hijau terbuka dan s
 
 Tema bawaan gelap dengan warna netral abu-abu hangat. Hijau logo hanya dipakai sebagai aksen: tombol utama, status aktif, mikrofon menyala, dan item terpilih. UI mengikuti aturan [antislop](https://github.com/miqdadbadjuber/anti-slop):
 
-- Tanpa gradien, glow, atau blur dekoratif.
+- Gradien hanya tipis dan bermakna (kedalaman panel, cahaya ruangan); tanpa glow atau blur dekoratif.
 - Tanpa emoji sebagai ikon dan tanpa em dash.
 - Kontras teks lolos WCAG AA.
 - Target sentuh minimal 44px.
@@ -342,7 +360,7 @@ Semua aset digambar prosedural, tanpa gambar pihak lain, di `src/client/art/` da
 
 - **Profil**: nama, avatar, status.
 - **Notifikasi**: bunyi ketukan, pesan langsung, dan sebutan, plus notifikasi browser.
-- **Tampilan**: tema, bahasa, kontras tinggi, dan pengaturan ruang (minimap, nama pengguna, animasi avatar, suara, bar kebutuhan dan efeknya).
+- **Tampilan**: tema, bahasa, kontras tinggi, dan pengaturan ruang (Ruangan 3D, minimap, nama pengguna, animasi avatar, suara, bar kebutuhan dan efeknya).
 - **Audio & Video**: perangkat, volume orang lain dan musik, peredam bising, mikrofon saat masuk.
 - **Privasi**: ekspor data dan hapus akun.
 - **Keamanan**: ganti kata sandi.
@@ -368,6 +386,8 @@ Status rinci ada di [`docs/PRD.md`](docs/PRD.md).
 
 - [x] **MVP (M0 sampai M8):** akun, workspace, peta 2D, sinkron posisi, chat, kehadiran, catatan, suara menurut jarak, berbagi layar, ruang privat dan ketuk.
 - [x] **Fase 2, langkah 1 sampai 3:** bar kebutuhan, kantin dan mesin penjual, gaji koin.
+- [x] **Ruangan 3D:** diorama three.js, furnitur dan avatar prosedural, duduk multi-slot, loncat, mode 2D cadangan.
+- [ ] **3D lanjutan:** efek ruang privat dan speaker di 3D, model GLB opsional.
 - [ ] **Fase 2, langkah 4:** toko pakaian dan aksesori, lemari, toko perabot.
 - [ ] **Fase 2, langkah 5 sampai 7:** dekorasi tarik-letakkan, editor peta, minigame saham, login Google dan Lark, rekaman sesi.
 - [ ] **Fase 3:** absensi, analitik tim, banyak peta per workspace, API dan webhook.
@@ -377,7 +397,7 @@ Status rinci ada di [`docs/PRD.md`](docs/PRD.md).
 Lihat bagian 14 PRD. Pilihan sementara:
 
 - Workspace bebas dibuat siapa saja.
-- Satu workspace satu ruangan 2D.
+- Satu workspace satu ruangan (3D, dengan mode 2D).
 - WebRTC mesh sendiri.
 - Penyedia Redis bebas.
 

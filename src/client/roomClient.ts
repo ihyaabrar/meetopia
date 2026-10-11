@@ -152,7 +152,11 @@ export class RoomClient {
         // Server belum dikonfigurasi: tampilkan pesannya, tapi tetap coba lagi berkala
         // supaya halaman pulih sendiri setelah env diisi dan deploy ulang (tanpa muat ulang).
         this.commit({ conn: "closed", configError: body.error });
-        this.retryTimer = setTimeout(() => void this.connect(), 20_000);
+        // Closed meanwhile (workspace switched): do not bring this client back.
+        if (this.closedByUser) return;
+        this.retryTimer = setTimeout(() => {
+          if (!this.closedByUser) void this.connect();
+        }, 20_000);
         return;
       }
       if (!res.ok || !body.token) return this.scheduleReconnect();

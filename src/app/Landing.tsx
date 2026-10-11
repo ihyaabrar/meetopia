@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { PublicShell } from "@/components/PublicShell";
 import { Icon, type IconName } from "@/components/Icon";
 import { useT } from "@/i18n/client";
@@ -196,6 +196,8 @@ function HeroMap() {
 export function Landing() {
   const t = useT();
   const webgl = useWebGL();
+  // Stable callback: a new function would make the 3D preview rebuild its world on every render.
+  const zoneLabel = useCallback((k: string) => t(k), [t]);
   const roomIcons: Record<TemplateId, IconName> = {
     office: "briefcase",
     home: "home",
@@ -231,7 +233,7 @@ export function Landing() {
                 template="office"
                 names={["Rani", "Dito", "Ayu", "Bima", "Sari", "Lala"]}
                 zoom={1.15}
-                zoneLabel={(k) => t(k)}
+                zoneLabel={zoneLabel}
                 label={t("landing.previewAlt3d")}
               />
             ) : webgl === false ? (

@@ -35,7 +35,14 @@ describe("pembatas laju", () => {
 
   it("IP klien diambil dari proxy", () => {
     const req = (h: Record<string, string>) => new Request("http://x", { headers: h });
-    expect(clientIp(req({ "x-forwarded-for": "203.0.113.5, 10.0.0.1" }))).toBe("203.0.113.5");
+    // The front of x-forwarded-for can be sent by the client; the trusted proxy's entry is last.
+    expect(clientIp(req({ "x-forwarded-for": "6.6.6.6, 203.0.113.5" }))).toBe("203.0.113.5");
+    expect(clientIp(req({ "x-vercel-forwarded-for": "198.51.100.9", "x-forwarded-for": "6.6.6.6" }))).toBe(
+      "198.51.100.9",
+    );
+    vi.stubEnv("TRUSTED_PROXY_HOPS", "2");
+    expect(clientIp(req({ "x-forwarded-for": "6.6.6.6, 203.0.113.5, 10.0.0.1" }))).toBe("203.0.113.5");
+    vi.unstubAllEnvs();
     expect(clientIp(req({ "x-real-ip": "198.51.100.7" }))).toBe("198.51.100.7");
     expect(clientIp(req({}))).toBe("local");
   });
@@ -44,11 +51,19 @@ describe("pembatas laju", () => {
 describe("koneksi PostgreSQL", () => {
   it("sslmode=require ditulis eksplisit sebagai verify-full", () => {
     const neon = "postgresql://u:p@ep-x.neon.tech/db?sslmode=require&channel_binding=require";
-    expect(pgConnectionString(neon)).toBe("postgresql://u:p@ep-x.neon.tech/db?sslmode=verify-full&channel_binding=require");
-    expect(pgConnectionString("postgres://h/db?a=1&sslmode=prefer")).toBe("postgres://h/db?a=1&sslmode=verify-full");
+    expect(pgConnectionString(neon)).toBe(
+      "postgresql://u:p@ep-x.neon.tech/db?sslmode=verify-full&channel_binding=require",
+    );
+    expect(pgConnectionString("postgres://h/db?a=1&sslmode=prefer")).toBe(
+      "postgres://h/db?a=1&sslmode=verify-full",
+    );
   });
   it("URL lain tidak diubah", () => {
-    for (const url of ["postgres://h/db", "postgres://h/db?sslmode=disable", "postgres://h/db?uselibpqcompat=true&sslmode=require"])
+    for (const url of [
+      "postgres://h/db",
+      "postgres://h/db?sslmode=disable",
+      "postgres://h/db?uselibpqcompat=true&sslmode=require",
+    ])
       expect(pgConnectionString(url)).toBe(url);
   });
 });

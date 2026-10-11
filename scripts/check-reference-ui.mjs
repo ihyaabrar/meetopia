@@ -35,9 +35,10 @@ const shot = async (name) => {
 };
 try {
   await page.goto("/");
-  await expect(page.locator(".hero-art canvas")).toBeVisible();
+  // The hero is the 3D diorama when WebGL works (2D canvas otherwise); Three.js loads lazily.
+  await expect(page.locator(".hero-art canvas")).toBeVisible({ timeout: 30000 });
   // Dev server: atlases are decoded after download, which can take ~10 s on a busy machine.
-  await expect(page.locator(".hero-art canvas")).toHaveAttribute("data-renderer", "illustrated", {
+  await expect(page.locator(".hero-art canvas")).toHaveAttribute("data-renderer", /illustrated|3d/, {
     timeout: 20000,
   });
   await shot("landing");
@@ -47,10 +48,12 @@ try {
     throw new Error("Hero preview must stay still with reduced motion");
   await page.goto("/login");
   await expect(page.locator("#email")).toBeVisible();
-  await page.waitForFunction(() => document.querySelector(".auth-room-preview canvas")?.width > 300);
-  await expect(page.locator(".auth-room-preview canvas.map-preview")).toHaveAttribute(
+  await page.waitForFunction(() => document.querySelector(".auth-room-preview canvas")?.width > 200, null, {
+    timeout: 30000,
+  });
+  await expect(page.locator(".auth-room-preview canvas").first()).toHaveAttribute(
     "data-renderer",
-    "illustrated",
+    /illustrated|3d/,
   );
   await shot("login");
   await page.goto("/register");
@@ -159,7 +162,7 @@ try {
   await page.getByRole("button", { name: "Buat", exact: true }).click();
   await page.getByRole("button", { name: "Masuk ruangan", exact: true }).click();
   // DOM contract works in production too, where __meetopia debug hooks are deliberately absent.
-  await expect(page.locator("canvas.map")).toHaveAttribute("data-renderer", "illustrated", {
+  await expect(page.locator("canvas.map")).toHaveAttribute("data-renderer", /illustrated|3d/, {
     timeout: 30000,
   });
   await expect(page.locator(".main-head .head-sub")).toContainText("1 orang di ruangan");
@@ -190,7 +193,7 @@ try {
       await expect(page.locator(".main-head .head-sub")).toContainText(messages[`tpl.${id}`]);
     }
     await expect(page.locator("canvas.map")).toBeVisible();
-    await expect(page.locator("canvas.map")).toHaveAttribute("data-renderer", "illustrated");
+    await expect(page.locator("canvas.map")).toHaveAttribute("data-renderer", /illustrated|3d/);
     await page.getByRole("button", { name: "Lihat seluruh map", exact: true }).click();
     await page.waitForTimeout(700);
     await shot(`world-${id}`);

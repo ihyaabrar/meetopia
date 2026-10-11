@@ -85,10 +85,24 @@ export async function rateLimit(key: string, max: number, windowMs: number) {
   if ((await rateHit(key, windowMs)) > max) throw new ApiError(429, "rateLimited");
 }
 
-/** IP klien dari proxy (Vercel mengisi x-forwarded-for); "local" bila tidak ada. */
+/**
+ * IP klien untuk pembatas laju. Di Vercel: x-vercel-forwarded-for (diisi platform, tidak bisa
+ * dipalsukan). Di hosting lain setiap proxy tepercaya MENAMBAHKAN alamat ke x-forwarded-for, jadi
+ * bagian depan bisa diisi klien sendiri: ambil entri ke-N dari belakang (TRUSTED_PROXY_HOPS, bawaan 1).
+ */
 export function clientIp(req: Request): string {
-  const fwd = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return fwd || req.headers.get("x-real-ip") || "local";
+  const h = req.headers;
+  const vercel = h.get("x-vercel-forwarded-for")?.split(",")[0]?.trim();
+  if (vercel) return vercel;
+  const chain = (h.get("x-forwarded-for") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (chain.length) {
+    const hops = Math.max(1, Math.floor(Number(process.env.TRUSTED_PROXY_HOPS)) || 1);
+    return chain[Math.max(0, chain.length - hops)];
+  }
+  return h.get("x-real-ip") || "local";
 }
 
 type Handler<C> = (req: Request, ctx: C) => Promise<Response>;

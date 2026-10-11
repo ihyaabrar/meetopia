@@ -38,22 +38,13 @@ import { seatCount, seatPose } from "@/shared/seats";
 import { furnitureAt } from "@/client/art/environment-assets";
 import dynamic from "next/dynamic";
 import type { Room3DApi, Room3DFrame } from "@/features/world3d/room/Room3D";
+import { webglSupported } from "@/features/world3d/useWebGL";
 
 // Three.js only loads when the 3D room is used.
 const Room3D = dynamic(() => import("@/features/world3d/room/Room3D"), {
   ssr: false,
   loading: () => <div className="room3d-loading" aria-hidden="true" />,
 });
-
-/** WebGL support, checked once in the browser. */
-function hasWebGL() {
-  try {
-    const c = document.createElement("canvas");
-    return !!(c.getContext("webgl2") || c.getContext("webgl"));
-  } catch {
-    return false;
-  }
-}
 
 const noSub = () => () => {};
 const NO_AUDIBLE: never[] = [];
@@ -157,12 +148,13 @@ export function RoomStage({
   const grid = useMemo(() => buildWalkable(map), [map]);
   // 3D room by default (Settings > Appearance can switch back to the 2D map); 2D without WebGL.
   const [webgl, setWebgl] = useState<boolean | null>(null);
-  useEffect(() => setWebgl(hasWebGL()), []);
+  useEffect(() => setWebgl(webglSupported()), []);
   const use3d = prefs.world3d && webgl === true;
   const zoneLabel = useCallback((k: string) => t(k), [t]);
   const scene = useMemo(
-    () => (typeof document === "undefined" || use3d || webgl === null ? null : new Scene(map, (k) => t(k))),
-    [map, t, use3d, webgl],
+    // The 2D scene also feeds the minimap, so it exists in 3D too (it just is not drawn there).
+    () => (typeof document === "undefined" || webgl === null ? null : new Scene(map, (k) => t(k))),
+    [map, t, webgl],
   );
   const frame3dRef = useRef<Room3DFrame | null>(null);
   const api3dRef = useRef<Room3DApi | null>(null);
@@ -587,7 +579,8 @@ export function RoomStage({
 
   // ------------------------------------------------------------ input
   const toWorld = (clientX: number, clientY: number) => {
-    if (use3d) return api3dRef.current?.pick(clientX, clientY) ?? { x: -100, y: -100 };
+    // Before the 3D canvas is ready there is nothing to hit: ignore the pointer.
+    if (use3d) return api3dRef.current?.pick(clientX, clientY) ?? null;
     const r = canvasRef.current!.getBoundingClientRect();
     const cam = state.current.camera;
     return {
@@ -596,16 +589,64 @@ export function RoomStage({
     };
   };
 
+  // In 3D a click is projected onto the floor: a point h metres up lands h·9/7 m further back, so a
+  // person (≈1.5 m) or tall furniture covers more floor behind its footprint than in 2D.
+  const BEHIND_3D = 9 / 7 / 0.6;
   const peerAt = (wx: number, wy: number) => {
     const s = snapRef.current;
+    const reach = use3d ? 1.5 * BEHIND_3D : 2.1;
+    let best: Presence | null = null,
+      bestD = Infinity;
     for (const p of s.peers.values()) {
       if (p.id === s.selfId) continue;
       const d = state.current.display.get(p.id) ?? p;
-      if (Math.abs(wx - d.x) < 0.7 && wy < d.y + 0.5 && wy > d.y - 2.1) return p;
+      if (Math.abs(wx - d.x) < 0.7 && wy < d.y + 0.5 && wy > d.y - reach) {
+        const dist = Math.abs(wx - d.x) + Math.abs(wy - d.y);
+        if (dist < bestD) {
+          bestD = dist;
+          best = p;
+        }
+      }
     }
-    return null;
+    return best;
   };
-  const objectAt = (wx: number, wy: number) => furnitureAt(map, wx * TILE, wy * TILE);
+  const TALL_3D = new Set([
+    "bookshelf",
+    "fridge",
+    "vending",
+    "arcade",
+    "palm",
+    "lamp",
+    "speaker",
+    "whiteboard",
+    "noticeboard",
+    "greenscreen",
+    "pergola",
+    "parasol",
+    "camera",
+    "softbox",
+    "cooler",
+    "coffee",
+  ]);
+  const objectAt = (wx: number, wy: number) => {
+    if (!use3d) return furnitureAt(map, wx * TILE, wy * TILE);
+    // Footprint, plus the strip behind it that the object's height covers on screen.
+    let best: MapObject | null = null;
+    let bestInside = false;
+    for (const o of map.objects) {
+      if (!o.label || o.kind === "rug") continue;
+      const behind = (TALL_3D.has(o.kind) ? 1.6 : 0.8) * BEHIND_3D;
+      if (wx >= o.x && wx <= o.x + o.w && wy >= o.y - behind && wy <= o.y + o.h) {
+        const inside = wy >= o.y;
+        // A footprint hit wins; among strip hits, the object nearest the camera (largest y).
+        if (!best || (inside && !bestInside) || (inside === bestInside && o.y + o.h > best.y + best.h)) {
+          best = o;
+          bestInside = inside;
+        }
+      }
+    }
+    return best;
+  };
 
   const onTap = (wx: number, wy: number) => {
     setEmoteOpen(false);
@@ -635,16 +676,17 @@ export function RoomStage({
     if (!p || p.id !== e.pointerId) return;
     if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10) return;
     const w = toWorld(e.clientX, e.clientY);
-    onTap(w.x, w.y);
+    if (w) onTap(w.x, w.y);
   };
   const onPointerMove = (e: React.PointerEvent) => {
     if (e.pointerType !== "mouse") return;
     const w = toWorld(e.clientX, e.clientY);
+    if (!w || !canvasRef.current) return;
     const interactive = !!peerAt(w.x, w.y) || !!objectAt(w.x, w.y);
     const tx = Math.floor(w.x);
     const ty = Math.floor(w.y);
     state.current.hover = !interactive && grid[ty]?.[tx] ? { x: tx, y: ty } : null;
-    canvasRef.current!.style.cursor = interactive ? "pointer" : grid[ty]?.[tx] ? "pointer" : "default";
+    canvasRef.current.style.cursor = interactive ? "pointer" : grid[ty]?.[tx] ? "pointer" : "default";
   };
   /** Objek interaktif terdekat dalam jangkauan (untuk tombol E / Enter). */
   const nearestObject = () => {
@@ -654,7 +696,9 @@ export function RoomStage({
     let bestD = INTERACT_RANGE;
     for (const o of map.objects) {
       if (!o.label) continue;
-      const d = distanceToObject(o, me.x, me.y);
+      // Standing next to a chair at a table both are ~0 away: a seat wins a near tie, because
+      // "E, E" there is meant to sit down.
+      const d = distanceToObject(o, me.x, me.y) - (o.actions?.includes("sit") ? 0.3 : 0);
       if (d < bestD) {
         bestD = d;
         best = o;
@@ -666,9 +710,10 @@ export function RoomStage({
   useEffect(() => {
     nearestObjectRef.current = nearestObject;
   });
-  const keyActionsRef = useRef<{ interact: () => void; jump: () => void }>({
+  const keyActionsRef = useRef<{ interact: () => void; jump: () => void; stop: () => void }>({
     interact: () => {},
     jump: () => {},
+    stop: () => {},
   });
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -720,18 +765,26 @@ export function RoomStage({
       if (k) state.current.keys.delete(k);
     };
     const clear = () => state.current.keys.clear();
+    // A hidden tab stops animation frames, so the "stopped" message would never be sent and
+    // peers would see this person walking in place: stop explicitly when the tab is hidden.
+    const hidden = () => {
+      if (document.hidden) keyActionsRef.current.stop();
+    };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     window.addEventListener("blur", clear);
+    document.addEventListener("visibilitychange", hidden);
     return () => {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
       window.removeEventListener("blur", clear);
+      document.removeEventListener("visibilitychange", hidden);
     };
   }, []);
 
   const zoomBy = (f: number) => {
     state.current.autoZoom = false;
+    state.current.fitAll = false;
     state.current.zoom = Math.max(0.25, Math.min(2.6, (state.current.zoom || 1) * f));
   };
 
@@ -792,15 +845,16 @@ export function RoomStage({
    */
   const interact = () => {
     const me = room.self;
-    const obj = nearestObject();
-    if (hint?.pinned && obj && hint.obj.id === obj.id && obj.actions?.length) {
-      runAction(obj.actions[0], obj);
-      return;
-    }
-    if (me?.sitting && (!obj || obj.id === me.seatId)) {
+    // Seated: E always stands up (at a desk the desk can be nearer than the chair itself).
+    if (me?.sitting) {
       setHint(null);
       room.updateSelf({ sitting: false, seatId: undefined, seatIndex: undefined });
       room.send({ t: "sit", sitting: false });
+      return;
+    }
+    const obj = nearestObject();
+    if (hint?.pinned && obj && hint.obj.id === obj.id && obj.actions?.length) {
+      runAction(obj.actions[0], obj);
       return;
     }
     if (obj) setHint({ obj, pinned: true });
@@ -817,8 +871,22 @@ export function RoomStage({
       room.send({ t: "avatarAction", action: "idle" });
     }, JUMP_MS);
   };
+  /** Stop walking now (tab hidden): clear keys and route, tell peers. */
+  const stop = () => {
+    const st = state.current;
+    const me = room.self;
+    st.keys.clear();
+    st.path = [];
+    st.target = null;
+    st.onArrive = null;
+    if (me && (st.keyMoving || me.moving)) {
+      st.keyMoving = false;
+      room.updateSelf({ moving: false });
+      room.send({ t: "move", x: me.x, y: me.y, dir: me.dir, moving: false });
+    }
+  };
   useEffect(() => {
-    keyActionsRef.current = { interact, jump };
+    keyActionsRef.current = { interact, jump, stop };
   });
 
   // ------------------------------------------------------------ kontrol media

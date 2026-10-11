@@ -13,9 +13,10 @@ import {
   DirectionalLight,
   Mesh,
   MeshBasicMaterial,
+  MeshStandardMaterial,
   Object3D,
   OrthographicCamera,
-  PCFSoftShadowMap,
+  PCFShadowMap,
   Plane,
   Raycaster,
   RingGeometry,
@@ -68,6 +69,9 @@ export interface Room3DApi {
 }
 
 const PX_PER_2D = 32 / TILE_M;
+const GREY = new Color("#8a9196");
+/** Scratch vector for label projection (module level: mutated every frame, never React state). */
+const labelPos = new Vector3();
 const CAMERA_OFFSET = new Vector3(0, 7, 9);
 const SIN_PITCH = CAMERA_OFFSET.y / CAMERA_OFFSET.length();
 const STATUS_COLOR: Record<string, string> = {
@@ -116,6 +120,18 @@ function createMarkers() {
   return { ring, focus };
 }
 
+const specs = new WeakMap<object, { spec: ReturnType<typeof chibiSpec>; key: string }>();
+/** chibiSpec + key, cached per avatar object (presence updates keep the same avatar reference). */
+function specOf(avatar: Presence["avatar"]) {
+  let hit = specs.get(avatar);
+  if (!hit) {
+    const spec = chibiSpec(avatar);
+    hit = { spec, key: chibiKey(spec) };
+    specs.set(avatar, hit);
+  }
+  return hit;
+}
+
 type Effects = Map<string, { emoji?: string; emojiAt?: number; bubble?: string; bubbleAt?: number }>;
 type LabelEl = { root: HTMLDivElement; name: HTMLSpanElement; extra: HTMLDivElement };
 
@@ -137,7 +153,9 @@ function Scene({
   onReady: (ids: string[]) => void;
 }) {
   const { camera, gl, scene, size } = useThree();
+  // Callers pass a stable label callback (useCallback), so this only rebuilds when the map changes.
   const world = useMemo(() => buildWorld(map, zoneLabel), [map, zoneLabel]);
+  const objectsById = useMemo(() => new Map(map.objects.map((o) => [o.id, o])), [map]);
   const furniture = useMemo(() => buildFurniture(map), [map]);
   const rigs = useRef(
     new Map<string, { key: string; rig: MasterRig; yaw: number; seated: number; away: boolean }>(),
@@ -249,15 +267,11 @@ function Scene({
     const seen = new Set<string>();
     let created = 0;
     for (const v of f.people) {
-      const spec = chibiSpec(v.p.avatar);
-      const key = chibiKey(spec);
+      const { spec, key } = specOf(v.p.avatar);
       let entry = rigs.current.get(v.p.id);
-      if (!entry || entry.key !== key) {
-        if (created >= 2 && entry) {
-          seen.add(v.p.id);
-          continue;
-        }
-        if (created >= 2) continue;
+      // At most two new rigs per frame; a person whose look changed keeps the old rig meanwhile.
+      if (!entry && created >= 1) continue;
+      if (!entry || (entry.key !== key && created < 1)) {
         created++;
         if (entry) {
           scene.remove(entry.rig.group);
@@ -270,7 +284,7 @@ function Scene({
         rigs.current.set(v.p.id, entry);
       }
       seen.add(v.p.id);
-      const seat = v.p.sitting && v.p.seatId ? map.objects.find((o) => o.id === v.p.seatId) : undefined;
+      const seat = v.p.sitting && v.p.seatId ? objectsById.get(v.p.seatId) : undefined;
       entry.seated += ((v.p.sitting ? 1 : 0) - entry.seated) * Math.min(1, dt * 10);
       const want = YAW[v.p.dir] ?? 0;
       let diff = want - entry.yaw;
@@ -299,9 +313,11 @@ function Scene({
         g.traverse((o: Object3D) => {
           if (o instanceof Mesh)
             for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
-              m.transparent = away;
-              m.opacity = away ? 0.55 : 1;
-              m.needsUpdate = true;
+              const mat = m as MeshStandardMaterial;
+              if (!mat.color) continue;
+              mat.userData.base ??= mat.color.clone();
+              mat.color.copy(mat.userData.base);
+              if (away) mat.color.lerp(GREY, 0.55);
             }
         });
       }
@@ -325,8 +341,14 @@ function Scene({
       const el = labels.current.get(v.p.id);
       if (!el) continue;
       const entry = rigs.current.get(v.p.id);
-      const top = entry ? 1.52 - 0.42 * entry.seated : 1.5;
-      const pos = new Vector3(v.x * TILE_M, top, v.y * TILE_M).project(cam);
+      if (!entry) {
+        // No body yet (rig still being built): no floating name either.
+        el.root.style.display = "none";
+        continue;
+      }
+      entry.rig.bones.head.getWorldPosition(labelPos);
+      labelPos.y += 0.36;
+      const pos = labelPos.project(cam);
       const left = ((pos.x + 1) / 2) * size.width,
         y = ((1 - pos.y) / 2) * size.height;
       el.root.style.transform = `translate(${left.toFixed(1)}px, ${y.toFixed(1)}px)`;
@@ -419,11 +441,21 @@ export default function Room3D({
   const labels = useRef(new Map<string, LabelEl>());
   const effects = useRef<Effects>(new Map());
   const [ids, setIds] = useState<string[]>([]);
+  // Decorative previews stop rendering when scrolled away or hidden (e.g. the auth panel on phones).
+  const wrap = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    if (interactive || !wrap.current || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([e]) => setVisible(e.isIntersecting && e.intersectionRatio > 0));
+    io.observe(wrap.current);
+    return () => io.disconnect();
+  }, [interactive]);
   return (
-    <div className={`room3d ${className ?? ""}`} style={style} {...handlers}>
+    <div ref={wrap} className={`room3d ${className ?? ""}`} style={style} {...handlers}>
       <Canvas
         orthographic
-        shadows={{ type: PCFSoftShadowMap }}
+        shadows={interactive ? { type: PCFShadowMap } : false}
+        frameloop={visible ? "always" : "never"}
         dpr={[1, 1.75]}
         camera={{ position: [0, 7, 9], near: 0.1, far: 80, zoom: 60 }}
         gl={{ antialias: true, powerPreference: "high-performance", toneMapping: ACESFilmicToneMapping }}

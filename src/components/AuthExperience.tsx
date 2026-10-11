@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback } from "react";
 import { AvatarCanvas } from "./AvatarCanvas";
 import { MapPreview } from "./MapPreview";
 import dynamic from "next/dynamic";
@@ -52,6 +53,8 @@ export function AuthExperience({
 }) {
   const t = useT();
   const webgl = useWebGL();
+  // Stable callback: a new function would make the 3D preview rebuild its world on every render.
+  const zoneLabel = useCallback((k: string) => t(k), [t]);
   return (
     <div className="auth-experience" data-expanded={expanded || undefined}>
       <aside className="auth-story">
@@ -65,7 +68,7 @@ export function AuthExperience({
               template="home"
               names={["Ayu", "Bima", "Sari"]}
               zoom={0.85}
-              zoneLabel={(k) => t(k)}
+              zoneLabel={zoneLabel}
               label={t("auth.panelPresence")}
             />
           ) : webgl === false ? (

@@ -62,7 +62,7 @@ export interface ChibiSpec {
   hair: string;
   hairStyle: "short" | "spiky" | "bob" | "long" | "bun" | "ponytail" | "curly" | "none";
   top: string;
-  topStyle: "hoodie" | "jacket" | "tee";
+  topStyle: "hoodie" | "jacket" | "tee" | "shirt" | "polo" | "sweater" | "striped";
   /** Visible under an open jacket. */
   under: string;
   pants: string;
@@ -145,7 +145,15 @@ export function chibiSpec(a: AvatarConfig): ChibiSpec {
     hairStyle: HAIR_3D[a.hair] ?? "short",
     top: a.bodyColor,
     topStyle:
-      a.outfit === "jacket" || a.outfit === "blazer" ? "jacket" : a.outfit === "hoodie" ? "hoodie" : "tee",
+      a.outfit === "jacket" || a.outfit === "blazer"
+        ? "jacket"
+        : a.outfit === "hoodie" ||
+            a.outfit === "shirt" ||
+            a.outfit === "polo" ||
+            a.outfit === "sweater" ||
+            a.outfit === "striped"
+          ? a.outfit
+          : "tee",
     under: a.outfit === "blazer" ? "#f4f1ea" : "#faf2df",
     pants: a.pantsColor,
     legs: a.bottom === "shorts" ? "shorts" : a.bottom === "skirt" ? "skirt" : "trousers",
@@ -242,11 +250,6 @@ export function createChibi(spec: ChibiSpec): MasterRig {
     material: number,
     blend?: { next: RigBone; jointY: number },
   ) {
-    if (g.index) {
-      const source = g;
-      g = source.toNonIndexed();
-      source.dispose();
-    }
     const index = BONE_NAMES.indexOf(bone),
       nextIndex = blend ? BONE_NAMES.indexOf(blend.next) : index;
     const count = g.getAttribute("position").count,
@@ -297,7 +300,7 @@ export function createChibi(spec: ChibiSpec): MasterRig {
   );
   torso.scale(1, 1, 0.68);
   add(torso, "spine", TOP);
-  ellipsoid("hip", [0, 0.005, 0], [0.145, 0.07, 0.105], spec.legs === "skirt" ? ACCENT : PANTS);
+  ellipsoid("hip", [0, 0.005, 0], [0.145, 0.07, 0.105], PANTS);
   add(transformGeometry(new CylinderGeometry(0.055, 0.059, 0.065, 16), [0, 0.178, 0]), "spine", SKIN);
   // A collar intersects the neck rather than hovering between the torso and head.
   if (spec.hat !== "hijab")
@@ -347,8 +350,44 @@ export function createChibi(spec: ChibiSpec): MasterRig {
         LIGHT,
       );
   } else {
-    // Tee / shirt / sweater: a hem band and a soft placket instead of a hood.
+    // Tee / shirt / polo / sweater / striped: a hem band instead of a hood, plus each garment's
+    // own detail so different tops never render the same.
     box("spine", [0, -0.122, 0], [0.33, 0.026, 0.235], TRIM, 0.012);
+    const style = spec.topStyle;
+    if (style === "shirt" || style === "polo") {
+      // Collar points and a button placket.
+      for (const side of [-1, 1]) box("spine", [side * 0.045, 0.165, 0.1], [0.07, 0.016, 0.05], LIGHT, 0.006);
+      const buttons = style === "shirt" ? 4 : 2;
+      for (let i = 0; i < buttons; i++)
+        ellipsoid("spine", [0, 0.13 - i * 0.055, 0.132], [0.009, 0.009, 0.005], LIGHT);
+      if (style === "shirt") box("spine", [0, 0.02, 0.129], [0.012, 0.29, 0.006], TRIM, 0.003);
+    }
+    if (style === "sweater") {
+      add(
+        transformGeometry(
+          new TorusGeometry(0.075, 0.02, 8, 24),
+          [0, 0.172, 0],
+          [1, 1, 0.8],
+          [Math.PI / 2, 0, 0],
+        ),
+        "spine",
+        TRIM,
+      );
+      for (const x of [-0.09, -0.045, 0, 0.045, 0.09])
+        box("spine", [x, -0.122, 0.118], [0.008, 0.026, 0.006], LIGHT, 0.002);
+    }
+    if (style === "striped")
+      for (const y of [-0.08, -0.02, 0.04, 0.1])
+        add(
+          transformGeometry(
+            new TorusGeometry(0.19, 0.012, 6, 32),
+            [0, y, 0],
+            [1, 1, 0.68],
+            [Math.PI / 2, 0, 0],
+          ),
+          "spine",
+          LIGHT,
+        );
   }
   for (const suffix of ["L", "R"] as const) {
     const arm = `arm${suffix}` as const,
@@ -423,7 +462,7 @@ export function createChibi(spec: ChibiSpec): MasterRig {
         24,
       ),
       "hip",
-      ACCENT,
+      PANTS,
     );
   ellipsoid("head", [0, 0, 0], [0.288, 0.265, 0.245], SKIN);
   for (const side of [-1, 1]) {
@@ -494,6 +533,16 @@ export function createChibi(spec: ChibiSpec): MasterRig {
     );
     for (const side of [-1, 1]) ellipsoid("head", [side * 0.3, -0.01, 0.01], [0.04, 0.07, 0.07], ACCENT);
   }
+  // Primitives are indexed; if any part is not, merge everything as non-indexed instead.
+  if (parts.some((p) => !p.index))
+    for (let i = 0; i < parts.length; i++)
+      if (parts[i].index) {
+        const flat = parts[i].toNonIndexed();
+        flat.clearGroups();
+        flat.addGroup(0, flat.getAttribute("position").count, parts[i].groups[0].materialIndex ?? 0);
+        parts[i].dispose();
+        parts[i] = flat;
+      }
   // mergeGeometries(useGroups) replaces source groups; these match one material per part.
   const materialIds = [...new Set(parts.map((p) => p.groups[0].materialIndex))];
   const batches = materialIds.map((id) =>
@@ -673,7 +722,8 @@ function addHair(spec: ChibiSpec, { add, ellipsoid, tube }: Builders, HAIR: numb
 }
 
 /** Poses beyond the lab's walk/sit/type cycle, used by the shared 3D room. */
-export type ChibiAction = "idle" | "wave" | "jump" | "phone" | "coffee" | "clap" | "thumbs-up" | "dance";
+export type ChibiAction =
+  "idle" | "wave" | "jump" | "phone" | "coffee" | "clap" | "thumbs-up" | "dance" | "read";
 
 export function poseMaster(
   rig: MasterRig,
@@ -716,7 +766,16 @@ export function poseMaster(
       (typing ? reach.upper + tap : -0.35) * seated - stride * sign * 0.6 * (1 - seated);
     b[`arm${side}`].rotation.y = typing ? sign * 0.13 * seated : 0;
     b[`forearm${side}`].rotation.x = (typing ? reach.lower - tap : -0.55) * seated;
+    b[`forearm${side}`].rotation.y = 0;
+    b[`forearm${side}`].rotation.z = 0;
     b[`arm${side}`].rotation.z = sign * -0.08 * (1 - seated);
+    if (action === "read" && seated > 0.5) {
+      // Reading while seated: both hands hold a book in front of the chest.
+      b[`arm${side}`].rotation.x = -0.55;
+      b[`arm${side}`].rotation.y = sign * 0.25;
+      b[`forearm${side}`].rotation.x = -1.35;
+      continue;
+    }
     if (seated > 0.5 || moving) continue;
     // Standing gestures. Right arm is side "R" (sign -1).
     const wiggle = reducedMotion ? 0 : Math.sin(time * 10);

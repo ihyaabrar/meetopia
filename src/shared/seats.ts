@@ -19,7 +19,10 @@ export function seatPose(map: MapData, obj: MapObject, index = 0) {
   const dir = obj.kind === "chair" ? workstationFacing(map, obj) : (obj.facing ?? "down");
   const attached = attachedSurface(map, obj);
   // Rear-facing feet are forward under a desktop, not at the rear wheelbase of the chair.
-  const footY = dir === "up" && attached?.surface.kind === "desk" ? 0.2 : Math.min(obj.h * 0.6, 0.6);
+  const footY =
+    dir === "up" && (attached?.surface.kind === "desk" || attached?.surface.kind === "gamingDesk")
+      ? 0.2
+      : Math.min(obj.h * 0.6, 0.6);
   // A sofa standing on its end (taller than wide) seats people along its height.
   const vertical = obj.h > obj.w && count > 1;
   return {

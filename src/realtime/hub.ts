@@ -54,7 +54,7 @@ import {
   type ZoneLock,
 } from "@/shared/protocol";
 import { createHash } from "node:crypto";
-import { canSitAt, seatPose } from "@/shared/seats";
+import { canSitAt, seatCount, seatPose } from "@/shared/seats";
 import { directionFrom } from "@/shared/avatar-animation";
 import { OrderedQueue } from "./ordered-queue";
 
@@ -85,6 +85,8 @@ const LAST_POSITION_TTL = 24 * 3600;
 const CHAT_WINDOW_MS = 5_000;
 const CHAT_MAX_PER_WINDOW = 6;
 const JUMP_TTL_MS = 1_200;
+const JUMPS_PER_WINDOW = 8;
+const POSE_ONLY_FROM_STATE = new Set(["walk", "run", "sit", "sit-sofa", "sit-floor"]);
 const NEEDS_TTL = 30 * 24 * 3600;
 /** Gaji dicairkan ke Neon setiap terkumpul sekian koin (sekitar 10 menit), bukan tiap menit. */
 const WALLET_FLUSH_COINS = 10;
@@ -100,6 +102,7 @@ interface Conn {
   emoteTimes: number[];
   /** When the current jump started (a jump never outlives JUMP_TTL_MS while moving). */
   jumpAt: number;
+  jumpTimes: number[];
   musicTimes: number[];
   lastPosSave: number;
   /** Kapan kehadiran terakhir ditulis ke Redis. */
@@ -291,6 +294,7 @@ export class RealtimeHub {
       chatTimes: [],
       emoteTimes: [],
       jumpAt: 0,
+      jumpTimes: [],
       musicTimes: [],
       lastPosSave: 0,
       presenceWrittenAt: 0,
@@ -535,13 +539,29 @@ export class RealtimeHub {
 
       case "avatarAction": {
         const now = Date.now();
-        // Ending a pose is never rate limited: a dropped "idle" would leave a jump looping for peers.
-        if (m.action !== "idle") {
+        // Ending a pose is never rate limited (a dropped "idle" would leave a jump looping for
+        // peers), but a repeated "idle" changes nothing and must not cost a Redis write + publish.
+        if (m.action === "idle" && (p.avatarAction ?? "idle") === "idle") return;
+        // Walking and sitting come from movement/seat messages, never from a pose request.
+        if (POSE_ONLY_FROM_STATE.has(m.action)) return;
+        if (m.action === "jump") {
+          // Jumps have their own budget so Space does not eat the emote quota.
+          conn.jumpTimes = conn.jumpTimes.filter((t) => now - t < CHAT_WINDOW_MS);
+          if (conn.jumpTimes.length >= JUMPS_PER_WINDOW) return;
+          conn.jumpTimes.push(now);
+          conn.jumpAt = now;
+          // A jump ends by itself even if the client never sends "idle".
+          setTimeout(() => {
+            if (conn.jumpAt !== now || p.avatarAction !== "jump" || room.conns.get(conn.userId) !== conn)
+              return;
+            p.avatarAction = "idle";
+            void this.broadcastUpdate(conn);
+          }, JUMP_TTL_MS);
+        } else if (m.action !== "idle") {
           conn.emoteTimes = conn.emoteTimes.filter((t) => now - t < CHAT_WINDOW_MS);
           if (conn.emoteTimes.length >= CHAT_MAX_PER_WINDOW) return;
           conn.emoteTimes.push(now);
         }
-        if (m.action === "jump") conn.jumpAt = now;
         p.avatarAction = m.action;
         delete p.pairedAction;
         return this.broadcastUpdate(conn);
@@ -1210,7 +1230,10 @@ export class RealtimeHub {
       for (const c of room.conns.values()) send(c.ws, { t: "map", map: ctl.map });
       if (!templateChanged && !geometryChanged) {
         for (const c of room.conns.values()) {
-          const seat = ctl.map.objects.find((o) => o.id === c.presence.seatId);
+          const found = ctl.map.objects.find((o) => o.id === c.presence.seatId);
+          // A sofa edited shorter may no longer have this person's place: stand them up instead
+          // of clamping two people onto the same slot.
+          const seat = found && (c.presence.seatIndex ?? 0) < seatCount(found) ? found : undefined;
           if (c.presence.sitting && seat) {
             await this.releaseSeat(c);
             Object.assign(c.presence, seatPose(ctl.map, seat, c.presence.seatIndex));
@@ -1221,6 +1244,7 @@ export class RealtimeHub {
             const spot = this.freeSpawn(room, []);
             Object.assign(c.presence, spot, { sitting: false, moving: false });
             delete c.presence.seatId;
+            delete c.presence.seatIndex;
             send(c.ws, { t: "teleported", x: spot.x, y: spot.y, toName: "" });
             await this.broadcastUpdate(c);
           }
