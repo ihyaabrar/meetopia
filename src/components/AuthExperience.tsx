@@ -1,7 +1,6 @@
 "use client";
 
 import { AvatarCanvas } from "./AvatarCanvas";
-import { Icon } from "./Icon";
 import { MapPreview } from "./MapPreview";
 import dynamic from "next/dynamic";
 import { useWebGL } from "@/features/world3d/useWebGL";
