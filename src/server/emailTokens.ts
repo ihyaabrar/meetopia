@@ -28,14 +28,18 @@ export async function consumeEmailToken(token: string, kind: Kind): Promise<stri
   return r?.user_id ?? null;
 }
 
-export async function sendVerificationEmail(user: {
-  id: string;
-  email: string;
-  name: string;
-  locale: string;
-}) {
+export async function sendVerificationEmail(
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    locale: string;
+  },
+  req?: Request,
+) {
   const token = await issueEmailToken(user.id, "verify");
-  const link = `${appUrl()}/api/auth/verify?token=${token}`;
+  // Tanpa APP_URL, pakai origin permintaan (bukan localhost): tautan email harus bisa dibuka.
+  const link = `${appUrl(req)}/api/auth/verify?token=${token}`;
   const l = isLocale(user.locale) ? user.locale : DEFAULT_LOCALE;
   await sendMail({
     to: user.email,
@@ -45,9 +49,12 @@ export async function sendVerificationEmail(user: {
   return link;
 }
 
-export async function sendResetEmail(user: { id: string; email: string; name: string; locale: string }) {
+export async function sendResetEmail(
+  user: { id: string; email: string; name: string; locale: string },
+  req?: Request,
+) {
   const token = await issueEmailToken(user.id, "reset");
-  const link = `${appUrl()}/reset?token=${token}`;
+  const link = `${appUrl(req)}/reset?token=${token}`;
   const l = isLocale(user.locale) ? user.locale : DEFAULT_LOCALE;
   await sendMail({
     to: user.email,

@@ -51,8 +51,10 @@ async function enterRoom(page: Page) {
   );
   // New spatial-first UI keeps these panels closed by default.
   await page.getByRole("button", { name: "Buka menu", exact: true }).click();
-  await page.locator(".main-head").getByRole("button", { name: "Anggota", exact: true }).click();
-  await page.locator(".main-head").getByRole("button", { name: "Buka / tutup chat", exact: true }).click();
+  // Di layar lebar tombol ini ada di rail kiri (salinan di header hanya untuk ponsel).
+  const rail = page.getByRole("navigation", { name: "Workspace", exact: true });
+  await rail.getByRole("button", { name: "Anggota", exact: true }).click();
+  await rail.getByRole("button", { name: "Buka / tutup chat", exact: true }).click();
 }
 
 const dbg = <T>(page: Page, fn: (d: Debug) => T) =>

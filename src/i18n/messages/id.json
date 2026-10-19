@@ -1052,5 +1052,6 @@
   "seat.occupied": "Kursi ini sedang digunakan.",
   "seat.tooFar": "Terlalu jauh dari kursi. Dekati dulu.",
   "action.readingActive": "Animasi membaca aktif. Bergerak untuk berhenti.",
-  "action.minigameSoon": "Minigame belum tersedia. Area ini bisa dipakai untuk berkumpul dan bermain bersama."
+  "action.minigameSoon": "Minigame belum tersedia. Area ini bisa dipakai untuk berkumpul dan bermain bersama.",
+  "error.transferConflict": "Kepemilikan berubah di tengah jalan. Muat ulang lalu coba lagi."
 }

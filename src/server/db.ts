@@ -3,6 +3,7 @@
  * Pengembangan tanpa DATABASE_URL: PGlite (PostgreSQL di dalam proses) di folder .data/.
  * Instance disimpan di globalThis agar server WebSocket dan route Next.js memakai koneksi yang sama.
  */
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { SCHEMA_SQL } from "./schema";
@@ -25,7 +26,14 @@ async function create(): Promise<Db> {
   let exec: (sql: string) => Promise<unknown>;
   if (url) {
     const { Pool } = await import("pg");
-    const pool = new Pool({ connectionString: pgConnectionString(url), max: 5, idleTimeoutMillis: 10_000 });
+    const pool = new Pool({
+      connectionString: pgConnectionString(url),
+      max: 5,
+      idleTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 10_000,
+    });
+    // Neon menutup koneksi yang menganggur; tanpa penangan ini Node melempar error dan proses mati.
+    pool.on("error", (e) => console.error("[db] koneksi menganggur putus", e.message));
     db = {
       query: async (sql, params) => (await pool.query(sql, params as unknown[])).rows,
       transaction: async (fn) => {
@@ -45,7 +53,24 @@ async function create(): Promise<Db> {
         }
       },
     };
-    exec = (sql) => pool.query(sql);
+    // Skema hanya dijalankan bila berubah. ALTER TABLE mengunci tabel; menjalankannya di setiap cold
+    // start membuat permintaan tertahan atau deadlock. Kunci advisory menahan instance lain yang
+    // menyala bersamaan sampai yang pertama selesai (semua perintah satu transaksi implisit).
+    exec = async (sql) => {
+      const version = createHash("sha256").update(sql).digest("hex");
+      const current = await pool
+        .query<{ v: string }>("SELECT v FROM schema_meta WHERE k = 'schema'")
+        .then((r) => r.rows[0]?.v)
+        .catch(() => undefined);
+      if (current === version) return;
+      await pool.query(
+        `SELECT pg_advisory_xact_lock(7243150);
+        ${sql}
+        CREATE TABLE IF NOT EXISTS schema_meta (k text PRIMARY KEY, v text NOT NULL);
+        INSERT INTO schema_meta (k, v) VALUES ('schema', '${version}')
+          ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v;`,
+      );
+    };
   } else {
     // Sistem berkas Vercel hanya-baca dan tidak permanen: wajib memakai Neon (DATABASE_URL).
     if (onVercel) throw new ConfigError("dbNotConfigured");

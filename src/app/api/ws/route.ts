@@ -16,12 +16,9 @@ export async function GET(req: Request) {
     // Jangan memeriksa header Upgrade sendiri: browser bisa datang lewat HTTP/2 (tanpa header itu),
     // dan runtime Vercel yang tahu apakah permintaan ini bisa di-upgrade.
     return await experimental_upgradeWebSocket(
-      (ws) =>
-        // Janji ini baru selesai saat soket ditutup, supaya fungsi tidak dibekukan selama ada koneksi.
-        new Promise<void>((resolve) => {
-          ws.once("close", () => resolve());
-          getHub().accept(ws, url.pathname + url.search);
-        }),
+      // Janji ini baru selesai setelah soket tutup dan kerja keluarnya (simpan posisi, dompet, umumkan
+      // leave, lepas kunci ruangan) beres, supaya fungsi tidak dibekukan di tengah jalan.
+      (ws) => getHub().accept(ws, url.pathname + url.search),
       { maxPayload: 64 * 1024 },
     );
   } catch (e) {

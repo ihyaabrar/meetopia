@@ -100,8 +100,13 @@ export class MediaManager {
 
   constructor(private room: RoomClient) {
     this.offSignal = room.on("signal", ({ from, data }) => void this.onSignal(from, data as Signal));
-    // Setelah sambung ulang, mulai ulang semua koneksi media.
-    this.offWelcome = room.on("welcome", () => this.closeAll());
+    // Setelah sambung ulang (di Vercel tiap 300 detik), server menganggap mic/kamera/layar mati.
+    // Tutup koneksi lama sambil memberi tahu lawan bicara (soket sudah terbuka lagi), lalu umumkan
+    // ulang media yang masih menyala supaya orang lain tetap mendengar.
+    this.offWelcome = room.on("welcome", () => {
+      for (const l of [...this.links.values()]) this.closeLink(l, true);
+      this.publishMedia();
+    });
     this.timer = setInterval(() => this.tick(), 400);
   }
 

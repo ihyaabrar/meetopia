@@ -38,7 +38,7 @@ export const POST = route(async (req) => {
     ],
   );
   const link = emailVerificationEnabled()
-    ? await sendVerificationEmail({ id, email, name: body.name, locale })
+    ? await sendVerificationEmail({ id, email, name: body.name, locale }, req)
     : undefined;
   await setSessionCookie(id, 1);
   // Tanpa SMTP saat pengembangan, tautan dikembalikan agar mudah diuji.

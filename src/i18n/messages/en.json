@@ -1052,5 +1052,6 @@
   "seat.occupied": "This seat is taken.",
   "seat.tooFar": "Too far from the seat. Walk closer first.",
   "action.readingActive": "Reading animation active. Move to stop.",
-  "action.minigameSoon": "Minigames are not available yet. Use this area to gather and play together."
+  "action.minigameSoon": "Minigames are not available yet. Use this area to gather and play together.",
+  "error.transferConflict": "Ownership changed in the meantime. Reload and try again."
 }

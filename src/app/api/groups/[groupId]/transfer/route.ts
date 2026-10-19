@@ -21,17 +21,19 @@ export const POST = route<Ctx>(async (req, { params }) => {
   const target = await getRole(body.userId, groupId);
   if (!target) throw new ApiError(404, "notFound");
   if (target === "guest") throw new ApiError(409, "guestCannotOwn");
-  // Satu transaksi: grup tidak pernah punya dua pemilik atau tanpa pemilik.
+  // Satu transaksi dengan syarat peran: dua permintaan bersamaan, atau target yang keluar di tengah
+  // jalan, membatalkan semuanya, jadi grup tidak pernah punya dua pemilik atau tanpa pemilik.
   await transaction(async (q) => {
+    const demoted = await q.query(
+      "UPDATE memberships SET role = 'admin' WHERE user_id = $1 AND group_id = $2 AND role = 'owner' RETURNING 1",
+      [user.id, groupId],
+    );
+    const promoted = await q.query(
+      "UPDATE memberships SET role = 'owner' WHERE user_id = $1 AND group_id = $2 AND role IN ('admin', 'member') RETURNING 1",
+      [body.userId, groupId],
+    );
+    if (!demoted.length || !promoted.length) throw new ApiError(409, "transferConflict");
     await q.query("UPDATE groups SET owner_id = $2 WHERE id = $1", [groupId, body.userId]);
-    await q.query("UPDATE memberships SET role = 'owner' WHERE user_id = $1 AND group_id = $2", [
-      body.userId,
-      groupId,
-    ]);
-    await q.query("UPDATE memberships SET role = 'admin' WHERE user_id = $1 AND group_id = $2", [
-      user.id,
-      groupId,
-    ]);
   });
   await publishToRoom(groupId, { control: { kind: "membership", userId: body.userId, role: "owner" } });
   await publishToRoom(groupId, { control: { kind: "membership", userId: user.id, role: "admin" } });

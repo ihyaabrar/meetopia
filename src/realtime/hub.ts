@@ -77,7 +77,8 @@ const HEARTBEAT_MS = 20_000;
  */
 const PRESENCE_REFRESH_MS = 45_000;
 const MOVING_WRITE_MS = 1_000;
-const NEEDS_SAVE_MS = 5 * 60_000;
+// Vercel memutus soket tiap 300 detik: simpan jauh sebelum itu.
+const NEEDS_SAVE_MS = 60_000;
 /** Daftar kehadiran untuk meneruskan sinyal WebRTC boleh berumur sebentar (banyak sinyal per detik). */
 const PRESENCE_CACHE_MS = 1_000;
 const LEAVE_GRACE_MS = 3_000;
@@ -88,8 +89,8 @@ const JUMP_TTL_MS = 1_200;
 const JUMPS_PER_WINDOW = 8;
 const POSE_ONLY_FROM_STATE = new Set(["walk", "run", "sit", "sit-sofa", "sit-floor"]);
 const NEEDS_TTL = 30 * 24 * 3600;
-/** Gaji dicairkan ke Neon setiap terkumpul sekian koin (sekitar 10 menit), bukan tiap menit. */
-const WALLET_FLUSH_COINS = 10;
+/** Gaji dicairkan ke Neon setiap terkumpul sekian koin (sekitar 2 menit), bukan tiap menit. */
+const WALLET_FLUSH_COINS = 2;
 
 interface Conn {
   ws: WebSocket;
@@ -126,6 +127,8 @@ interface Conn {
   order: { timer: NodeJS.Timeout; serve: () => Promise<void> } | null;
   /** Bar & gaji koneksi ini sudah disimpan saat dilepas (jangan menimpa koneksi baru). */
   lifeSaved: boolean;
+  /** Selesai saat kerja "keluar" (simpan posisi, dompet, umumkan leave) sudah beres. */
+  done?: Promise<void>;
 }
 
 interface Room {
@@ -147,13 +150,16 @@ export class RealtimeHub {
   private wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
   private rooms = new Map<string, Room>();
   private roomLoading = new Map<string, Promise<Room>>();
-  private pendingMessages: ChatMessage[] = [];
   private timers: NodeJS.Timeout[] = [];
   private kvPromise = getKv();
 
   constructor() {
-    this.timers.push(setInterval(() => void this.heartbeat(), HEARTBEAT_MS));
-    this.timers.push(setInterval(() => void this.flushMessages(), 1_000));
+    this.timers.push(
+      setInterval(
+        () => void this.heartbeat().catch((e) => console.error("[realtime] heartbeat", e)),
+        HEARTBEAT_MS,
+      ),
+    );
     this.timers.push(setInterval(() => void repo.pruneOldMessages().catch(() => {}), 6 * 3600_000));
   }
 
@@ -166,12 +172,22 @@ export class RealtimeHub {
     this.wss.handleUpgrade(req, socket, head, (ws) => this.accept(ws, req.url ?? "/"));
   }
 
-  /** Menerima soket yang sudah di-upgrade, mis. dari `experimental_upgradeWebSocket` di Vercel. */
-  accept(ws: WebSocket, url: string) {
-    void this.onConnection(ws, url).catch((e) => {
+  /**
+   * Menerima soket yang sudah di-upgrade, mis. dari `experimental_upgradeWebSocket` di Vercel.
+   * Janji ini baru selesai setelah soket tutup DAN kerja keluarnya beres (simpan posisi, dompet,
+   * umumkan leave, lepas kunci ruangan). Di Vercel fungsi berhenti saat janji ini selesai.
+   */
+  accept(ws: WebSocket, url: string): Promise<void> {
+    const closed = new Promise<void>((resolve) => ws.once("close", () => resolve()));
+    const ready = this.onConnection(ws, url).catch((e) => {
       console.error("[realtime] gagal menerima koneksi", e);
       send(ws, { t: "error", code: "server" });
       ws.close(1011);
+      return undefined;
+    });
+    return closed.then(async () => {
+      const conn = await ready;
+      await conn?.done;
     });
   }
 
@@ -195,25 +211,26 @@ export class RealtimeHub {
           };
           room.unsubscribe = await kv.subscribe(keys.roomChannel(groupId), (raw) => this.onBus(room, raw));
           this.rooms.set(groupId, room);
-          this.roomLoading.delete(groupId);
           return room;
-        })(),
+        })().finally(() => this.roomLoading.delete(groupId)),
       );
     }
     return this.roomLoading.get(groupId)!;
   }
 
-  private async onConnection(ws: WebSocket, rawUrl: string) {
+  private async onConnection(ws: WebSocket, rawUrl: string): Promise<Conn | undefined> {
     const url = new URL(rawUrl, "http://x");
     const auth = await verifyRealtimeToken(url.searchParams.get("token") ?? "");
     if (!auth) {
       send(ws, { t: "error", code: "unauthorized" });
-      return ws.close(4001);
+      ws.close(4001);
+      return;
     }
     const role = await repo.getRole(auth.userId, auth.groupId);
     if (!role || !can(role, "enterRoom")) {
       send(ws, { t: "error", code: "forbidden" });
-      return ws.close(4003);
+      ws.close(4003);
+      return;
     }
     const user = await one<{
       name: string;
@@ -221,9 +238,12 @@ export class RealtimeHub {
       status_text: string | null;
       status_expires_at: string | Date | null;
     }>("SELECT name, avatar, status_text, status_expires_at FROM users WHERE id = $1", [auth.userId]);
-    if (!user) return ws.close(4001);
+    if (!user) {
+      ws.close(4001);
+      return;
+    }
 
-    const room = await this.loadRoom(auth.groupId);
+    let room = await this.loadRoom(auth.groupId);
     const kv = await this.kv();
 
     // Pulihkan posisi terakhir (sambung ulang otomatis, aturan 2).
@@ -312,6 +332,9 @@ export class RealtimeHub {
       order: null,
       lifeSaved: false,
     };
+    // Selama await di atas, koneksi terakhir bisa saja menutup ruangan ini (muat ulang cepat).
+    // Jangan menempel ke ruangan yang sudah lepas langganan: muat lagi.
+    if (this.rooms.get(auth.groupId) !== room) room = await this.loadRoom(auth.groupId);
     room.conns.set(auth.userId, conn);
     await this.writePresence(conn);
 
@@ -360,9 +383,12 @@ export class RealtimeHub {
       )
         send(ws, { t: "error", code: "rateLimited" });
     });
-    ws.on("close", () => {
+    const onClose = () => {
       if (room.conns.get(conn.userId) === conn) this.scheduleLeave(room, conn);
-    });
+    };
+    ws.on("close", onClose);
+    // Soket bisa sudah tutup selama await di atas: event close-nya terlewat.
+    if (ws.readyState === ws.CLOSED || ws.readyState === ws.CLOSING) onClose();
 
     const peers = (await this.readPresence(room)).filter((p) => p.id !== auth.userId);
     send(ws, {
@@ -380,6 +406,7 @@ export class RealtimeHub {
     await publishToRoom(auth.groupId, { msg: { t: "join", peer: presence } });
     const startZone = privateZoneAt(room.map, presence.x, presence.y);
     if (startZone) await this.enterZone(room, conn, startZone);
+    return conn;
   }
 
   /** Titik muncul di sekitar spawn yang tidak ditempati orang lain (agar avatar tidak menumpuk). */
@@ -479,7 +506,15 @@ export class RealtimeHub {
     void this.releaseSeat(conn);
     room.conns.delete(conn.userId);
     room.leaving.set(conn.userId, conn);
-    setTimeout(() => void this.finalizeLeave(room, conn), LEAVE_GRACE_MS);
+    conn.done = new Promise<void>((resolve) =>
+      setTimeout(
+        () =>
+          void this.finalizeLeave(room, conn)
+            .catch((e) => console.error("[realtime] gagal keluar", e))
+            .finally(resolve),
+        LEAVE_GRACE_MS,
+      ),
+    );
   }
 
   private async finalizeLeave(room: Room, conn: Conn) {
@@ -499,8 +534,6 @@ export class RealtimeHub {
       if (zone) await this.leaveZone(room, conn.userId, zone);
     }
     await publishToRoom(conn.groupId, { msg: { t: "leave", id: conn.userId, conn: conn.presence.conn } });
-    // Di Vercel instance bisa dibekukan setelah koneksi terakhir tutup: simpan pesan sekarang.
-    await this.flushMessages();
     if (room.conns.size === 0 && this.rooms.get(room.groupId) === room) {
       this.rooms.delete(room.groupId);
       await room.unsubscribe();
@@ -1083,13 +1116,14 @@ export class RealtimeHub {
       if (!can(conn.role, "sendChannelMessage")) return send(conn.ws, { t: "error", code: "forbidden" });
       if (!m.channelId || !(await repo.channelInGroup(m.channelId, conn.groupId))) return;
       msg.channelId = m.channelId;
-      this.pendingMessages.push(msg);
+      // Simpan dulu, baru kirim: di Vercel fungsi bisa berhenti kapan saja, pesan tidak boleh hilang.
+      await repo.insertMessages([msg]);
       await publishToRoom(conn.groupId, { msg: { t: "chat", message: msg } });
     } else if (m.kind === "dm") {
       if (!m.toUserId || m.toUserId === conn.userId || !(await repo.getRole(m.toUserId, conn.groupId)))
         return;
       msg.toUserId = m.toUserId;
-      this.pendingMessages.push(msg);
+      await repo.insertMessages([msg]);
       await publishToRoom(conn.groupId, { to: [conn.userId, m.toUserId], msg: { t: "chat", message: msg } });
     } else {
       // Percakapan sekitar: hanya untuk orang yang sedang bisa didengar; tidak disimpan.
@@ -1472,26 +1506,8 @@ export class RealtimeHub {
     }
   }
 
-  async flushMessages() {
-    if (!this.pendingMessages.length) return;
-    const batch = this.pendingMessages.splice(0, this.pendingMessages.length);
-    try {
-      await repo.insertMessages(batch);
-    } catch (e) {
-      // Satu pesan yang kanalnya/pengirimnya sudah dihapus (pelanggaran foreign key) jangan
-      // sampai menahan pesan lain: simpan satu per satu, buang yang memang tidak bisa disimpan.
-      if ((e as { code?: string }).code !== "23503") {
-        console.error("[realtime] gagal menyimpan pesan, dicoba lagi", e);
-        this.pendingMessages.unshift(...batch);
-        return;
-      }
-      for (const m of batch) await repo.insertMessages([m]).catch(() => {});
-    }
-  }
-
   async close() {
     this.timers.forEach(clearInterval);
-    await this.flushMessages();
     for (const room of this.rooms.values()) for (const c of room.conns.values()) c.ws.close(1001);
     this.wss.close();
   }

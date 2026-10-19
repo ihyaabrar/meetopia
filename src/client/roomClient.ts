@@ -170,7 +170,6 @@ export class RoomClient {
     this.ws = ws;
     ws.onmessage = (ev) => this.onMessage(JSON.parse(String(ev.data)) as ServerMessage);
     ws.onopen = () => {
-      this.retry = 0;
       this.pingTimer = setInterval(() => this.send({ t: "ping" }), 25_000);
     };
     ws.onclose = (ev) => {
@@ -256,6 +255,10 @@ export class RoomClient {
   private onMessage(m: ServerMessage) {
     switch (m.t) {
       case "welcome": {
+        // Jeda sambung ulang baru di-reset saat sesi benar-benar berhasil, bukan saat soket terbuka:
+        // server yang menerima lalu langsung menutup tidak boleh membuat klien mencoba tanpa jeda.
+        this.retry = 0;
+        const before = this.self;
         const peers = new Map(m.peers.map((p) => [p.id, p]));
         for (const p of m.peers) this.seenAt.set(p.id, Date.now());
         this.commit({
@@ -270,6 +273,9 @@ export class RoomClient {
           clockOffset: m.serverNow - Date.now(),
           configError: undefined,
         });
+        // Server memulai sesi baru dengan status "aktif": pulihkan status yang dipilih sendiri.
+        if (before?.manualStatus && before.status !== "active")
+          this.send({ t: "status", status: before.status, manual: true });
         if (this.disconnectedAt) {
           console.info(`[meetopia] tersambung lagi setelah ${Date.now() - this.disconnectedAt} ms`);
           this.disconnectedAt = null;

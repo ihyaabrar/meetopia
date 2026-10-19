@@ -15,7 +15,7 @@ export const POST = route(async (req) => {
     [email.toLowerCase().trim()],
   );
   let link: string | undefined;
-  if (user) link = await sendResetEmail(user);
+  if (user) link = await sendResetEmail(user, req);
   // Selalu sukses agar tidak membocorkan email mana yang terdaftar.
   return ok({ ok: true, devResetLink: isDev && !process.env.SMTP_URL ? link : undefined });
 });
