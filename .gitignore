@@ -10,4 +10,5 @@ test-results
 
 # Catatan sesi alat analisa & konfigurasi lokal editor
 graphify-out/
-.claude/
+.claude/*
+!.claude/skills/
