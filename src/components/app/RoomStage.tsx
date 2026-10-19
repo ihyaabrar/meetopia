@@ -317,7 +317,9 @@ export function RoomStage({
         return;
       }
       const ctx = use3d ? null : canvas.getContext("2d");
-      const dt = Math.max(0, Math.min(0.05, (nowMs - last) / 1000));
+      // Batas 0,25 detik (bukan 0,05): di perangkat lambat (< 20 fps) kecepatan jalan tetap sama.
+      // Gerak dipecah jadi langkah kecil di bawah, jadi frame panjang tidak menembus dinding.
+      const dt = Math.max(0, Math.min(0.25, (nowMs - last) / 1000));
       last = nowMs;
       const time = nowMs / 1000;
       const st = state.current;
@@ -360,8 +362,11 @@ export function RoomStage({
           };
           let nx = me.x;
           let ny = me.y;
-          if (free(nx + (vx / len) * step, ny)) nx += (vx / len) * step;
-          if (free(nx, ny + (vy / len) * step)) ny += (vy / len) * step;
+          for (let left = step; left > 0; left -= 0.2) {
+            const part = Math.min(left, 0.2);
+            if (free(nx + (vx / len) * part, ny)) nx += (vx / len) * part;
+            if (free(nx, ny + (vy / len) * part)) ny += (vy / len) * part;
+          }
           const dir = dirFrom(vx, vy, me.dir);
           room.updateSelf({ x: nx, y: ny, dir, moving: true, sitting: false, avatarAction: keepJump(me) });
           st.keyMoving = true;
@@ -378,22 +383,27 @@ export function RoomStage({
 
       // Gerak diri sendiri menyusuri jalur
       if (me && st.path.length) {
-        const n = st.path[0];
-        const tx = n.x + 0.5;
-        const ty = n.y + 0.5;
-        const dx = tx - me.x;
-        const dy = ty - me.y;
-        const d = Math.hypot(dx, dy);
-        const step = speedRef.current * dt;
+        // Sisa langkah dipakai untuk titik jalur berikutnya, jadi frame panjang tidak memperlambat.
+        let budget = speedRef.current * dt;
         let nx = me.x;
         let ny = me.y;
-        if (d <= step) {
-          nx = tx;
-          ny = ty;
-          st.path.shift();
-        } else {
-          nx += (dx / d) * step;
-          ny += (dy / d) * step;
+        let dx = 0;
+        let dy = 0;
+        while (st.path.length && budget > 0) {
+          const n = st.path[0];
+          dx = n.x + 0.5 - nx;
+          dy = n.y + 0.5 - ny;
+          const d = Math.hypot(dx, dy);
+          if (d <= budget) {
+            nx = n.x + 0.5;
+            ny = n.y + 0.5;
+            budget -= d;
+            st.path.shift();
+          } else {
+            nx += (dx / d) * budget;
+            ny += (dy / d) * budget;
+            budget = 0;
+          }
         }
         const moving = st.path.length > 0;
         const dir = dirFrom(dx, dy, me.dir);
