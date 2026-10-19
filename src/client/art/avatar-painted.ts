@@ -619,7 +619,12 @@ export function drawPaintedAvatar(
   ctx.translate(0, rig.bob);
   ctx.rotate(rig.lean);
   const bodyW = d.width * (side ? (diagonal ? 0.91 : 0.78) : 1);
-  const cloth = avatarSprite(a, pose.dir, "cloth")!;
+  const cloth = avatarSprite(a, pose.dir, "cloth");
+  if (!cloth) {
+    // Kombinasi tanpa gambar (mis. nilai baju lama yang tidak dikenal): pakai penggambar biasa.
+    ctx.restore();
+    return false;
+  }
   const directionalTorso = cloth.collarX !== undefined && cloth.collarY !== undefined;
   const torsoHeight = directionalTorso ? d.torso + 4.5 : d.torso + 1.5;
   const torsoWidth = bodyW * 1.04;

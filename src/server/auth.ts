@@ -7,7 +7,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { authSecret, emailVerificationEnabled } from "./env";
 import { one } from "./db";
-import type { AvatarConfig } from "@/shared/avatar";
+import { sanitizeAvatar, type AvatarConfig } from "@/shared/avatar";
 import { activeStatus } from "@/shared/status";
 
 export { activeStatus };
@@ -76,7 +76,8 @@ export function toSessionUser(r: UserRow): SessionUser {
     id: r.id,
     email: r.email,
     name: r.name,
-    avatar: r.avatar,
+    // Avatar lama di database bisa memakai nilai yang sudah tidak dikenal (mis. baju lama).
+    avatar: sanitizeAvatar(r.avatar),
     locale: r.locale,
     highContrast: r.high_contrast,
     emailVerified: !!r.email_verified_at,

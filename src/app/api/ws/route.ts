@@ -18,7 +18,14 @@ export async function GET(req: Request) {
     return await experimental_upgradeWebSocket(
       // Janji ini baru selesai setelah soket tutup dan kerja keluarnya (simpan posisi, dompet, umumkan
       // leave, lepas kunci ruangan) beres, supaya fungsi tidak dibekukan di tengah jalan.
-      (ws) => getHub().accept(ws, url.pathname + url.search),
+      (ws) => {
+        // Vercel mematikan fungsi tepat di maxDuration; tutup sendiri lebih awal supaya kerja keluar
+        // (masa tenggang 3 detik + simpan) sempat selesai. Klien langsung menyambung ulang (1012).
+        const rotate = setTimeout(() => ws.close(1012, "rotate"), (maxDuration - 20) * 1000);
+        return getHub()
+          .accept(ws, url.pathname + url.search)
+          .finally(() => clearTimeout(rotate));
+      },
       { maxPayload: 64 * 1024 },
     );
   } catch (e) {
