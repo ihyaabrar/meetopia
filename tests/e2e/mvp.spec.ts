@@ -19,8 +19,24 @@ const shots = process.env.SHOTS_DIR;
 /** Bila diisi, pengguna B tersambung ke instance real-time lain (uji sinkron lewat Redis, aturan 3). */
 const rtUrlB = process.env.E2E_RT_URL_B;
 
-async function pageB(browser: import("@playwright/test").Browser) {
+/**
+ * Halaman baru dengan ruangan 2D: browser tes tanpa GPU merender 3D sangat lambat sehingga tes
+ * kehabisan waktu. Logika ruangan sama untuk 2D dan 3D. Set E2E_3D=1 untuk menguji dengan 3D.
+ */
+async function newContext(browser: import("@playwright/test").Browser) {
   const ctx = await browser.newContext();
+  if (!process.env.E2E_3D)
+    await ctx.addInitScript(() => {
+      try {
+        const prefs = JSON.parse(localStorage.getItem("mt_prefs") ?? "{}");
+        localStorage.setItem("mt_prefs", JSON.stringify({ ...prefs, world3d: false }));
+      } catch {}
+    });
+  return ctx;
+}
+
+async function pageB(browser: import("@playwright/test").Browser) {
+  const ctx = await newContext(browser);
   if (rtUrlB)
     await ctx.addInitScript(
       (url) => ((window as unknown as { __MEETOPIA_RT_URL: string }).__MEETOPIA_RT_URL = url),
@@ -64,7 +80,7 @@ const dbg = <T>(page: Page, fn: (d: Debug) => T) =>
   }, fn.toString()) as Promise<T>;
 
 test("MVP: grup, undangan, sinkron posisi, chat, catatan, mic, sambung ulang", async ({ browser }) => {
-  const a = await (await browser.newContext()).newPage();
+  const a = await (await newContext(browser)).newPage();
   const b = await pageB(browser);
   const stamp = Date.now();
 
@@ -216,7 +232,7 @@ test("MVP: grup, undangan, sinkron posisi, chat, catatan, mic, sambung ulang", a
 test("Ruang privat: pemegang mengunci dengan PIN, peran pindah saat keluar (FR-23, FR-31)", async ({
   browser,
 }) => {
-  const a = await (await browser.newContext()).newPage();
+  const a = await (await newContext(browser)).newPage();
   const b = await pageB(browser);
   const stamp = Date.now();
   await register(a, `a${stamp}@contoh.id`, "Ayu");
@@ -320,7 +336,7 @@ const musicVolume = (page: Page) =>
   });
 
 test("Speaker: musik makin pelan saat menjauh, hilang di luar jangkauan", async ({ browser }) => {
-  const a = await (await browser.newContext()).newPage();
+  const a = await (await newContext(browser)).newPage();
   const b = await pageB(browser);
   const stamp = Date.now();
   await register(a, `a${stamp}@contoh.id`, "Ayu");
@@ -402,7 +418,7 @@ test("Speaker: musik makin pelan saat menjauh, hilang di luar jangkauan", async 
 });
 
 test("Jenis ruangan: buat Rumah, lalu ganti ke Gaming house", async ({ browser }) => {
-  const a = await (await browser.newContext()).newPage();
+  const a = await (await newContext(browser)).newPage();
   a.on("dialog", (d) => void d.accept());
   const stamp = Date.now();
   await register(a, `r${stamp}@contoh.id`, "Rani");
@@ -462,7 +478,7 @@ test("Jenis ruangan: buat Rumah, lalu ganti ke Gaming house", async ({ browser }
 test("Berbagi layar: rekan di dekat melihat layar, bisa diperkecil dan disembunyikan", async ({
   browser,
 }) => {
-  const a = await (await browser.newContext()).newPage();
+  const a = await (await newContext(browser)).newPage();
   const b = await pageB(browser);
   const stamp = Date.now();
   await register(a, `s${stamp}@contoh.id`, "Sari");
@@ -508,7 +524,7 @@ test("Berbagi layar: rekan di dekat melihat layar, bisa diperkecil dan disembuny
 test("Dunia hidup: beli dari mesin penjual dan kopi, saldo tidak bisa negatif (FR-51, FR-54, FR-55)", async ({
   browser,
 }) => {
-  const a = await (await browser.newContext()).newPage();
+  const a = await (await newContext(browser)).newPage();
   const stamp = Date.now();
   await register(a, `l${stamp}@contoh.id`, "Lina");
   await a.waitForURL(/\/app/);
