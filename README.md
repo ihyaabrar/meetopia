@@ -48,7 +48,10 @@ Spesifikasi lengkap ada di [`docs/PRD.md`](docs/PRD.md), lengkap dengan centang 
 ### Ruangan 3D
 
 - **Diorama 3D** dengan kamera miring yang bisa diperbesar, mengikuti avatarmu dan tidak keluar dari batas peta. Lantai, dinding, dan label area dibangun dari data peta; tidak ada model atau tekstur pihak ketiga.
-- **36 jenis furnitur prosedural** (meja kerja dengan monitor, sofa, kasur, TV, speaker, dapur, mesin penjual, arcade, dan lainnya). TV otomatis menghadap sofa terdekat.
+- **Gaya rumah boneka:** dinding belakang berdiri tinggi dengan jendela (di gaming house: strip LED dan poster), dinding lain dipotong rendah supaya isi setiap ruangan selalu terlihat. Dinding tipis tepat di tengah tile, jadi lantai rapat sampai dinding dan bukaan pintu pas selebar tile pintu. Rooftop memakai pagar kaca dan ruang rapat berdinding kaca.
+- **Lantai dilukis khusus 3D** per jenis area (kayu, batu, ubin dapur, karpet, beton studio, rumput, dek kayu) lengkap dengan karpet, ambang pintu, dan bayangan lembut di bawah dinding dan perabot. Label area berupa plakat kecil di lantai yang tidak pernah tertutup dinding.
+- **Warna dan cahaya per ruangan:** tiap jenis ruangan punya palet dinding dan kain sendiri; gaya furnitur (hangat, modern, industrial, tropis) dan suasana (terang, normal, redup, malam) di pengaturan workspace ikut mengubah tampilan 3D.
+- **36 jenis furnitur prosedural** (meja kerja dengan monitor, sofa, kasur, TV, speaker kayu, dapur, BBQ, mesin penjual, arcade, dan lainnya). Kursi menyesuaikan tempatnya: kursi kantor di meja kerja, kursi makan di meja makan, kursi gaming di gaming house. TV menghadap sofa yang memang melihat ke arahnya.
 - **Avatar chibi 3D** dari profil yang sama dengan avatar 2D: rambut, topi/hijab, kacamata, headphone, tujuh gaya atasan, celana panjang/pendek/rok. Animasi jalan dengan langkah kaki dan ayunan tangan bergantian, loncat, lambai, tepuk tangan, ngetik saat duduk di meja.
 - **Tempat duduk multi-slot:** sofa panjang muat satu orang per kotak, sofa kecil dua orang, kasur satu orang per dua kotak. Server menolak kursi yang sudah terisi.
 - **Mode 2D tetap ada.** Matikan "Ruangan 3D" di Pengaturan → Tampilan, atau otomatis kembali ke 2D bila browser tidak mendukung WebGL.

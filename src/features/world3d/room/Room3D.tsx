@@ -37,6 +37,7 @@ import {
 import { disposeModel } from "@/features/world3d/model-kit";
 import { buildFurniture, TILE_M } from "./furniture3d";
 import { buildWorld } from "./world-model";
+import { roomLight, roomPalette } from "./palette3d";
 
 export interface Person3D {
   p: Presence;
@@ -120,6 +121,12 @@ function createMarkers() {
   return { ring, focus };
 }
 
+/** Scene background: the room type's colour, darker at night. */
+function backgroundOf(map: MapData) {
+  const bg = roomPalette(map).background;
+  return map.appearance?.ambience === "night" ? new Color(bg).multiplyScalar(0.35).getStyle() : bg;
+}
+
 const specs = new WeakMap<object, { spec: ReturnType<typeof chibiSpec>; key: string }>();
 /** chibiSpec + key, cached per avatar object (presence updates keep the same avatar reference). */
 function specOf(avatar: Presence["avatar"]) {
@@ -161,6 +168,7 @@ function Scene({
     new Map<string, { key: string; rig: MasterRig; yaw: number; seated: number; away: boolean }>(),
   );
   const sun = useRef<DirectionalLight>(null);
+  const light = useMemo(() => roomLight(map), [map]);
   const target = useRef(new Vector3(map.spawn.x * TILE_M, 0, map.spawn.y * TILE_M));
   // Imperative scene helpers live in a ref: they are mutated every frame, never React state.
   const fxRef = useRef<{ ring: Mesh; focus: Mesh } | null>(null);
@@ -228,6 +236,7 @@ function Scene({
     const f = frameRef.current;
     if (!f) return;
     const cam = state.camera as OrthographicCamera;
+    state.gl.toneMappingExposure = light.exposure;
     const { ring, focus } = fxRef.current!;
     const self = f.people.find((p) => p.isSelf);
     // Camera: follow the person smoothly, but never show more than a margin beyond the map edges
@@ -382,16 +391,15 @@ function Scene({
     }
   });
 
-  const sky = map.template === "rooftop" ? "#bfe0ea" : "#0b1a21";
   return (
     <>
-      <color attach="background" args={[sky]} />
-      <hemisphereLight args={["#fff4e2", "#4f5f58", 1.05]} />
-      <ambientLight intensity={0.35} />
+      <color attach="background" args={[backgroundOf(map)]} />
+      <hemisphereLight args={[light.hemiSky, light.hemiGround, light.hemi]} />
+      <ambientLight intensity={0.3} />
       <directionalLight
         ref={sun}
-        intensity={2.3}
-        color="#ffe9c9"
+        intensity={light.sun}
+        color={light.sunColor}
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-camera-left={-9}
@@ -403,7 +411,7 @@ function Scene({
         shadow-normalBias={0.04}
         shadow-bias={-0.0002}
       />
-      <directionalLight position={[6, 5, -6]} intensity={0.45} color="#bfe3ff" />
+      <directionalLight position={[6, 5, -6]} intensity={light.fill} color="#bfe3ff" />
       <primitive object={world.group} />
       <primitive object={furniture} />
     </>
@@ -460,7 +468,7 @@ export default function Room3D({
         camera={{ position: [0, 7, 9], near: 0.1, far: 80, zoom: 60 }}
         gl={{ antialias: true, powerPreference: "high-performance", toneMapping: ACESFilmicToneMapping }}
         onCreated={({ gl }) => {
-          gl.toneMappingExposure = 1.02;
+          gl.toneMappingExposure = roomLight(map).exposure;
           const c = gl.domElement;
           // Same DOM contract as the 2D canvas (keyboard focus, tests, assistive tech).
           if (interactive) {
@@ -470,7 +478,7 @@ export default function Room3D({
           } else c.setAttribute("role", "img");
           c.setAttribute("aria-label", canvasLabel);
           c.dataset.renderer = "3d";
-          c.style.background = new Color("#0b1a21").getStyle();
+          c.style.background = new Color(backgroundOf(map)).getStyle();
           onCanvas?.(c);
         }}
         fallback={<div role="alert">WebGL tidak tersedia.</div>}
