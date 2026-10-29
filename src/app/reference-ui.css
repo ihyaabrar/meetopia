@@ -1959,6 +1959,84 @@
     0 0 0 2px #4fae63,
     0 2px 6px rgba(0, 0, 0, 0.18);
 }
+/* Room markers (speaker playing, TV playing, locked door), positioned like the name chips. */
+.room3d-mark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+}
+.room3d-mark > * {
+  position: absolute;
+  translate: -50% -100%;
+}
+.room3d-mark.lock svg {
+  width: 14px;
+  height: 16px;
+  color: #f2c94c;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+}
+.room3d-mark.tv .play {
+  width: 22px;
+  height: 15px;
+  border-radius: 4px;
+  background: #d9584c;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+.room3d-mark.tv .play::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 3.5px;
+  border-left: 7px solid #fff;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+}
+.room3d-mark.spk > span {
+  width: 11px;
+  height: 15px;
+  color: #7cc48a;
+  opacity: var(--level, 1);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
+  animation: room3d-note 2.2s linear infinite;
+}
+.room3d-mark.spk svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.room3d-mark.spk .n1 {
+  left: -9px;
+}
+.room3d-mark.spk .n2 {
+  animation-delay: -0.73s;
+}
+.room3d-mark.spk .n3 {
+  left: 9px;
+  animation-delay: -1.46s;
+}
+@keyframes room3d-note {
+  from {
+    transform: translateY(0);
+    opacity: var(--level, 1);
+  }
+  to {
+    transform: translateY(-34px);
+    opacity: 0;
+  }
+}
+.room3d-mark[data-still="true"] > span {
+  animation: none;
+}
+.room3d-mark.spk[data-still="true"] .n1,
+.room3d-mark.spk[data-still="true"] .n3 {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .room3d-mark > span {
+    animation: none;
+  }
+}
 .room3d-label .x {
   position: absolute;
   bottom: 22px;

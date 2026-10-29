@@ -20,10 +20,12 @@ import {
   Plane,
   Raycaster,
   RingGeometry,
+  Shape,
+  ShapeGeometry,
   Vector2,
   Vector3,
 } from "three";
-import type { MapData, MapObject } from "@/shared/map";
+import { zoneDoors, type MapData, type MapObject, type Zone } from "@/shared/map";
 import type { Point } from "@/shared/pathfinding";
 import type { Presence } from "@/shared/protocol";
 import {
@@ -59,6 +61,13 @@ export interface Room3DFrame {
   reducedMotion: boolean;
   showNames: boolean;
   time: number;
+  /** The private room the viewer is in: everything else is dimmed, like the 2D view. */
+  privateZone?: Zone | null;
+  /** Speakers playing music; `level` 0..1 = how loud the viewer hears it. */
+  speakers?: Array<{ obj: MapObject; level: number }>;
+  playingTvs?: MapObject[];
+  /** Locked rooms (by zone id): a padlock floats over their doors. */
+  lockedZones?: Record<string, unknown>;
 }
 export interface Room3DApi {
   /** Screen point → map tile coordinates (fractional), or null outside the floor. */
@@ -118,7 +127,53 @@ function createMarkers() {
   );
   focus.rotation.x = -Math.PI / 2;
   focus.visible = false;
-  return { ring, focus };
+  // Private-room dimming: a dark sheet over everything except the room (geometry set per room).
+  const shade = new Mesh(
+    new ShapeGeometry(new Shape()),
+    new MeshBasicMaterial({
+      color: "#0c0a08",
+      transparent: true,
+      opacity: 0.55,
+      depthTest: false,
+      depthWrite: false,
+    }),
+  );
+  shade.rotation.x = -Math.PI / 2;
+  shade.position.y = 0.03;
+  shade.renderOrder = 10;
+  shade.visible = false;
+  return { ring, focus, shade };
+}
+
+/** Floor sheet with a hole over the zone; the hole reaches 1.6 m north so the room's walls and heads stay lit. */
+function shadeGeometry(map: MapData, z: Zone) {
+  const m = TILE_M,
+    pad = 4 * m;
+  // Shape space (x, y) maps to world (x, -z) after the -90° turn about X.
+  const outer = new Shape();
+  outer.moveTo(-pad, pad);
+  outer.lineTo(map.width * m + pad, pad);
+  outer.lineTo(map.width * m + pad, -(map.height * m + pad));
+  outer.lineTo(-pad, -(map.height * m + pad));
+  const hole = new Shape();
+  hole.moveTo(z.x * m, -(z.y * m - 1.6));
+  hole.lineTo(z.x * m, -(z.y + z.h) * m);
+  hole.lineTo((z.x + z.w) * m, -(z.y + z.h) * m);
+  hole.lineTo((z.x + z.w) * m, -(z.y * m - 1.6));
+  outer.holes.push(hole);
+  return new ShapeGeometry(outer);
+}
+
+const NOTE_SVG =
+  '<svg viewBox="0 0 12 16" aria-hidden="true"><path d="M4 2v9.2A2.6 2.6 0 1 0 6 13.6V5.5l5-1.3V1z" fill="currentColor"/></svg>';
+const LOCK_SVG =
+  '<svg viewBox="0 0 16 18" aria-hidden="true"><path d="M4.5 8V5.5a3.5 3.5 0 0 1 7 0V8" fill="none" stroke="currentColor" stroke-width="2"/><rect x="2" y="8" width="12" height="9" rx="2" fill="currentColor"/></svg>';
+/** Overlay marker markup per kind (DOM, positioned every frame like the name chips). */
+function markerHtml(kind: "spk" | "tv" | "lock") {
+  if (kind === "spk")
+    return `<span class="n1">${NOTE_SVG}</span><span class="n2">${NOTE_SVG}</span><span class="n3">${NOTE_SVG}</span>`;
+  if (kind === "tv") return '<span class="play"></span>';
+  return LOCK_SVG;
 }
 
 /** Scene background: the room type's colour, darker at night. */
@@ -149,6 +204,7 @@ function Scene({
   zoneLabel,
   labels,
   effects,
+  fxLayer,
   onReady,
 }: {
   map: MapData;
@@ -157,6 +213,7 @@ function Scene({
   zoneLabel: (key: string) => string;
   labels: React.RefObject<Map<string, LabelEl>>;
   effects: React.RefObject<Effects>;
+  fxLayer: React.RefObject<HTMLDivElement | null>;
   onReady: (ids: string[]) => void;
 }) {
   const { camera, gl, scene, size } = useThree();
@@ -171,7 +228,9 @@ function Scene({
   const light = useMemo(() => roomLight(map), [map]);
   const target = useRef(new Vector3(map.spawn.x * TILE_M, 0, map.spawn.y * TILE_M));
   // Imperative scene helpers live in a ref: they are mutated every frame, never React state.
-  const fxRef = useRef<{ ring: Mesh; focus: Mesh } | null>(null);
+  const fxRef = useRef<{ ring: Mesh; focus: Mesh; shade: Mesh } | null>(null);
+  const shadeFor = useRef<string | null>(null);
+  const marks = useRef(new Map<string, HTMLElement>());
   if (fxRef.current === null) fxRef.current = createMarkers();
   const lastIds = useRef("");
   const first = useRef(true);
@@ -183,10 +242,15 @@ function Scene({
   useEffect(() => () => disposeModel(furniture), [furniture]);
   useEffect(() => {
     const all = rigs.current;
-    const { ring, focus } = fxRef.current!;
-    scene.add(ring, focus);
+    const { ring, focus, shade } = fxRef.current!;
+    const markers = marks.current;
+    scene.add(ring, focus, shade);
     return () => {
-      scene.remove(ring, focus);
+      scene.remove(ring, focus, shade);
+      shade.geometry.dispose();
+      (shade.material as MeshBasicMaterial).dispose();
+      for (const el of markers.values()) el.remove();
+      markers.clear();
       for (const r of all.values()) {
         disposeModel(r.rig.group);
         r.rig.skeleton.dispose();
@@ -237,7 +301,7 @@ function Scene({
     if (!f) return;
     const cam = state.camera as OrthographicCamera;
     state.gl.toneMappingExposure = light.exposure;
-    const { ring, focus } = fxRef.current!;
+    const { ring, focus, shade } = fxRef.current!;
     const self = f.people.find((p) => p.isSelf);
     // Camera: follow the person smoothly, but never show more than a margin beyond the map edges
     // (like the 2D view). Zoom matches the 2D zoom buttons, converted to px per metre.
@@ -389,6 +453,59 @@ function Scene({
       focus.rotation.z = Math.PI / 4;
       (focus.material as MeshBasicMaterial).opacity = 0.6 + Math.sin(f.time * 4) * 0.25;
     }
+
+    // Private room: dim everything else.
+    const zone = f.privateZone ?? null;
+    if ((zone?.id ?? null) !== shadeFor.current) {
+      shadeFor.current = zone?.id ?? null;
+      if (zone) {
+        shade.geometry.dispose();
+        shade.geometry = shadeGeometry(map, zone);
+      }
+    }
+    shade.visible = !!zone;
+
+    // Speakers playing, TVs playing and locked doors: DOM markers over the scene.
+    const layer = fxLayer.current;
+    if (!layer) return;
+    const want = new Map<
+      string,
+      { kind: "spk" | "tv" | "lock"; x: number; y: number; h: number; level?: number }
+    >();
+    for (const s of f.speakers ?? [])
+      want.set(`spk:${s.obj.id}`, {
+        kind: "spk",
+        x: s.obj.x + s.obj.w / 2,
+        y: s.obj.y + s.obj.h / 2,
+        h: 1.2,
+        level: s.level,
+      });
+    for (const o of f.playingTvs ?? [])
+      want.set(`tv:${o.id}`, { kind: "tv", x: o.x + o.w / 2, y: o.y + o.h / 2, h: 1.35 });
+    for (const id of Object.keys(f.lockedZones ?? {})) {
+      const z = map.zones.find((zz) => zz.id === id);
+      if (z) zoneDoors(map, z).forEach((d, i) => want.set(`lock:${id}:${i}`, { kind: "lock", ...d, h: 1 }));
+    }
+    for (const [key, el] of marks.current)
+      if (!want.has(key)) {
+        el.remove();
+        marks.current.delete(key);
+      }
+    for (const [key, m] of want) {
+      let el = marks.current.get(key);
+      if (!el) {
+        el = document.createElement("div");
+        el.className = `room3d-mark ${m.kind}`;
+        el.innerHTML = markerHtml(m.kind);
+        layer.appendChild(el);
+        marks.current.set(key, el);
+      }
+      const pos = labelPos.set(m.x * TILE_M, m.h, m.y * TILE_M).project(cam);
+      el.style.transform = `translate(${(((pos.x + 1) / 2) * size.width).toFixed(1)}px, ${(((1 - pos.y) / 2) * size.height).toFixed(1)}px)`;
+      el.dataset.still = f.reducedMotion ? "true" : "false";
+      if (m.level !== undefined)
+        el.style.setProperty("--level", (0.45 + Math.min(1, m.level) * 0.55).toFixed(2));
+    }
   });
 
   return (
@@ -448,6 +565,7 @@ export default function Room3D({
 }) {
   const labels = useRef(new Map<string, LabelEl>());
   const effects = useRef<Effects>(new Map());
+  const fxLayer = useRef<HTMLDivElement>(null);
   const [ids, setIds] = useState<string[]>([]);
   // Decorative previews stop rendering when scrolled away or hidden (e.g. the auth panel on phones).
   const wrap = useRef<HTMLDivElement>(null);
@@ -490,9 +608,11 @@ export default function Room3D({
           zoneLabel={zoneLabel}
           labels={labels}
           effects={effects}
+          fxLayer={fxLayer}
           onReady={setIds}
         />
       </Canvas>
+      <div className="room3d-labels" aria-hidden="true" ref={fxLayer} />
       <div className="room3d-labels" aria-hidden="true">
         {ids.map((id) => (
           <div

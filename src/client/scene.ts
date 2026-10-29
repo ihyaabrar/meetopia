@@ -3,7 +3,7 @@
  * emote, balon chat), garis koneksi suara, sorotan ruang privat, cahaya lampu, dan label nama.
  * Terpisah dari React agar loop gambar ringan dan mudah dirawat.
  */
-import { TILE, isLockable, tileAt, type MapData, type MapObject, type Zone } from "@/shared/map";
+import { TILE, isLockable, tileAt, zoneDoors, type MapData, type MapObject, type Zone } from "@/shared/map";
 import type { Presence } from "@/shared/protocol";
 import type { AvatarCondition } from "@/shared/avatar";
 import { AVATAR_MAP_SCALE, drawAvatar, avatarNameOffset } from "./art/avatar";
@@ -115,29 +115,7 @@ export class Scene {
     zoneLabel: (k: string) => string,
   ) {
     this.layers = renderWorld(map, zoneLabel);
-    for (const z of map.zones) {
-      if (!isLockable(z)) continue;
-      const tiles: Array<{ x: number; y: number }> = [];
-      for (let ty = z.y - 1; ty <= z.y + z.h; ty++)
-        for (let tx = z.x - 1; tx <= z.x + z.w; tx++) {
-          const inside = tx >= z.x && tx < z.x + z.w && ty >= z.y && ty < z.y + z.h;
-          if (!inside && tileAt(map, tx, ty) === "door") tiles.push({ x: tx, y: ty });
-        }
-      // Kelompokkan tile pintu yang bersebelahan menjadi satu pintu.
-      const groups: Array<Array<{ x: number; y: number }>> = [];
-      for (const t of tiles) {
-        const g = groups.find((gr) => gr.some((o) => Math.abs(o.x - t.x) + Math.abs(o.y - t.y) === 1));
-        if (g) g.push(t);
-        else groups.push([t]);
-      }
-      this.doors.set(
-        z.id,
-        groups.map((g) => ({
-          x: g.reduce((a, t) => a + t.x, 0) / g.length + 0.5,
-          y: g.reduce((a, t) => a + t.y, 0) / g.length + 0.5,
-        })),
-      );
-    }
+    for (const z of map.zones) if (isLockable(z)) this.doors.set(z.id, zoneDoors(map, z));
     this.measure = document.createElement("canvas").getContext("2d")!;
   }
 

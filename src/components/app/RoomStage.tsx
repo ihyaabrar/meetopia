@@ -518,6 +518,16 @@ export function RoomStage({
         }
       }
 
+      // Room effects shared by both renderers.
+      const privateZone = me ? privateZoneAt(map, me.x, me.y) : null;
+      const speakers = Object.values(s.music).flatMap((m) => {
+        const obj = map.objects.find((o) => o.id === m.objectId);
+        if (!obj) return [];
+        return [{ obj, level: me ? speakerVolume(map, obj, me.x, me.y).volume : 0 }];
+      });
+      const playingTvs = Object.keys(s.tv).flatMap((id) => map.objects.filter((o) => o.id === id));
+      const lockedZones = Object.fromEntries(Object.entries(s.locks).filter(([, l]) => l.locked));
+
       if (use3d)
         frame3dRef.current = {
           people,
@@ -529,6 +539,10 @@ export function RoomStage({
           reducedMotion: reducedMotion(),
           showNames: getPrefs().showNames,
           time,
+          privateZone,
+          speakers,
+          playingTvs,
+          lockedZones,
         };
       else if (scene && ctx)
         scene.draw(ctx, {
@@ -544,17 +558,13 @@ export function RoomStage({
           hoverTile: st.hover,
           focusObj: hintObjRef.current,
           links,
-          privateZone: me ? privateZoneAt(map, me.x, me.y) : null,
+          privateZone,
           showRadius: !!me && (me.moving || st.path.length > 0),
-          speakers: Object.values(s.music).flatMap((m) => {
-            const obj = map.objects.find((o) => o.id === m.objectId);
-            if (!obj) return [];
-            return [{ obj, level: me ? speakerVolume(map, obj, me.x, me.y).volume : 0 }];
-          }),
+          speakers,
           reducedMotion: reducedMotion(),
           showNames: getPrefs().showNames,
-          playingTvs: Object.keys(s.tv).flatMap((id) => map.objects.filter((o) => o.id === id)),
-          lockedZones: Object.fromEntries(Object.entries(s.locks).filter(([, l]) => l.locked)),
+          playingTvs,
+          lockedZones,
         });
 
       // Posisi popup petunjuk objek

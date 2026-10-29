@@ -194,6 +194,26 @@ export function zoneAt(map: MapData, x: number, y: number): Zone | null {
 
 export const isLockable = (z: Zone) => z.lockable ?? z.private;
 
+/** Pusat tiap pintu (tile, pecahan) di tepi zona; tile pintu yang bersebelahan dihitung satu pintu. */
+export function zoneDoors(map: MapData, z: Zone): Array<{ x: number; y: number }> {
+  const tiles: Array<{ x: number; y: number }> = [];
+  for (let ty = z.y - 1; ty <= z.y + z.h; ty++)
+    for (let tx = z.x - 1; tx <= z.x + z.w; tx++) {
+      const inside = tx >= z.x && tx < z.x + z.w && ty >= z.y && ty < z.y + z.h;
+      if (!inside && tileAt(map, tx, ty) === "door") tiles.push({ x: tx, y: ty });
+    }
+  const groups: Array<Array<{ x: number; y: number }>> = [];
+  for (const t of tiles) {
+    const g = groups.find((gr) => gr.some((o) => Math.abs(o.x - t.x) + Math.abs(o.y - t.y) === 1));
+    if (g) g.push(t);
+    else groups.push([t]);
+  }
+  return groups.map((g) => ({
+    x: g.reduce((a, t) => a + t.x, 0) / g.length + 0.5,
+    y: g.reduce((a, t) => a + t.y, 0) / g.length + 0.5,
+  }));
+}
+
 export function privateZoneAt(map: MapData, x: number, y: number): Zone | null {
   const z = zoneAt(map, x, y);
   return z && z.private ? z : null;
