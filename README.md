@@ -54,6 +54,7 @@ Spesifikasi lengkap ada di [`docs/PRD.md`](docs/PRD.md), lengkap dengan centang 
 - **36 jenis furnitur prosedural** (meja kerja dengan monitor, sofa, kasur, TV, speaker kayu, dapur, BBQ, mesin penjual, arcade, dan lainnya). Kursi menyesuaikan tempatnya: kursi kantor di meja kerja, kursi makan di meja makan, kursi gaming di gaming house. TV menghadap sofa yang memang melihat ke arahnya.
 - **Avatar chibi 3D** dari profil yang sama dengan avatar 2D: rambut, topi/hijab, kacamata, headphone, tujuh gaya atasan, celana panjang/pendek/rok. Animasi jalan dengan langkah kaki dan ayunan tangan bergantian, loncat, lambai, tepuk tangan, ngetik saat duduk di meja.
 - **Tempat duduk multi-slot:** sofa panjang muat satu orang per kotak, sofa kecil dua orang, kasur satu orang per dua kotak. Server menolak kursi yang sudah terisi.
+- **Efek ruangan di 3D:** ruangan lain diredupkan saat kamu di ruang privat, gembok di pintu ruang terkunci, tanda putar di TV, dan not musik di speaker yang menyala.
 - **Mode 2D tetap ada.** Matikan "Ruangan 3D" di Pengaturan → Tampilan, atau otomatis kembali ke 2D bila browser tidak mendukung WebGL.
 
 ### Ruangan
@@ -123,6 +124,9 @@ Spesifikasi lengkap ada di [`docs/PRD.md`](docs/PRD.md), lengkap dengan centang 
   <tr>
     <td width="50%"><img src="docs/assets/room-3d.png" alt="Ruangan kantor 3D: avatar duduk di sofa area kerja tim, meja dengan monitor, TV menghadap sofa"><br><sub><b>Kantor 3D.</b> Duduk di sofa; tiap kotak sofa satu orang.</sub></td>
     <td width="50%"><img src="docs/assets/home-3d.png" alt="Ruangan rumah 3D: ruang keluarga dengan sofa panjang, dua avatar dan label nama"><br><sub><b>Rumah 3D.</b> Ruang keluarga, label nama mengikuti kepala avatar.</sub></td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/assets/private-3d.png" alt="Ruang rapat 3D yang dikunci: ruangan lain diredupkan, gembok di pintu, tanda putar di TV dan not musik di speaker"><br><sub><b>Ruang privat 3D.</b> Ruangan lain diredupkan, pintu terkunci bergembok, TV dan speaker yang menyala diberi tanda.</sub></td>
   </tr>
   <tr>
     <td colspan="2"><img src="docs/assets/room.png" alt="Ruangan kantor dengan lima orang di lounge: label nama, status mikrofon, balon chat, dan panel anggota"><br><sub><b>Mode 2D.</b> Lima orang di lounge. Garis putus-putus menunjukkan siapa yang bisa saling mendengar.</sub></td>
@@ -390,7 +394,7 @@ Status rinci ada di [`docs/PRD.md`](docs/PRD.md).
 - [x] **MVP (M0 sampai M8):** akun, workspace, peta 2D, sinkron posisi, chat, kehadiran, catatan, suara menurut jarak, berbagi layar, ruang privat dan ketuk.
 - [x] **Fase 2, langkah 1 sampai 3:** bar kebutuhan, kantin dan mesin penjual, gaji koin.
 - [x] **Ruangan 3D:** diorama three.js, furnitur dan avatar prosedural, duduk multi-slot, loncat, mode 2D cadangan.
-- [ ] **3D lanjutan:** efek ruang privat dan speaker di 3D, model GLB opsional.
+- [ ] **3D lanjutan:** FX di atas kepala (lapar, haus, tidur), animasi halus dan IK, model GLB opsional.
 - [ ] **Fase 2, langkah 4:** toko pakaian dan aksesori, lemari, toko perabot.
 - [ ] **Fase 2, langkah 5 sampai 7:** dekorasi tarik-letakkan, editor peta, minigame saham, login Google dan Lark, rekaman sesi.
 - [ ] **Fase 3:** absensi, analitik tim, banyak peta per workspace, API dan webhook.
